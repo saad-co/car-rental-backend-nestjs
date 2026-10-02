@@ -4,6 +4,36 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-02 — M0 frontend base: Vite app + TailAdmin shell
+- **Done (frontend repo, uncommitted):** Vite 8 + React 19 + TypeScript (strict), Tailwind v4 via PostCSS,
+  `react-router` 8. TailAdmin foundation in light theme only (D20): theme CSS, `SidebarContext`, `AppLayout`,
+  `AppSidebar`, `AppHeader`, `Backdrop`, `UserDropdown` (placeholder), `Dropdown`, `cn()`, svgr icon setup,
+  placeholder Dashboard page, `.gitattributes` (`* text=auto eol=lf`, completes B11), `.gitignore` covers `.env`.
+- **Verified:** `npm run build` passes (`tsc -b` + `vite build`); `npm run lint` 0 errors, 1 warning
+  (`SidebarContext` exports a hook and a component, same as TailAdmin); `npm run dev` checked in the browser:
+  desktop and mobile layout, sidebar collapse to icons, user menu opens, no console errors.
+- **Not done:** no login page, no auth, no API client, no TanStack Query yet (planned steps 11–12);
+  user menu shows a static placeholder user; no real logo (BACKLOG).
+- **Next:** TypeORM + `User` entity + first migration (backend), once Docker Desktop is running.
+- **Branch:** `feature/m0-auth` (frontend).
+
+---
+
+### 2026-10-02 — M0 step 1: backend scaffold
+- **Done (backend repo, uncommitted):** NestJS 12 scaffold (ESM, Vitest, oxlint), package renamed
+  `car-rental-backend-nestjs`, `.gitattributes` (`* text=auto eol=lf`, part of B11), `.gitignore`,
+  `docker-compose.yml` (Postgres 17 + init script creating `car_rental_test`), `.env.example`.
+  Docs fixed for the TypeORM / Vitest / "two repos, not monorepo" decisions (D17–D19; spec §2, §4, §11,
+  ARCHITECTURE, both CLAUDE.md files).
+- **Verified:** `npm run build`, `npm test` (1 passed), `npm run test:e2e` (1 passed), `npm run lint`
+  (exit 0); built app answers `GET /` with `Hello World!`; `npm audit --omit=dev` = 0 issues.
+- **Not verified:** `docker compose up` — Docker Desktop was not running on this machine.
+- **Not done:** no config/env validation yet (added with the database step); frontend `.gitattributes` (B11 stays open).
+- **Next:** start Docker Desktop, bring up Postgres; then TypeORM + `User` entity + first migration.
+- **Branch:** `feature/m0-auth` (backend).
+
+---
+
 ### 2026-10-02 — Project setup
 - **Done:** both repos created by Saad under `saad-co`. Initial commit on `main` with `CLAUDE.md` and
   `docs/` (backend) and `CLAUDE.md` (frontend); `dev` created from `main`. Docs finalised on

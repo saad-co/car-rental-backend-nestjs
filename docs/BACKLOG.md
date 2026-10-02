@@ -15,8 +15,11 @@ Ad-hoc requests, feedback, open questions and follow-ups. Mark done with a date;
 | B8 | Choose LLM provider and model | 2026-10-02 | Cheap, fast, structured output. Needed for M3. |
 | B9 | Reminder tier defaults and wording | 2026-10-02 | Needed for M6. |
 | B10 | Late fees | 2026-10-02 | Not defined. No late-fee logic in Phase 1. |
-| B11 | Add `.gitattributes` with `* text=auto eol=lf` | 2026-10-02 | Both repos, during M0. |
+| B12 | Real logo and favicon from the client | 2026-10-02 | Sidebar/header use a text logo "Car Rental"; favicon is Vite's default. |
+| B13 | Dark mode | 2026-10-02 | Deliberately left out of the frontend (D20). Add later if wanted. |
+| B14 | Check TailAdmin Pro licence terms cover this use | 2026-10-02 | Components are copied into a client project. |
 
 ## Done
 | # | Item | Done | Notes |
 |---|---|---|---|
+| B11 | `.gitattributes` with `* text=auto eol=lf` | 2026-10-02 | Both repos. |

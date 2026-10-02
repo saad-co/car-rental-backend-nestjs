@@ -89,3 +89,28 @@ Milestone order is set in `PHASE1_SPEC.md` section 11. M0 is auth and roles.
 **Why:** every later screen needs a logged-in user, ledger adjustments are admin-only, and auth proves
 the full chain (database, API, OpenAPI client, frontend) before money logic is built on it.
 The client document groups this under "Setup and foundation"; the milestone split is ours.
+
+### D17 — 2026-10-02 — TypeORM instead of Prisma
+Supersedes the Prisma part of D2. Schema = TypeORM entity classes; changes only through generated,
+reviewed migration files; `synchronize` stays off (it can drop columns at startup).
+**Why:** Saad's choice. Idempotency and uniqueness rules still live in database constraints (D6).
+
+### D18 — 2026-10-02 — Vitest instead of Jest; NestJS 12 (ES modules)
+Nest 12's generator produces an ESM project with Vitest and oxlint. Kept as generated. The spec's
+"Jest" is changed to "Vitest"; the describe/it/expect API is the same.
+**Why:** Jest needs fragile extra configuration for ESM. Verified: constructor injection works under
+Vitest (the generated unit and e2e tests pass).
+
+### D19 — 2026-10-02 — Project name `car-rental` for local infrastructure
+Docker container `car-rental-db`, volume `car-rental-db-data`, database `car_rental`, test database
+`car_rental_test`, user `car_rental`. Matches the repo names.
+
+### D20 — 2026-10-02 — Frontend foundation: light theme only, trimmed TailAdmin shell
+Copied from TailAdmin: theme tokens, Outfit font, svgr icon convention, `SidebarContext`, `AppLayout`,
+`Backdrop`, `Dropdown`, `cn()`. Rewritten smaller: `AppSidebar` (one nav list, no sub-menus), `AppHeader`
+(no search, no notifications), `UserDropdown` (static placeholder until auth). **No dark mode**: all `dark:`
+classes removed, no theme context or toggle. Text logo "Car Rental" instead of TailAdmin images.
+Not copied: `react-helmet-async`/`PageMeta` (`<title>` is set in `index.html`), icon barrel entries beyond
+the two in use. `react-router` is v8 (template used v7); `strict: true` added to `tsconfig.app.json`.
+**Why:** Saad asked for a simple theme and basic shell (D15: copy only what a screen needs). Dark mode can be
+added later by re-adding the `dark` variant and a theme context.

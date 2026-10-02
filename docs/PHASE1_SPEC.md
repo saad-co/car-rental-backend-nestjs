@@ -42,11 +42,11 @@ Known defects there that this build must NOT repeat are listed in section 9.
 | Backend | NestJS (TypeScript) |
 | Frontend | React + Vite + TypeScript, React Router, TanStack Query |
 | UI | TailAdmin React Pro (Tailwind CSS) — components copied in as needed, never the whole template (D15) |
-| Database | PostgreSQL via Prisma |
+| Database | PostgreSQL via TypeORM (migrations only, `synchronize` off) |
 | Scheduling | `@nestjs/schedule`, with a Postgres advisory lock per job so runs never overlap |
 | Local dev | `docker-compose` for Postgres |
 | Hosting | Railway — one service per repo, Railway Postgres. `main` deploys to staging. |
-| Tests | Jest (unit + e2e against a test database) |
+| Tests | Vitest (unit + e2e against a test database) |
 
 Two repos, side by side in one workspace: `car-rental-backend-nestjs` (NestJS, owns this spec in `docs/`)
 and `car-rental-frontend-reactjs` (React). Deployed separately.
@@ -69,7 +69,7 @@ so the two repos cannot silently drift apart.
 
 ---
 
-## 4. Data model (conceptual — translate to Prisma)
+## 4. Data model (conceptual — translate to TypeORM entities)
 
 **User** — staff account. `email` (unique), `passwordHash`, `role` (`admin` | `staff`), `active`.
 
@@ -218,7 +218,7 @@ Each milestone ends with passing tests and something demonstrable.
 
 | # | Milestone | Done when |
 |---|---|---|
-| M0 | Monorepo, NestJS + React + Prisma + Postgres, auth, roles | Staff can log in; admin-only route rejects staff |
+| M0 | Two repos (NestJS API + React app), TypeORM + Postgres, auth, roles | Staff can log in; admin-only route rejects staff |
 | M1 | Drivers, aliases, ledger, manual adjustments and reversals | Balance correct from entries; reversal cancels; duplicate key rejected |
 | M2 | Billing job and arrears | Re-running a billing day creates no new debits; days-late correct for both billing types |
 | M3 | Gmail intake, DKIM verification, LLM extraction | Unverified email rejected; seen message skipped; extraction validated |

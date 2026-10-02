@@ -8,7 +8,7 @@
 |---|---|---|
 | API | `car-rental-backend-nestjs` | NestJS. Business logic, scheduled jobs, webhooks, OpenAPI document. |
 | Admin web app | `car-rental-frontend-reactjs` | React + Vite. Uses TailAdmin Pro components, copied in as needed. Staff-facing only. |
-| Database | Railway Postgres (local: docker-compose) | Accessed only by the API, via Prisma. |
+| Database | Railway Postgres (local: docker-compose) | Accessed only by the API, via TypeORM. |
 
 The web app never talks to the database or to external services directly — only to the API,
 through a client generated from the API's OpenAPI document.

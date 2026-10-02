@@ -1,0 +1,24 @@
+# Local development database only. Railway provides its own Postgres in staging.
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: car-rental-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-car_rental}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-car_rental_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-car_rental}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - car-rental-db-data:/var/lib/postgresql/data
+      # Runs once, on first start of an empty volume: creates the separate test database.
+      - ./docker/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-car_rental} -d ${POSTGRES_DB:-car_rental}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  car-rental-db-data:
