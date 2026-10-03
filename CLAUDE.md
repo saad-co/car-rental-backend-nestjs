@@ -26,5 +26,6 @@ NestJS 12 (ES modules: relative imports end in `.js`), TypeScript strict, TypeOR
 - Build: `npm run build`
 - Test: `npm test` (unit), `npm run test:e2e`
 - Lint: `npm run lint`
+- Format: `npm run format` (Prettier, double quotes; run before committing)
 - Migrate: (added with the first migration)
 - Export OpenAPI:

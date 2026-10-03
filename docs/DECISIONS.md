@@ -114,3 +114,8 @@ Not copied: `react-helmet-async`/`PageMeta` (`<title>` is set in `index.html`), 
 the two in use. `react-router` is v8 (template used v7); `strict: true` added to `tsconfig.app.json`.
 **Why:** Saad asked for a simple theme and basic shell (D15: copy only what a screen needs). Dark mode can be
 added later by re-adding the `dark` variant and a theme context.
+
+### D21 — 2026-10-03 — One code style in both repos: Prettier, double quotes
+Both repos have the same `.prettierrc` (`singleQuote: false`, `trailingComma: "all"`) and `npm run format`.
+Backend formats `src` and `test`; frontend formats `src/**/*.{ts,tsx,css}`.
+**Why:** one style across the two repos; format once now so later diffs show only real changes.

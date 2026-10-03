@@ -4,6 +4,16 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-03 — Prettier formatting in both repos
+- **Done (by Saad, reviewed by Claude):** `singleQuote: false` in the backend `.prettierrc`, `npm run format`
+  over the backend; same `.prettierrc` and Prettier added to the frontend (`format` script), frontend formatted (D21).
+- **Verified:** formatting-only diffs; `prettier --check` clean in both repos; backend `build`, `test`, `test:e2e`,
+  `lint` pass; frontend `build` passes, `lint` 0 errors (same 1 warning as before).
+- **Also done:** Prettier version range aligned to `^3.9.9` in both repos (3.9.9 was already installed in both).
+- **Branch:** `feature/m0-auth` (both).
+
+---
+
 ### 2026-10-02 — M0 frontend base: Vite app + TailAdmin shell
 - **Done (frontend repo, uncommitted):** Vite 8 + React 19 + TypeScript (strict), Tailwind v4 via PostCSS,
   `react-router` 8. TailAdmin foundation in light theme only (D20): theme CSS, `SidebarContext`, `AppLayout`,
