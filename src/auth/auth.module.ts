@@ -1,9 +1,11 @@
 import { Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { APP_GUARD } from "@nestjs/core";
 import { JwtModule } from "@nestjs/jwt";
 import { UsersModule } from "../users/users.module.js";
 import { AuthController } from "./auth.controller.js";
 import { AuthService } from "./auth.service.js";
+import { JwtAuthGuard } from "./jwt-auth.guard.js";
 
 /**
  * Everything about logging in.
@@ -29,6 +31,10 @@ import { AuthService } from "./auth.service.js";
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService],
+  providers: [
+    AuthService,
+    // Registering the guard under APP_GUARD makes it run on every route in the app.
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+  ],
 })
 export class AuthModule {}
