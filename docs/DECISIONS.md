@@ -137,3 +137,9 @@ Postgres user `car_rental_user`, password `car_rental_password`, database `car_r
 `car_rental_db_test` (must end in `_test`). Container and volume names are unchanged.
 **Why:** user and database had the same name (`car_rental`), which made connection strings hard to read.
 Changing them needs a fresh volume (`docker compose down -v`), since Postgres reads these only on first start.
+
+### D24 — 2026-10-04 — Admin-only login; no `staff` role; drivers do not log in
+User `role` is `admin` | `driver` with no database default; only `admin` can log in. Drivers are records managed
+by admins. `driver` exists so a future driver portal needs no table change. Supersedes the `staff` role in the spec.
+**Why:** the client system has no staff role. The spec was drafted in chat and is not binding where it is
+inconsistent; it is updated in place when a better decision is made.

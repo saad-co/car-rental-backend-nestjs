@@ -1,7 +1,7 @@
 # Phase 1 Spec — Payments, Ledger and SMS Reminders
 
 Fleet operations platform for a rideshare rental fleet (~40 vehicles, Chicago + LA).
-Drivers rent cars and pay rent daily or weekly. Staff need every payment to land on
+Drivers rent cars and pay rent daily or weekly. Admins need every payment to land on
 the right driver's ledger, and drivers who fall behind to be reminded by SMS.
 
 **The one rule that outranks everything:** a driver must never be chased for money
@@ -12,7 +12,7 @@ they already paid. When in doubt, the system flags for a human instead of guessi
 ## 1. Scope
 
 **In Phase 1**
-- Staff admin web app (login, roles)
+- Admin web app (login). Only admins log in; drivers are records and do not log in (D24)
 - Drivers, their payment handles (aliases), billing settings
 - Append-only driver ledger
 - Recurring rent charges and arrears
@@ -71,7 +71,8 @@ so the two repos cannot silently drift apart.
 
 ## 4. Data model (conceptual — translate to TypeORM entities)
 
-**User** — staff account. `email` (unique), `passwordHash`, `role` (`admin` | `staff`), `active`.
+**User** — an account that can log in. `email` (unique), `passwordHash`, `role` (`admin` | `driver`, no default),
+`active`. Only `admin` logs in in Phase 1; `driver` is reserved for a future portal (D24).
 
 **Driver** — `firstName`, `lastName`, `phone` (E.164), `email`, `status` (`active` | `inactive`),
 `billingType` (`daily` | `weekly`), `billingRateCents`, `billingDueWeekday` (weekly only),
@@ -148,7 +149,7 @@ Balance = sum(credits) − sum(debits). Never stored.
 3. Confidence ≥ threshold (setting, default 0.9) → matched. Otherwise → `unmatched`, into the unrecognised bucket.
 
 ### 6.2 Manual assignment
-Staff assign an unmatched payment to a driver. This posts the payment and **creates an alias** from the sender handle/name, so the same sender matches automatically next time. Logged in AuditLog.
+An admin assigns an unmatched payment to a driver. This posts the payment and **creates an alias** from the sender handle/name, so the same sender matches automatically next time. Logged in AuditLog.
 
 ### 6.3 Posting rules
 - **Zelle — two stages.**
@@ -218,7 +219,7 @@ Each milestone ends with passing tests and something demonstrable.
 
 | # | Milestone | Done when |
 |---|---|---|
-| M0 | Two repos (NestJS API + React app), TypeORM + Postgres, auth, roles | Staff can log in; admin-only route rejects staff |
+| M0 | Two repos (NestJS API + React app), TypeORM + Postgres, auth, roles | Admin can log in; protected routes reject requests without a valid admin token |
 | M1 | Drivers, aliases, ledger, manual adjustments and reversals | Balance correct from entries; reversal cancels; duplicate key rejected |
 | M2 | Billing job and arrears | Re-running a billing day creates no new debits; days-late correct for both billing types |
 | M3 | Gmail intake, DKIM verification, LLM extraction | Unverified email rejected; seen message skipped; extraction validated |

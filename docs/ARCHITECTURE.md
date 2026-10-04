@@ -7,7 +7,7 @@
 | Component | Repo | Role |
 |---|---|---|
 | API | `car-rental-backend-nestjs` | NestJS. Business logic, scheduled jobs, webhooks, OpenAPI document. |
-| Admin web app | `car-rental-frontend-reactjs` | React + Vite. Uses TailAdmin Pro components, copied in as needed. Staff-facing only. |
+| Admin web app | `car-rental-frontend-reactjs` | React + Vite. Uses TailAdmin Pro components, copied in as needed. Admin-facing only. |
 | Database | Railway Postgres (local: docker-compose) | Accessed only by the API, via TypeORM. |
 
 The web app never talks to the database or to external services directly — only to the API,
@@ -33,7 +33,7 @@ Reminder job ──► effective balance check ──► Quo SMS (off / dry_run 
 Full rules: `PHASE1_SPEC.md` sections 5–8.
 
 ## Security model
-- Staff authentication with `admin` and `staff` roles. Ledger adjustments and reversals are admin-only.
+- Admin authentication (`role` is `admin` or `driver`; only admins log in). Ledger adjustments and reversals are admin-only.
 - Emails only trusted with `dkim=pass` and an exact expected sender domain.
 - Plaid access token encrypted at rest.
 - Webhooks (Plaid, Quo) verified by signature before processing.

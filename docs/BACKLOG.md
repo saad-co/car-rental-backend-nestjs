@@ -18,6 +18,7 @@ Ad-hoc requests, feedback, open questions and follow-ups. Mark done with a date;
 | B12 | Real logo and favicon from the client | 2026-10-02 | Sidebar/header use a text logo "Car Rental"; favicon is Vite's default. |
 | B13 | Dark mode | 2026-10-02 | Deliberately left out of the frontend (D20). Add later if wanted. |
 | B14 | Check TailAdmin Pro licence terms cover this use | 2026-10-02 | Components are copied into a client project. |
+| B15 | Old-system driver features to add when their phase arrives | 2026-10-04 | Encrypted date of birth and address, applications, portal token, vehicle assignments, deposit fields, `paused`/`terminated` billing states. Reference: `gonzocar/app/models/models.py`. |
 
 ## Done
 | # | Item | Done | Notes |

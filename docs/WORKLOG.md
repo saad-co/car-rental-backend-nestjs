@@ -4,6 +4,15 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-04 — Role cleanup: `admin` | `driver` (D24)
+- **Done (backend, uncommitted):** `Role` enum is `admin` | `driver`; `role` column has no default; JSDoc on the
+  `User` entity; migration `ReplaceStaffRoleWithDriver` generated and applied. Spec, ARCHITECTURE and DECISIONS updated.
+- **Verified (by Saad):** `\dT+ user_role` lists `admin` and `driver`.
+- **Next:** `PasswordService`, `UsersService`, `seed:admin`, login, auth guard; then Drivers.
+- **Branch:** `feature/m0-auth` (backend).
+
+---
+
 ### 2026-10-04 — Port 5000 and renamed Postgres user/db (D23)
 - **Done (backend, uncommitted):** port 3000 → 5000 (`.env.example`, `main.ts`, `env.validation.ts`, `CLAUDE.md`);
   Postgres names updated in `.env.example`, `docker-compose.yml` defaults and `docker/initdb/01-create-test-db.sql`.
