@@ -6,6 +6,7 @@ import {
   Matches,
   Max,
   Min,
+  MinLength,
   validateSync,
 } from "class-validator";
 
@@ -23,6 +24,16 @@ class EnvironmentVariables {
     message: "DATABASE_URL must start with postgresql://",
   })
   DATABASE_URL!: string;
+
+  /** Secret used to sign login tokens. Anyone who knows it can forge tokens. */
+  @IsString()
+  @MinLength(32, { message: "JWT_SECRET must be at least 32 characters" })
+  JWT_SECRET!: string;
+
+  /** How long a login token stays valid, in seconds (default 8 hours). */
+  @IsInt()
+  @Min(60)
+  JWT_EXPIRES_IN_SECONDS: number = 28800;
 }
 
 // Runs once at startup (ConfigModule calls it). If anything is missing or wrong the app
