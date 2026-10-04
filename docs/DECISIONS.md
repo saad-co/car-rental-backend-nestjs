@@ -119,3 +119,21 @@ added later by re-adding the `dark` variant and a theme context.
 Both repos have the same `.prettierrc` (`singleQuote: false`, `trailingComma: "all"`) and `npm run format`.
 Backend formats `src` and `test`; frontend formats `src/**/*.{ts,tsx,css}`.
 **Why:** one style across the two repos; format once now so later diffs show only real changes.
+
+### D22 — 2026-10-03 — Database conventions (users table, migrations)
+- Primary keys are `uuid` with the database default `gen_random_uuid()` (built into Postgres 13+); TypeORM is told
+  `uuidExtension: "pgcrypto"` (picks that function) and `installExtensions: false` (no `CREATE EXTENSION`).
+- All timestamps are `timestamptz` (UTC instants). Emails are stored lower-case, enforced by a CHECK constraint.
+- Every `@Column` states its SQL `type` explicitly. **Why:** the migration CLI runs through `tsx` (esbuild), which does
+  not emit TypeScript decorator metadata, so TypeORM cannot infer types and fails to load the entities.
+- Entities and migrations are registered in `src/database/data-source.ts` (explicit entity list; migrations by glob),
+  used by the CLI, seed script and tests. The running app gets its connection from `AppModule`.
+- Tests use a separate database via `DATABASE_URL_TEST` (name ends in `_test`).
+- Env is validated at startup (`src/config/env.validation.ts`); the app refuses to start on a bad value.
+
+### D23 — 2026-10-04 — API port 5000; clearer Postgres names
+Supersedes the names in D19 and the default port 3000. API listens on **5000**.
+Postgres user `car_rental_user`, password `car_rental_password`, database `car_rental_db`, test database
+`car_rental_db_test` (must end in `_test`). Container and volume names are unchanged.
+**Why:** user and database had the same name (`car_rental`), which made connection strings hard to read.
+Changing them needs a fresh volume (`docker compose down -v`), since Postgres reads these only on first start.

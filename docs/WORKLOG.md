@@ -4,6 +4,31 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-04 — Port 5000 and renamed Postgres user/db (D23)
+- **Done (backend, uncommitted):** port 3000 → 5000 (`.env.example`, `main.ts`, `env.validation.ts`, `CLAUDE.md`);
+  Postgres names updated in `.env.example`, `docker-compose.yml` defaults and `docker/initdb/01-create-test-db.sql`.
+- **Verified (by Saad):** volume recreated; `\l` lists `car_rental_db` and `car_rental_db_test`; `migration:run`
+  applied `CreateUsers` to the new database.
+- **Branch:** `feature/m0-auth` (backend).
+
+---
+
+### 2026-10-03 — M0: config, TypeORM, `User` entity, first migration (backend)
+- **Done (backend repo, uncommitted):** `ConfigModule` + startup env validation (`PORT`, `DATABASE_URL`);
+  TypeORM connected via `TypeOrmModule.forRootAsync`; `User` entity and `UsersModule`; shared `data-source.ts`;
+  migration `CreateUsers` generated and applied to the dev database; scripts `typeorm`, `migration:generate|run|revert|show`;
+  `.env.example` gained `DATABASE_URL` and `DATABASE_URL_TEST`.
+- **Verified:** Docker Postgres up, `car_rental` and `car_rental_test` exist (init script works). `\d users` matches the
+  entity. In rolled-back transactions Postgres rejected a duplicate email, an upper-case email and an invalid role.
+  `migration:show` lists the migration as applied. App starts against Postgres; a bad `PORT` or missing `DATABASE_URL`
+  stops startup with a clear message. `prettier --check`, `build`, `npm test`, `npm run test:e2e`, `npm run lint` pass.
+- **Not done:** the migration is applied to the dev DB only, not `car_rental_test` (done in the test-setup step);
+  no service, controller, password hashing or seed yet.
+- **Next:** `PasswordService` + `UsersService` + `seed:admin`, then auth (login, guards).
+- **Branch:** `feature/m0-auth` (backend).
+
+---
+
 ### 2026-10-03 — Prettier formatting in both repos
 - **Done (by Saad, reviewed by Claude):** `singleQuote: false` in the backend `.prettierrc`, `npm run format`
   over the backend; same `.prettierrc` and Prettier added to the frontend (`format` script), frontend formatted (D21).
