@@ -4,6 +4,21 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-06 — Admin auth backend, CORS, OpenAPI (D25, D27)
+- **Done (backend):** `PasswordService` (bcrypt), `UsersService`, `npm run seed:admin`, `POST /auth/login`,
+  global `JwtAuthGuard` with `@Public()`, `GET /auth/me` with `@CurrentUser()`, global `ValidationPipe`,
+  CORS from `CORS_ORIGINS`, Swagger at `/docs`, `npm run openapi:export` writing `openapi.json`.
+- **Verified (by Saad):** seed creates the admin (bcrypt `$2b$12$` hash) and is a no-op on re-run; login returns
+  a token; wrong password 401; invalid body 400; `/auth/me` 200 with token, 401 without or with a tampered token;
+  a deactivated admin is rejected with a still-valid token; CORS answers only allowed origins; `/docs` Authorize
+  flow works; `openapi.json` exported. build, lint and Prettier pass.
+- **Not done:** no automated tests for auth yet; Swagger pages are public (decide for staging).
+- **Scope change recorded:** driver applications and driver accounts (D26).
+- **Next:** frontend admin login (generated client, login page, protected routes); then applications and drivers.
+- **Branch:** `feature/m0-auth` (backend).
+
+---
+
 ### 2026-10-04 — Role cleanup: `admin` | `driver` (D24)
 - **Done (backend, uncommitted):** `Role` enum is `admin` | `driver`; `role` column has no default; JSDoc on the
   `User` entity; migration `ReplaceStaffRoleWithDriver` generated and applied. Spec, ARCHITECTURE and DECISIONS updated.

@@ -143,3 +143,29 @@ User `role` is `admin` | `driver` with no database default; only `admin` can log
 by admins. `driver` exists so a future driver portal needs no table change. Supersedes the `staff` role in the spec.
 **Why:** the client system has no staff role. The spec was drafted in chat and is not binding where it is
 inconsistent; it is updated in place when a better decision is made.
+
+### D25 — 2026-10-06 — Admin auth: JWT bearer token, global guard, user re-read per request
+`POST /auth/login` returns a JWT (payload `sub` = user id only; lifetime `JWT_EXPIRES_IN_SECONDS`, default 8h).
+A global guard (`APP_GUARD`) requires `Authorization: Bearer <token>` on every route unless marked `@Public()`.
+The guard loads the user from the database on each request and rejects missing or inactive users, so
+deactivation takes effect immediately. Unknown email, wrong password and inactive account give the same 401;
+a dummy bcrypt hash keeps response times equal. bcrypt cost 12, passwords limited to 72 bytes.
+No Passport: `@nestjs/jwt` plus our own guard. Scripts that need Nest's dependency injection (seed) run from
+the compiled build, because `tsx` does not emit decorator metadata.
+
+### D26 — 2026-10-06 — Driver applications and driver accounts (supersedes "drivers do not log in" in D24)
+Drivers apply through the existing 3-step form on gonzocar.com. The website sends the same JSON to the old
+backend and, as a second independent call, to our public `POST /applications`; both systems run in parallel and
+independently. Admins approve, reject or put applications `on_hold`. On approval the system creates the driver
+and a `driver` login (email only), generates a password and emails it (Nodemailer); the driver must verify their
+email before logging in and must change the password on first login before reaching any other screen.
+The driver portal shows payments, charges, late fees, deposit and vehicles, but never a lifetime total paid.
+**Why:** Saad and the client (2026-10-05/06). Details still open are in BACKLOG.
+
+### D27 — 2026-10-06 — CORS allow-list; OpenAPI document committed as `openapi.json`
+Browser origins allowed to call the API come from `CORS_ORIGINS` (comma-separated). The OpenAPI document is
+built by `@nestjs/swagger` with its CLI plugin (DTO types and JSDoc become the schema; no extra decorators),
+served at `/docs` and `/docs-json`, and exported by `npm run openapi:export` to `openapi.json` (committed).
+The export uses Nest's preview mode, so it needs no database. The frontend generates its client from the file.
+**Why:** the file works without a running backend, ties the contract to each commit, and makes API changes
+visible in PR diffs.

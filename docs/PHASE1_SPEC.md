@@ -12,7 +12,9 @@ they already paid. When in doubt, the system flags for a human instead of guessi
 ## 1. Scope
 
 **In Phase 1**
-- Admin web app (login). Only admins log in; drivers are records and do not log in (D24)
+- Admin web app (login)
+- Driver applications from the gonzocar.com form (approve / reject / on hold), and a driver portal with its own
+  login, created on approval (D26)
 - Drivers, their payment handles (aliases), billing settings
 - Append-only driver ledger
 - Recurring rent charges and arrears
@@ -22,8 +24,8 @@ they already paid. When in doubt, the system flags for a human instead of guessi
 - SMS reminders via Quo (formerly OpenPhone), inbound replies and delivery status
 - Payments dashboard, message templates, settings and automation switches
 
-**Not in Phase 1:** contracts and e-signature, vehicle condition / check-in, driver
-mobile app or portal, data migration from the existing system.
+**Not in Phase 1:** contracts and e-signature, vehicle condition / check-in, a driver
+mobile app, data migration from the existing system.
 
 **Reference system.** An existing app (FastAPI + Postgres) handles parts of this today.
 Use it as a reference for real-world behaviour and edge cases only — do not copy code.
@@ -72,7 +74,7 @@ so the two repos cannot silently drift apart.
 ## 4. Data model (conceptual — translate to TypeORM entities)
 
 **User** — an account that can log in. `email` (unique), `passwordHash`, `role` (`admin` | `driver`, no default),
-`active`. Only `admin` logs in in Phase 1; `driver` is reserved for a future portal (D24).
+`active`. Admins log in to the admin app; drivers log in to the driver portal with their email (D26).
 
 **Driver** — `firstName`, `lastName`, `phone` (E.164), `email`, `status` (`active` | `inactive`),
 `billingType` (`daily` | `weekly`), `billingRateCents`, `billingDueWeekday` (weekly only),

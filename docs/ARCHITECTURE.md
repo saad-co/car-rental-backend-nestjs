@@ -1,6 +1,7 @@
 # Architecture
 
-> **Status 2026-10-02: planned, not yet built.** This describes the target design.
+> **Status 2026-10-06: partly built.** Built: API scaffold, Postgres + TypeORM, admin auth, OpenAPI export;
+> frontend app shell. The rest describes the target design.
 > As components are built, update this file to match the code. Where they differ, the code wins.
 
 ## Components
@@ -33,7 +34,9 @@ Reminder job ──► effective balance check ──► Quo SMS (off / dry_run 
 Full rules: `PHASE1_SPEC.md` sections 5–8.
 
 ## Security model
-- Admin authentication (`role` is `admin` or `driver`; only admins log in). Ledger adjustments and reversals are admin-only.
+- JWT bearer-token authentication for admins and (later) drivers; a global guard protects every route unless
+  marked public; the user is re-read from the database on each request (D25). Ledger adjustments and reversals are admin-only.
+- Only origins in `CORS_ORIGINS` may call the API from a browser (D27).
 - Emails only trusted with `dkim=pass` and an exact expected sender domain.
 - Plaid access token encrypted at rest.
 - Webhooks (Plaid, Quo) verified by signature before processing.

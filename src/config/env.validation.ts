@@ -34,6 +34,14 @@ class EnvironmentVariables {
   @IsInt()
   @Min(60)
   JWT_EXPIRES_IN_SECONDS: number = 28800;
+
+  /**
+   * Comma-separated list of web addresses (origins) whose pages may call this API from
+   * a browser, e.g. "http://localhost:5173,https://gonzocar.com".
+   */
+  @IsString()
+  @IsNotEmpty()
+  CORS_ORIGINS: string = "http://localhost:5173";
 }
 
 // Runs once at startup (ConfigModule calls it). If anything is missing or wrong the app

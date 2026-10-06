@@ -31,4 +31,6 @@ NestJS 12 (ES modules: relative imports end in `.js`), TypeScript strict, TypeOR
 - Lint: `npm run lint`
 - Format: `npm run format` (Prettier, double quotes; run before committing)
 - Migrate: `npm run migration:run` (also `migration:revert`, `migration:show`, `migration:generate -- <path>`)
-- Export OpenAPI:
+- Seed first admin: `npm run seed:admin` (needs `ADMIN_EMAIL`, `ADMIN_PASSWORD` in `.env`)
+- Export OpenAPI: `npm run openapi:export` (writes `openapi.json`; commit it, then regenerate the frontend client)
+- API docs: http://localhost:5000/docs
