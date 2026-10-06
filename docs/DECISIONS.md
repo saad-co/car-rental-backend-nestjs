@@ -89,3 +89,105 @@ Milestone order is set in `PHASE1_SPEC.md` section 11. M0 is auth and roles.
 **Why:** every later screen needs a logged-in user, ledger adjustments are admin-only, and auth proves
 the full chain (database, API, OpenAPI client, frontend) before money logic is built on it.
 The client document groups this under "Setup and foundation"; the milestone split is ours.
+
+### D17 — 2026-10-02 — TypeORM instead of Prisma
+Supersedes the Prisma part of D2. Schema = TypeORM entity classes; changes only through generated,
+reviewed migration files; `synchronize` stays off (it can drop columns at startup).
+**Why:** Saad's choice. Idempotency and uniqueness rules still live in database constraints (D6).
+
+### D18 — 2026-10-02 — Vitest instead of Jest; NestJS 12 (ES modules)
+Nest 12's generator produces an ESM project with Vitest and oxlint. Kept as generated. The spec's
+"Jest" is changed to "Vitest"; the describe/it/expect API is the same.
+**Why:** Jest needs fragile extra configuration for ESM. Verified: constructor injection works under
+Vitest (the generated unit and e2e tests pass).
+
+### D19 — 2026-10-02 — Project name `car-rental` for local infrastructure
+Docker container `car-rental-db`, volume `car-rental-db-data`, database `car_rental`, test database
+`car_rental_test`, user `car_rental`. Matches the repo names.
+
+### D20 — 2026-10-02 — Frontend foundation: light theme only, trimmed TailAdmin shell
+Copied from TailAdmin: theme tokens, Outfit font, svgr icon convention, `SidebarContext`, `AppLayout`,
+`Backdrop`, `Dropdown`, `cn()`. Rewritten smaller: `AppSidebar` (one nav list, no sub-menus), `AppHeader`
+(no search, no notifications), `UserDropdown` (static placeholder until auth). **No dark mode**: all `dark:`
+classes removed, no theme context or toggle. Text logo "Car Rental" instead of TailAdmin images.
+Not copied: `react-helmet-async`/`PageMeta` (`<title>` is set in `index.html`), icon barrel entries beyond
+the two in use. `react-router` is v8 (template used v7); `strict: true` added to `tsconfig.app.json`.
+**Why:** Saad asked for a simple theme and basic shell (D15: copy only what a screen needs). Dark mode can be
+added later by re-adding the `dark` variant and a theme context.
+
+### D21 — 2026-10-03 — One code style in both repos: Prettier, double quotes
+Both repos have the same `.prettierrc` (`singleQuote: false`, `trailingComma: "all"`) and `npm run format`.
+Backend formats `src` and `test`; frontend formats `src/**/*.{ts,tsx,css}`.
+**Why:** one style across the two repos; format once now so later diffs show only real changes.
+
+### D22 — 2026-10-03 — Database conventions (users table, migrations)
+- Primary keys are `uuid` with the database default `gen_random_uuid()` (built into Postgres 13+); TypeORM is told
+  `uuidExtension: "pgcrypto"` (picks that function) and `installExtensions: false` (no `CREATE EXTENSION`).
+- All timestamps are `timestamptz` (UTC instants). Emails are stored lower-case, enforced by a CHECK constraint.
+- Every `@Column` states its SQL `type` explicitly. **Why:** the migration CLI runs through `tsx` (esbuild), which does
+  not emit TypeScript decorator metadata, so TypeORM cannot infer types and fails to load the entities.
+- Entities and migrations are registered in `src/database/data-source.ts` (explicit entity list; migrations by glob),
+  used by the CLI, seed script and tests. The running app gets its connection from `AppModule`.
+- Tests use a separate database via `DATABASE_URL_TEST` (name ends in `_test`).
+- Env is validated at startup (`src/config/env.validation.ts`); the app refuses to start on a bad value.
+
+### D23 — 2026-10-04 — API port 5000; clearer Postgres names
+Supersedes the names in D19 and the default port 3000. API listens on **5000**.
+Postgres user `car_rental_user`, password `car_rental_password`, database `car_rental_db`, test database
+`car_rental_db_test` (must end in `_test`). Container and volume names are unchanged.
+**Why:** user and database had the same name (`car_rental`), which made connection strings hard to read.
+Changing them needs a fresh volume (`docker compose down -v`), since Postgres reads these only on first start.
+
+### D24 — 2026-10-04 — Admin-only login; no `staff` role; drivers do not log in
+User `role` is `admin` | `driver` with no database default; only `admin` can log in. Drivers are records managed
+by admins. `driver` exists so a future driver portal needs no table change. Supersedes the `staff` role in the spec.
+**Why:** the client system has no staff role. The spec was drafted in chat and is not binding where it is
+inconsistent; it is updated in place when a better decision is made.
+
+### D25 — 2026-10-06 — Admin auth: JWT bearer token, global guard, user re-read per request
+`POST /auth/login` returns a JWT (payload `sub` = user id only; lifetime `JWT_EXPIRES_IN_SECONDS`, default 8h).
+A global guard (`APP_GUARD`) requires `Authorization: Bearer <token>` on every route unless marked `@Public()`.
+The guard loads the user from the database on each request and rejects missing or inactive users, so
+deactivation takes effect immediately. Unknown email, wrong password and inactive account give the same 401;
+a dummy bcrypt hash keeps response times equal. bcrypt cost 12, passwords limited to 72 bytes.
+No Passport: `@nestjs/jwt` plus our own guard. Scripts that need Nest's dependency injection (seed) run from
+the compiled build, because `tsx` does not emit decorator metadata.
+
+### D26 — 2026-10-06 — Driver applications and driver accounts (supersedes "drivers do not log in" in D24)
+Drivers apply through the existing 3-step form on gonzocar.com. The website sends the same JSON to the old
+backend and, as a second independent call, to our public `POST /applications`; both systems run in parallel and
+independently. Admins approve, reject or put applications `on_hold`. On approval the system creates the driver
+and a `driver` login (email only), generates a password and emails it (Nodemailer); the driver must verify their
+email before logging in and must change the password on first login before reaching any other screen.
+The driver portal shows payments, charges, late fees, deposit and vehicles, but never a lifetime total paid.
+**Why:** Saad and the client (2026-10-05/06). Details still open are in BACKLOG.
+
+### D27 — 2026-10-06 — CORS allow-list; OpenAPI document committed as `openapi.json`
+Browser origins allowed to call the API come from `CORS_ORIGINS` (comma-separated). The OpenAPI document is
+built by `@nestjs/swagger` with its CLI plugin (DTO types and JSDoc become the schema; no extra decorators),
+served at `/docs` and `/docs-json`, and exported by `npm run openapi:export` to `openapi.json` (committed).
+The export uses Nest's preview mode, so it needs no database. The frontend generates its client from the file.
+**Why:** the file works without a running backend, ties the contract to each commit, and makes API changes
+visible in PR diffs.
+
+### D28 — 2026-10-06 — Frontend admin session: token in localStorage, `/auth/me` on load, routes under `/admin`
+The access token from `POST /auth/login` is stored in `localStorage` (`carRental.accessToken`) and mirrored in
+React state (`AuthContext`). An `openapi-fetch` middleware adds `Authorization: Bearer <token>` to every request.
+On page load a stored token is checked with `GET /auth/me`; a 401 removes it. API unreachable keeps the token and
+offers a retry. Routes: `/admin/login` public; everything under `/admin` behind `RequireAuth`; any other URL goes
+to `/admin`. `RequireAuth` only decides what to show; the API's guard (D25) is the real protection.
+**Why:** simplest setup that matches the API's bearer tokens and survives a refresh. Trade-off: script running
+on the page (XSS) could read the token; an httpOnly cookie avoids that but needs cookie auth and CSRF protection
+in the API (B21). The `/admin` prefix leaves room for driver portal routes (D26).
+
+### D29 — 2026-10-06 — Frontend API data layer: generated types, TanStack Query conventions
+- `src/api/schema.d.ts` is generated from the backend's `openapi.json` (`npm run api:generate`) and is the
+  list of endpoints and their types; request paths are type-checked against it. No hand-written endpoint list.
+- `openapi-typescript` runs through `npx` pinned to 7.13.0 instead of being a dev dependency: its peer
+  dependency is TypeScript 5 and the project uses TypeScript 6, so `npm install` fails on peer resolution.
+- `src/api/queryClient.ts` holds the only TanStack Query configuration and every query key (hierarchical).
+- One `src/api/<feature>.queries.ts` per feature. Every `useQuery` / `useMutation` is wrapped in a custom hook
+  there, built from `queryOptions(...)`; screens call only these hooks. Exception: the `/auth/me` query lives
+  in `AuthContext` (its fetch function updates the provider's token state).
+**Why:** Saad (2026-10-06): configuration in one file, one queries file per feature, a hook per query/mutation.
+The generated types make backend changes fail the frontend build instead of failing at runtime.
