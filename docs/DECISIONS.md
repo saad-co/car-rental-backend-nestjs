@@ -169,3 +169,25 @@ served at `/docs` and `/docs-json`, and exported by `npm run openapi:export` to 
 The export uses Nest's preview mode, so it needs no database. The frontend generates its client from the file.
 **Why:** the file works without a running backend, ties the contract to each commit, and makes API changes
 visible in PR diffs.
+
+### D28 — 2026-10-06 — Frontend admin session: token in localStorage, `/auth/me` on load, routes under `/admin`
+The access token from `POST /auth/login` is stored in `localStorage` (`carRental.accessToken`) and mirrored in
+React state (`AuthContext`). An `openapi-fetch` middleware adds `Authorization: Bearer <token>` to every request.
+On page load a stored token is checked with `GET /auth/me`; a 401 removes it. API unreachable keeps the token and
+offers a retry. Routes: `/admin/login` public; everything under `/admin` behind `RequireAuth`; any other URL goes
+to `/admin`. `RequireAuth` only decides what to show; the API's guard (D25) is the real protection.
+**Why:** simplest setup that matches the API's bearer tokens and survives a refresh. Trade-off: script running
+on the page (XSS) could read the token; an httpOnly cookie avoids that but needs cookie auth and CSRF protection
+in the API (B21). The `/admin` prefix leaves room for driver portal routes (D26).
+
+### D29 — 2026-10-06 — Frontend API data layer: generated types, TanStack Query conventions
+- `src/api/schema.d.ts` is generated from the backend's `openapi.json` (`npm run api:generate`) and is the
+  list of endpoints and their types; request paths are type-checked against it. No hand-written endpoint list.
+- `openapi-typescript` runs through `npx` pinned to 7.13.0 instead of being a dev dependency: its peer
+  dependency is TypeScript 5 and the project uses TypeScript 6, so `npm install` fails on peer resolution.
+- `src/api/queryClient.ts` holds the only TanStack Query configuration and every query key (hierarchical).
+- One `src/api/<feature>.queries.ts` per feature. Every `useQuery` / `useMutation` is wrapped in a custom hook
+  there, built from `queryOptions(...)`; screens call only these hooks. Exception: the `/auth/me` query lives
+  in `AuthContext` (its fetch function updates the provider's token state).
+**Why:** Saad (2026-10-06): configuration in one file, one queries file per feature, a hook per query/mutation.
+The generated types make backend changes fail the frontend build instead of failing at runtime.

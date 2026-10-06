@@ -4,6 +4,22 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-06 — Frontend admin login (D28, D29)
+- **Done (frontend):** typed API client generated from `openapi.json` (`npm run api:generate`, `openapi-fetch`
+  with a bearer-token middleware); `AuthContext` (login, logout, `/auth/me` session check); central
+  `queryClient.ts`; login page at `/admin/login` (TailAdmin `Label`, `InputField`, `Button`); `RequireAuth` guard
+  on `/admin`; header shows the logged-in email and role with Sign out. Removed unused `openapi-react-query`.
+- **Verified (by Saad):** build, lint, Prettier pass. `/auth/me` 200 with a stored token, 401 with a bad token
+  (token removed). Login: empty fields and invalid email blocked by the browser; wrong password shows
+  "Invalid email or password."; success redirects to `/admin`. Logged-out visits to `/admin` and `/` redirect to
+  login; refresh keeps the session; Sign out clears the token; API down shows the retry screen.
+- **Not done:** admin-only role check (comes with driver accounts); return to the originally requested page after
+  login; no frontend tests yet.
+- **Next:** backend PR description and merge of both PRs after testing; then applications and drivers.
+- **Branch:** `feature/m0-auth` (frontend).
+
+---
+
 ### 2026-10-06 — Admin auth backend, CORS, OpenAPI (D25, D27)
 - **Done (backend):** `PasswordService` (bcrypt), `UsersService`, `npm run seed:admin`, `POST /auth/login`,
   global `JwtAuthGuard` with `@Public()`, `GET /auth/me` with `@CurrentUser()`, global `ValidationPipe`,

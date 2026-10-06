@@ -24,6 +24,7 @@ Ad-hoc requests, feedback, open questions and follow-ups. Mark done with a date;
 | B18 | Production email sender | 2026-10-06 | Nodemailer uses a personal Gmail for now; switch to a business address before go-live. |
 | B19 | Deposit rules, vehicles and rentals, rental extensions | 2026-10-06 | Needed for the driver portal. Client has not answered how extensions work. |
 | B20 | Swagger `/docs` exposure on staging | 2026-10-06 | Public locally; decide whether to hide or protect it when deployed. |
+| B21 | Token storage before go-live | 2026-10-06 | Admin token is in `localStorage` (D28). Consider an httpOnly cookie (needs cookie auth and CSRF protection in the API). |
 
 ## Done
 | # | Item | Done | Notes |
