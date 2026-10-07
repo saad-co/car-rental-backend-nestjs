@@ -282,10 +282,23 @@ export class ApplicationsService {
     return application;
   }
 
-  /** Copies every detail field from the entity, field by field. */
+  /**
+   * Copies every detail field from the entity, field by field. The list fields are repeated
+   * here rather than spread from `toListItem()`: its return type is a class, and spreading a
+   * class instance would silently drop anything defined on its prototype (lint rule
+   * `no-misused-spread`).
+   */
   private toDetail(application: Application): ApplicationDetailDto {
     return {
-      ...this.toListItem(application),
+      id: application.id,
+      status: application.status,
+      firstName: application.firstName,
+      lastName: application.lastName,
+      email: application.email,
+      phone: application.phone,
+      city: application.city,
+      submittedAt: application.submittedAt,
+      receivedAt: application.createdAt,
       requestId: application.requestId,
       zip: application.zip,
       licenseStoragePath: application.licenseStoragePath,
