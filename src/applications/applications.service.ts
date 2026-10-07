@@ -2,14 +2,22 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import { isEmail } from "class-validator";
 import { DataSource, EntityManager, Repository } from "typeorm";
+import { createOneTimeToken } from "../auth/one-time-token.js";
 import { isUniqueViolation } from "../database/postgres-errors.js";
+import { driverWelcomeEmail } from "../drivers/driver-welcome.email.js";
 import { Driver } from "../drivers/driver.entity.js";
 import { toUsE164 } from "../drivers/us-phone.js";
+import { MailService } from "../mail/mail.service.js";
+import { PasswordService } from "../users/password.service.js";
+import { Role, User } from "../users/user.entity.js";
 import { Application, ApplicationStatus } from "./application.entity.js";
 import {
   ApplicationDetailDto,
@@ -27,6 +35,9 @@ export interface ReceiveResult {
 /** A submission from the website: a flat JSON object whose values are mostly strings. */
 type Submission = Record<string, unknown>;
 
+/** How long a new driver's email verification link works. */
+const VERIFY_LINK_VALID_HOURS = 48;
+
 /**
  * Driver applications: intake from the website, the admin list and detail views, and review
  * (approve, reject, on hold).
@@ -38,12 +49,21 @@ type Submission = Record<string, unknown>;
  */
 @Injectable()
 export class ApplicationsService {
+  private readonly logger = new Logger(ApplicationsService.name);
+  /** Base address of the web app, for links in emails. */
+  private readonly webAppUrl: string;
+
   constructor(
     @InjectRepository(Application)
     private readonly applications: Repository<Application>,
     /** The database connection, used to run several writes as one transaction. */
     private readonly dataSource: DataSource,
-  ) {}
+    private readonly passwords: PasswordService,
+    private readonly mail: MailService,
+    config: ConfigService,
+  ) {
+    this.webAppUrl = config.getOrThrow<string>("WEB_APP_URL");
+  }
 
   /**
    * Stores a submission from the gonzocar.com form.
@@ -173,16 +193,34 @@ export class ApplicationsService {
   }
 
   /**
-   * Approves an application: creates the Driver and marks the application approved, in one
-   * transaction. Either both writes are saved or neither is, so there can never be a driver
-   * without an approved application, or the other way round.
+   * Approves an application, in one transaction:
+   * 1. creates the driver's login (`users`, role `driver`) with a generated password, not yet
+   *    verified and required to change the password (D26);
+   * 2. creates the Driver, linked to that login;
+   * 3. marks the application approved;
+   * 4. emails the driver their password and verification link.
+   *
+   * The email is sent last, inside the transaction: if it fails, everything is rolled back and
+   * the admin can simply try again. (The reverse, email sent but the commit failing, is very
+   * unlikely; the driver would hold a password for an account that does not exist, and
+   * approving again sends a new one.)
    *
    * @param adminId the admin approving it (stored as the reviewer).
    * @throws NotFoundException if there is no application with this id.
-   * @throws ConflictException if it is already approved, or a driver already has this email or phone.
+   * @throws ConflictException if it is already approved, if a driver or login already has
+   *   this email, or a driver has this phone.
    * @throws BadRequestException if the phone is not a valid US number.
+   * @throws ServiceUnavailableException if the welcome email could not be sent (nothing saved).
    */
   async approve(id: string, adminId: string): Promise<ApplicationDetailDto> {
+    // Prepared before the transaction: hashing is deliberately slow, and the row lock taken
+    // inside should be held as briefly as possible.
+    const temporaryPassword = this.passwords.generate();
+    const passwordHash = await this.passwords.hash(temporaryPassword);
+    const verification = createOneTimeToken(
+      VERIFY_LINK_VALID_HOURS * 60 * 60 * 1000,
+    );
+
     try {
       const approved = await this.dataSource.transaction(async (manager) => {
         const application = await this.loadForReview(manager, id);
@@ -207,12 +245,34 @@ export class ApplicationsService {
           );
         }
 
+        // The admin account, or a login left over from an earlier driver, may use this email.
+        const existingLogin = await manager.findOne(User, {
+          where: { email: application.email },
+        });
+        if (existingLogin) {
+          throw new ConflictException(
+            "A login with this email already exists.",
+          );
+        }
+
+        const user = await manager.save(
+          manager.create(User, {
+            email: application.email,
+            passwordHash,
+            role: Role.driver,
+            mustChangePassword: true,
+            emailVerificationTokenHash: verification.tokenHash,
+            emailVerificationExpiresAt: verification.expiresAt,
+          }),
+        );
+
         const driver = await manager.save(
           manager.create(Driver, {
             firstName: application.firstName,
             lastName: application.lastName,
             email: application.email,
             phone,
+            userId: user.id,
           }),
         );
 
@@ -220,16 +280,54 @@ export class ApplicationsService {
         application.driverId = driver.id;
         application.reviewedById = adminId;
         application.reviewedAt = new Date();
-        return manager.save(application);
+        const saved = await manager.save(application);
+
+        await this.sendWelcomeEmail(
+          application,
+          temporaryPassword,
+          verification.token,
+        );
+        return saved;
       });
       return this.toDetail(approved);
     } catch (error) {
       if (isUniqueViolation(error)) {
         throw new ConflictException(
-          "A driver with this email or phone number already exists.",
+          "A driver or login with this email or phone number already exists.",
         );
       }
       throw error;
+    }
+  }
+
+  /**
+   * Sends the approved driver their login details. Called inside the approval transaction.
+   * @throws ServiceUnavailableException if the email could not be sent; the cause is logged.
+   */
+  private async sendWelcomeEmail(
+    application: Application,
+    temporaryPassword: string,
+    verificationToken: string,
+  ): Promise<void> {
+    try {
+      await this.mail.send(
+        driverWelcomeEmail({
+          firstName: application.firstName,
+          email: application.email,
+          temporaryPassword,
+          verifyUrl: `${this.webAppUrl}/driver/verify-email?token=${verificationToken}`,
+          loginUrl: `${this.webAppUrl}/driver/login`,
+          validForHours: VERIFY_LINK_VALID_HOURS,
+        }),
+      );
+    } catch (error) {
+      this.logger.error(
+        `Welcome email to ${application.email} failed; approval rolled back.`,
+        error instanceof Error ? error.stack : String(error),
+      );
+      throw new ServiceUnavailableException(
+        "The welcome email could not be sent, so nothing was approved. Please try again.",
+      );
     }
   }
 
