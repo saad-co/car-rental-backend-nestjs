@@ -20,9 +20,12 @@ NestJS 12 (ES modules: relative imports end in `.js`), TypeScript strict, TypeOR
   Workflow: edit the entity, `npm run migration:generate -- src/database/migrations/<Name>`, run `npm run format`,
   read the SQL, then `npm run migration:run`. Add new entities to `src/database/data-source.ts`.
 - Every `@Column` gets an explicit `type` (the migration CLI has no decorator metadata). Timestamps are `timestamptz`.
+- Every entity must be registered by some module's `TypeOrmModule.forFeature([...])`, including entities that are
+  only the target of a relation; `data-source.ts` alone is not enough for the running app (`autoLoadEntities`).
+- Routes are admin-only unless `@Roles(...)` opens them (D32). Email goes through `MailService`; local `.env` uses
+  `MAIL_MODE=log` unless testing real sends.
 
 ## Commands
-<!-- Fill in once the scaffold exists -->
 - Install: `npm install`
 - Database: `docker compose up -d` (needs Docker Desktop running); copy `.env.example` to `.env` first
 - Dev: `npm run start:dev` (API on http://localhost:5000)

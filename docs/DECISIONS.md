@@ -209,3 +209,23 @@ Order: step A (drivers, applications) → step B (driver login, D26) → payment
 Connecting the live gonzocar.com form stays the last step.
 **Why:** Saad: driver login is small, and application → approval → driver login forms one flow that is
 tested together.
+
+### D32 — 2026-10-08 — Roles: admin-only by default
+A second global guard (`RolesGuard`, after `JwtAuthGuard`) checks the user's role. A route without `@Roles(...)`
+is admin-only; routes open to drivers say so (`@Roles(Role.admin, Role.driver)` on `/auth/me` and
+`/auth/change-password`). 401 = unknown user, 403 = known user without access.
+**Why:** a forgotten decorator on a new admin route must not expose it to drivers.
+
+### D33 — 2026-10-08 — Driver logins: created on approval, verified by email, forced password change
+- A driver's login is a `users` row (role `driver`), linked by `drivers.user_id` (unique). Approval creates it in
+  the same transaction as the driver, with a generated password (`must_change_password = true`).
+- The welcome email (password + verification link) is sent last inside that transaction; a failed send rolls
+  everything back and returns 503. The rarer reverse case (sent, commit fails) is accepted.
+- The verification link carries a random one-time token; only its SHA-256 hash and an expiry (48 h) are stored on
+  `users`, cleared on use. Not a JWT: the auth guard accepts any JWT signed with `JWT_SECRET` as a login.
+- Drivers cannot log in before verifying (403, only after a correct password). Admins are not required to verify.
+- While `must_change_password` is true, `RolesGuard` answers 403 on every route except those marked
+  `@AllowedBeforePasswordChange()` (`/auth/me`, `/auth/change-password`). New passwords: 8 characters to 72 bytes.
+- Email goes through `MailService`: `MAIL_MODE=smtp` (Gmail App Password for now, B18) or `log` (printed, not sent;
+  local only, because the console shows temporary passwords). `MAIL_MODE` has no default.
+**Why:** D26 flow with the fewest moving parts; no driver can end up with an account but no email.

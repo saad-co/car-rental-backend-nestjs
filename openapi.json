@@ -71,7 +71,64 @@
             }
           }
         },
-        "summary": "`GET /auth/me`: returns the user the token belongs to. The frontend calls it when the\npage loads to check that a stored token is still valid and to learn who is logged in.\n\nIt has no `@Public()`, so JwtAuthGuard requires a valid token before this runs.",
+        "summary": "`GET /auth/me`: returns the user the token belongs to. The frontend calls it when the\npage loads to check that a stored token is still valid and to learn who is logged in.\n\nIt has no `@Public()`, so JwtAuthGuard requires a valid token before this runs.\n`@Roles` opens it to drivers too (routes are admin-only by default), and it works before\na forced password change, so the frontend can learn that the change is required.",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/auth/verify-email": {
+      "post": {
+        "operationId": "AuthController_verifyEmail",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyEmailDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "summary": "`POST /auth/verify-email`: confirms the email address from the token in the welcome\nemail's link. Public: the driver cannot log in before this. `204` on success.",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/auth/change-password": {
+      "post": {
+        "operationId": "AuthController_changePassword",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthUserDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`POST /auth/change-password`: the logged-in user replaces their password. This is the\none action allowed while a temporary password must be changed. Returns the updated user.",
         "tags": [
           "Auth"
         ]
@@ -436,12 +493,17 @@
               "driver"
             ],
             "type": "string"
+          },
+          "mustChangePassword": {
+            "type": "boolean",
+            "description": "True while the user still has a system-generated password. Until they change it, every\nendpoint except `GET /auth/me` and `POST /auth/change-password` answers `403`."
           }
         },
         "required": [
           "id",
           "email",
-          "role"
+          "role",
+          "mustChangePassword"
         ]
       },
       "LoginResponseDto": {
@@ -458,6 +520,38 @@
         "required": [
           "accessToken",
           "user"
+        ]
+      },
+      "VerifyEmailDto": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "The `token` from the verification link in the welcome email.",
+            "maxLength": 100
+          }
+        },
+        "required": [
+          "token"
+        ]
+      },
+      "ChangePasswordDto": {
+        "type": "object",
+        "properties": {
+          "currentPassword": {
+            "type": "string",
+            "description": "The password the user logs in with now (the temporary one, at first login)."
+          },
+          "newPassword": {
+            "type": "string",
+            "description": "The new password: at least 8 characters. The 72-byte limit (bcrypt) is checked by the\nservice, since characters outside English can take more than one byte.",
+            "minLength": 8,
+            "maxLength": 72
+          }
+        },
+        "required": [
+          "currentPassword",
+          "newPassword"
         ]
       },
       "ApplicationReceivedDto": {

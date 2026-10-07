@@ -25,6 +25,11 @@ export class AuthUserDto {
   id: string;
   email: string;
   role: Role;
+  /**
+   * True while the user still has a system-generated password. Until they change it, every
+   * endpoint except `GET /auth/me` and `POST /auth/change-password` answers `403`.
+   */
+  mustChangePassword: boolean;
 }
 
 /** Response of a successful login. */

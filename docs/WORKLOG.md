@@ -4,6 +4,34 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-08 — Step B frontend: driver pages; admin app admin-only
+- **Done (frontend):** `/driver/verify-email` (confirm button, not on page load, so email scanners cannot use up
+  the token), `/driver/login`, forced `/driver/change-password`, placeholder `/driver` portal; login page shared
+  by both areas and refuses the wrong role; `RequireAuth` per role; any 401 logs out (B23 done); lists refetch
+  when the tab regains focus.
+- **Verified (manually):** full flow: approve → email → confirm → login → forced password change → portal.
+- **Not done:** real portal content (payments, charges, vehicles); frontend tests.
+- **Next:** payment email parsing (needs B4–B8).
+- **Branch:** `feature/driver-login` (frontend).
+
+---
+
+### 2026-10-08 — Step B backend: driver logins (D32, D33)
+- **Done (backend):** global `RolesGuard` (admin-only by default); `users.email_verified_at`,
+  `must_change_password`, email verification token hash + expiry; `drivers.user_id`; `MailService` (log/smtp,
+  Nodemailer); approval creates the driver's login and sends the welcome email inside the transaction;
+  `POST /auth/verify-email`, `POST /auth/change-password`; login refuses unverified drivers; forced-change gate;
+  `mustChangePassword` in login and `/auth/me`; `openapi.json` exported.
+- **Verified (manually):** driver token gets 403 on admin routes; welcome email printed (log) and delivered (Gmail
+  SMTP); new login row linked, unverified, must change password, token hash stored; unverified login 403;
+  verify 204; forced-change 403 until changed; wrong current password 400; change 200; new password logs in.
+- **Not done:** driver frontend (B5); resend-credentials action; automated tests; rate limiting on login and
+  verify-email.
+- **Next:** B5 driver pages and admin-only admin app; then payment email parsing.
+- **Branch:** `feature/driver-login` (backend).
+
+---
+
 ### 2026-10-07 — Step A frontend: applications and drivers screens
 - **Done (frontend):** Applications list (status filter, pagination, filter and page in the URL), application
   detail (full submission, approve / reject / on hold, approve confirmed in a modal, API errors shown), Drivers

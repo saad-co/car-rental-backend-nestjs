@@ -6,6 +6,7 @@ import { UsersModule } from "../users/users.module.js";
 import { AuthController } from "./auth.controller.js";
 import { AuthService } from "./auth.service.js";
 import { JwtAuthGuard } from "./jwt-auth.guard.js";
+import { RolesGuard } from "./roles.guard.js";
 
 /**
  * Everything about logging in.
@@ -33,8 +34,10 @@ import { JwtAuthGuard } from "./jwt-auth.guard.js";
   controllers: [AuthController],
   providers: [
     AuthService,
-    // Registering the guard under APP_GUARD makes it run on every route in the app.
+    // Registering a guard under APP_GUARD makes it run on every route in the app.
+    // Global guards run in this order: first who the user is, then what they may do.
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: RolesGuard },
   ],
 })
 export class AuthModule {}

@@ -77,4 +77,40 @@ export class UsersService {
       .where("user.email = :email", { email: this.normalizeEmail(email) })
       .getOne();
   }
+
+  /** Finds a user by id INCLUDING the password hash, to check their current password. */
+  findByIdWithPassword(id: string): Promise<User | null> {
+    return this.users
+      .createQueryBuilder("user")
+      .addSelect("user.passwordHash")
+      .where("user.id = :id", { id })
+      .getOne();
+  }
+
+  /**
+   * Finds the user whose email verification link carries this token (by its hash). A column
+   * excluded with `select: false` can still be searched on; it just is not returned.
+   */
+  findByEmailVerificationTokenHash(tokenHash: string): Promise<User | null> {
+    return this.users.findOne({
+      where: { emailVerificationTokenHash: tokenHash },
+    });
+  }
+
+  /** Records that the user confirmed their email, and makes the link unusable from now on. */
+  async markEmailVerified(id: string): Promise<void> {
+    await this.users.update(id, {
+      emailVerifiedAt: new Date(),
+      emailVerificationTokenHash: null,
+      emailVerificationExpiresAt: null,
+    });
+  }
+
+  /** Replaces the user's password with one they chose, which ends the forced change (D26). */
+  async setOwnPassword(id: string, password: string): Promise<void> {
+    await this.users.update(id, {
+      passwordHash: await this.passwords.hash(password),
+      mustChangePassword: false,
+    });
+  }
 }
