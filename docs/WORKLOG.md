@@ -4,6 +4,23 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-07 — Step A backend: drivers, applications intake and review (D26, D31)
+- **Done (backend):** `drivers` table (unique lower-case email, unique `+1` phone via CHECK, active/inactive);
+  `applications` table (unique `request_id`, full payload as jsonb minus `turnstile_token`, review fields,
+  CHECK approved iff driver linked); public `POST /applications` (lenient checks, idempotent);
+  admin `GET /applications` (paginated, status filter), `GET /applications/:id`, approve / reject / hold
+  (approve creates the driver in one transaction with a row lock); admin `GET /drivers`, `GET /drivers/:id`;
+  shared `PaginationQueryDto`; `openapi.json` exported; fixture `test/fixtures/application.json`.
+- **Verified (manually):** constraints in psql (bad phone, upper-case email, approved without driver, unknown
+  driver id); repeat submission returns the same id with one row; token not stored; 400 for missing fields and
+  bad email; approve 200 with driver; second approve/reject 409; duplicate email and differently formatted
+  duplicate phone 409; non-US phone 400 with nothing saved; hold → reject → approve works; drivers list and filters.
+- **Not done:** automated tests; rate limiting and Turnstile on the public endpoint (B16); admin screens (A8–A10).
+- **Next:** backend PR; frontend applications and drivers screens; then step B (driver login).
+- **Branch:** `feature/driver-applications` (backend).
+
+---
+
 ### 2026-10-07 — M0 merged; build order for drivers and payment parsing (D30)
 - **Done:** backend PR #1 and frontend PR #2 merged into `dev` (2026-10-06). New branch `feature/driver-applications`.
 - **Plan (D30):** step A (drivers, applications intake, admin review) → payment email parsing → step B (driver login).
