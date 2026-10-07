@@ -3,9 +3,12 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  JoinColumn,
+  OneToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from "typeorm";
+import { User } from "../users/user.entity.js";
 
 /** Whether a driver is currently with the fleet. */
 export enum DriverStatus {
@@ -18,7 +21,7 @@ export enum DriverStatus {
  *
  * Created when an admin approves an application (D26). Payments are matched to drivers
  * later (spec M4), which is why email and phone must each belong to only one driver.
- * Kept lean on purpose: billing, aliases and the driver's login are added in later steps.
+ * Kept lean on purpose: billing and aliases are added in later steps.
  */
 @Entity("drivers")
 @Check("drivers_email_lowercase", `"email" = lower("email")`)
@@ -55,6 +58,18 @@ export class Driver {
     default: DriverStatus.active,
   })
   status: DriverStatus;
+
+  /**
+   * The driver's login (a `users` row with role `driver`), created on approval. Null for
+   * drivers approved before driver logins existed.
+   */
+  @Column({ name: "user_id", type: "uuid", nullable: true })
+  userId: string | null;
+
+  /** Foreign key to `users`. `OneToOne` also makes `user_id` unique: one login per driver. */
+  @OneToOne(() => User, { nullable: true })
+  @JoinColumn({ name: "user_id" })
+  user?: User | null;
 
   @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt: Date;
