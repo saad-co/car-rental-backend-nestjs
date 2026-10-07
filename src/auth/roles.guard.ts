@@ -7,6 +7,7 @@ import {
 import { Reflector } from "@nestjs/core";
 import { Role } from "../users/user.entity.js";
 import type { AuthenticatedRequest } from "./jwt-auth.guard.js";
+import { ALLOWED_BEFORE_PASSWORD_CHANGE_KEY } from "./password-change.decorator.js";
 import { IS_PUBLIC_KEY } from "./public.decorator.js";
 import { ROLES_KEY } from "./roles.decorator.js";
 
@@ -17,8 +18,11 @@ const DEFAULT_ROLES: Role[] = [Role.admin];
  * Second global guard, after JwtAuthGuard: checks the logged-in user's role.
  *
  * JwtAuthGuard answers "who are you?" (401 if unknown); this answers "may you do this?"
- * (403 if not). Routes are admin-only unless `@Roles(...)` says otherwise; `@Public()` routes
- * are skipped, since there is no user.
+ * (403 if not):
+ * - a user who must still replace their temporary password may only use routes marked
+ *   `@AllowedBeforePasswordChange()` (D26);
+ * - routes are admin-only unless `@Roles(...)` says otherwise.
+ * `@Public()` routes are skipped, since there is no user.
  */
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -38,6 +42,17 @@ export class RolesGuard implements CanActivate {
       ) ?? DEFAULT_ROLES;
 
     const { user } = context.switchToHttp().getRequest<AuthenticatedRequest>();
+
+    if (
+      user.mustChangePassword &&
+      !this.reflector.getAllAndOverride<boolean>(
+        ALLOWED_BEFORE_PASSWORD_CHANGE_KEY,
+        targets,
+      )
+    ) {
+      throw new ForbiddenException("Please change your password first.");
+    }
+
     if (!allowed.includes(user.role)) {
       throw new ForbiddenException("You do not have access to this.");
     }

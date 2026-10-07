@@ -17,6 +17,8 @@ export interface AuthenticatedUser {
   id: string;
   email: string;
   role: Role;
+  /** True until the user replaces a system-generated password (RolesGuard enforces it). */
+  mustChangePassword: boolean;
 }
 
 /** An Express request that has passed through the guard. */
@@ -77,7 +79,12 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException("Invalid or expired access token.");
     }
 
-    request.user = { id: user.id, email: user.email, role: user.role };
+    request.user = {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      mustChangePassword: user.mustChangePassword,
+    };
     return true;
   }
 
