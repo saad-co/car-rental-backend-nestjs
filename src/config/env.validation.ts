@@ -1,12 +1,16 @@
 import { plainToInstance } from "class-transformer";
 import {
+  IsEmail,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsString,
+  IsUrl,
   Matches,
   Max,
   Min,
   MinLength,
+  ValidateIf,
   validateSync,
 } from "class-validator";
 
@@ -42,6 +46,48 @@ class EnvironmentVariables {
   @IsString()
   @IsNotEmpty()
   CORS_ORIGINS: string = "http://localhost:5173";
+
+  /**
+   * Base address of the web app, used to build links in emails (e.g. the driver's email
+   * verification link). No trailing slash.
+   */
+  @IsUrl({ require_tld: false, require_protocol: true })
+  WEB_APP_URL!: string;
+
+  /**
+   * How emails go out. `smtp`: really sent (SMTP_* below). `log`: printed to the console and
+   * not sent, for local development only, since the console then shows temporary passwords.
+   * No default on purpose: every environment must choose.
+   */
+  @IsIn(["log", "smtp"])
+  MAIL_MODE!: "log" | "smtp";
+
+  /** Sender shown in emails, e.g. `Car Rental <name@gmail.com>`. With Gmail, the account's own address. */
+  @IsString()
+  @IsNotEmpty()
+  MAIL_FROM!: string;
+
+  /** SMTP server, e.g. `smtp.gmail.com`. Required when MAIL_MODE is `smtp`. */
+  @ValidateIf((env: EnvironmentVariables) => env.MAIL_MODE === "smtp")
+  @IsString()
+  @IsNotEmpty()
+  SMTP_HOST?: string;
+
+  /** 465 (TLS from the start, used for Gmail) or 587 (STARTTLS). */
+  @ValidateIf((env: EnvironmentVariables) => env.MAIL_MODE === "smtp")
+  @IsInt()
+  SMTP_PORT?: number;
+
+  /** SMTP login; for Gmail, the Gmail address. */
+  @ValidateIf((env: EnvironmentVariables) => env.MAIL_MODE === "smtp")
+  @IsEmail()
+  SMTP_USER?: string;
+
+  /** SMTP password; for Gmail, an App Password (never the account password). */
+  @ValidateIf((env: EnvironmentVariables) => env.MAIL_MODE === "smtp")
+  @IsString()
+  @IsNotEmpty()
+  SMTP_PASSWORD?: string;
 }
 
 // Runs once at startup (ConfigModule calls it). If anything is missing or wrong the app

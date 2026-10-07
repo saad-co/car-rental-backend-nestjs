@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import bcrypt from "bcrypt";
+import { randomBytes } from "node:crypto";
 
 /**
  * bcrypt's cost factor: each +1 doubles the time it takes to hash a password.
@@ -43,6 +44,15 @@ export class PasswordService {
       return false;
     }
     return bcrypt.compare(password, passwordHash);
+  }
+
+  /**
+   * A random temporary password, e.g. for a new driver's first login. 12 random bytes as
+   * base64url: 16 characters of letters, digits, `-` and `_`. The user must replace it at
+   * first login (`must_change_password`).
+   */
+  generate(): string {
+    return randomBytes(12).toString("base64url");
   }
 
   /** Length is counted in bytes, not characters, because that is what bcrypt reads. */
