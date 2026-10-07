@@ -203,3 +203,9 @@ Connecting the live gonzocar.com form to `POST /applications` is the last step, 
 **Why:** payment parsing is the client's main problem (Saad, 2026-10-07). Matching payments needs driver records
 but not driver logins, so the login work moves after parsing. The live form is the client's real sign-up flow, so
 it is only touched once our endpoint is deployed and proven.
+
+### D31 — 2026-10-07 — Driver login before payment parsing (supersedes the order in D30)
+Order: step A (drivers, applications) → step B (driver login, D26) → payment email parsing.
+Connecting the live gonzocar.com form stays the last step.
+**Why:** Saad: driver login is small, and application → approval → driver login forms one flow that is
+tested together.

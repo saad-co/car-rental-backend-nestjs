@@ -7,6 +7,7 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 ### 2026-10-07 — M0 merged; build order for drivers and payment parsing (D30)
 - **Done:** backend PR #1 and frontend PR #2 merged into `dev` (2026-10-06). New branch `feature/driver-applications`.
 - **Plan (D30):** step A (drivers, applications intake, admin review) → payment email parsing → step B (driver login).
+- **Revised same day (D31):** step A → step B (driver login) → payment email parsing.
 - **Next:** A1 `Driver` entity and migration.
 - **Branch:** `feature/driver-applications` (backend).
 
