@@ -11,6 +11,8 @@ import { CurrentUser } from "./current-user.decorator.js";
 import { AuthUserDto, LoginDto, LoginResponseDto } from "./dto/login.dto.js";
 import type { AuthenticatedUser } from "./jwt-auth.guard.js";
 import { Public } from "./public.decorator.js";
+import { Roles } from "./roles.decorator.js";
+import { Role } from "../users/user.entity.js";
 
 /**
  * Authentication routes. Controllers only receive the request and hand it to a service;
@@ -41,8 +43,10 @@ export class AuthController {
    * page loads to check that a stored token is still valid and to learn who is logged in.
    *
    * It has no `@Public()`, so JwtAuthGuard requires a valid token before this runs.
+   * `@Roles` opens it to drivers too (routes are admin-only by default).
    */
   @Get("me")
+  @Roles(Role.admin, Role.driver)
   me(@CurrentUser() user: AuthenticatedUser): AuthUserDto {
     return user;
   }
