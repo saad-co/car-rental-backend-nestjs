@@ -1,7 +1,8 @@
 # Architecture
 
-> **Status 2026-10-06: partly built.** Built: API scaffold, Postgres + TypeORM, admin auth, OpenAPI export;
-> frontend app shell, generated API client, admin login and protected routes. The rest describes the target design.
+> **Status 2026-10-07: partly built.** Built: API scaffold, Postgres + TypeORM, admin auth, OpenAPI export;
+> driver applications intake and review, drivers list; frontend app shell, generated API client, admin login and
+> protected routes. The rest describes the target design.
 > As components are built, update this file to match the code. Where they differ, the code wins.
 
 ## Components

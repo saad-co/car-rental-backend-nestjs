@@ -191,3 +191,21 @@ in the API (B21). The `/admin` prefix leaves room for driver portal routes (D26)
   in `AuthContext` (its fetch function updates the provider's token state).
 **Why:** Saad (2026-10-06): configuration in one file, one queries file per feature, a hook per query/mutation.
 The generated types make backend changes fail the frontend build instead of failing at runtime.
+
+### D30 — 2026-10-07 — Build order: drivers and applications, then payment parsing, then driver login
+1. **Step A:** `drivers` and `applications` tables, public `POST /applications`, admin review (approve creates the
+   driver), admin screens. Tested with a fixture JSON and Postman/curl, not the live website.
+2. **Payment email parsing** (spec M3/M4): Gmail intake, extraction, matching payments to drivers.
+3. **Step B:** driver logins from D26 (generated password, email verification, forced password change, portal),
+   starting with an admin-only role check on admin endpoints.
+
+Connecting the live gonzocar.com form to `POST /applications` is the last step, after deployment and full testing.
+**Why:** payment parsing is the client's main problem (Saad, 2026-10-07). Matching payments needs driver records
+but not driver logins, so the login work moves after parsing. The live form is the client's real sign-up flow, so
+it is only touched once our endpoint is deployed and proven.
+
+### D31 — 2026-10-07 — Driver login before payment parsing (supersedes the order in D30)
+Order: step A (drivers, applications) → step B (driver login, D26) → payment email parsing.
+Connecting the live gonzocar.com form stays the last step.
+**Why:** Saad: driver login is small, and application → approval → driver login forms one flow that is
+tested together.

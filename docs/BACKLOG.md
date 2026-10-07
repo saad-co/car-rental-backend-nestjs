@@ -8,11 +8,11 @@ Ad-hoc requests, feedback, open questions and follow-ups. Mark done with a date;
 | B1 | Write access to both repos for Abulkalam | 2026-10-02 | Requested from Saad. Blocks pushing. |
 | B2 | Branch protection on `main` and `dev`, both repos | 2026-10-02 | Saad. Require PRs. |
 | B3 | Confirm Cash App / Venmo one-stage posting (D8) | 2026-10-02 | Saad. |
-| B4 | Exact sender addresses for Cash App, Venmo, Chase Zelle emails | 2026-10-02 | Confirm from real samples. Needed for M3. |
-| B5 | Real sample payment emails | 2026-10-02 | Raw emails exist in the reference system's `inbound_emails` table. Needed for M3. |
-| B6 | Gmail OAuth for the new system | 2026-10-02 | Separate authorization from the client. Restricted scope — check verification path. Needed for M3. |
+| B4 | Exact sender addresses for Cash App, Venmo, Chase Zelle emails | 2026-10-02 | Confirm from real samples. Needed for M3. **Start early:** blocks payment parsing, which follows step A (D30). |
+| B5 | Real sample payment emails | 2026-10-02 | Raw emails exist in the reference system's `inbound_emails` table. Needed for M3. **Start early:** blocks payment parsing, which follows step A (D30). |
+| B6 | Gmail OAuth for the new system | 2026-10-02 | Separate authorization from the client. Restricted scope — check verification path. Needed for M3. **Start early:** blocks payment parsing, which follows step A (D30). |
 | B7 | Plaid production access | 2026-10-02 | Requires a security questionnaire and company details. Needed for M5. |
-| B8 | Choose LLM provider and model | 2026-10-02 | Cheap, fast, structured output. Needed for M3. |
+| B8 | Choose LLM provider and model | 2026-10-02 | Cheap, fast, structured output. Needed for M3. **Start early:** blocks payment parsing, which follows step A (D30). |
 | B9 | Reminder tier defaults and wording | 2026-10-02 | Needed for M6. |
 | B10 | Late fees | 2026-10-02 | Client expects them in the driver portal (2026-10-06). Need the rule: amount and when it applies. |
 | B12 | Real logo and favicon from the client | 2026-10-02 | Sidebar/header use a text logo "Car Rental"; favicon is Vite's default. |
@@ -25,6 +25,8 @@ Ad-hoc requests, feedback, open questions and follow-ups. Mark done with a date;
 | B19 | Deposit rules, vehicles and rentals, rental extensions | 2026-10-06 | Needed for the driver portal. Client has not answered how extensions work. |
 | B20 | Swagger `/docs` exposure on staging | 2026-10-06 | Public locally; decide whether to hide or protect it when deployed. |
 | B21 | Token storage before go-live | 2026-10-06 | Admin token is in `localStorage` (D28). Consider an httpOnly cookie (needs cookie auth and CSRF protection in the API). |
+| B22 | Connect the gonzocar.com form to `POST /applications` | 2026-10-07 | Last step (D31). Needs: API deployed; `https://gonzocar.com` in `CORS_ORIGINS`; rate limiting (B16); the website's call to us must not block or break its submission if our API fails. |
+| B23 | Expired token during use | 2026-10-07 | A 401 from any API call should log the admin out and return to login; today the page shows an error. |
 
 ## Done
 | # | Item | Done | Notes |
