@@ -4,12 +4,20 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-07 — M0 merged; build order for drivers and payment parsing (D30)
+- **Done:** backend PR #1 and frontend PR #2 merged into `dev` (2026-10-06). New branch `feature/driver-applications`.
+- **Plan (D30):** step A (drivers, applications intake, admin review) → payment email parsing → step B (driver login).
+- **Next:** A1 `Driver` entity and migration.
+- **Branch:** `feature/driver-applications` (backend).
+
+---
+
 ### 2026-10-06 — Frontend admin login (D28, D29)
 - **Done (frontend):** typed API client generated from `openapi.json` (`npm run api:generate`, `openapi-fetch`
   with a bearer-token middleware); `AuthContext` (login, logout, `/auth/me` session check); central
   `queryClient.ts`; login page at `/admin/login` (TailAdmin `Label`, `InputField`, `Button`); `RequireAuth` guard
   on `/admin`; header shows the logged-in email and role with Sign out. Removed unused `openapi-react-query`.
-- **Verified (by Saad):** build, lint, Prettier pass. `/auth/me` 200 with a stored token, 401 with a bad token
+- **Verified (manually):** build, lint, Prettier pass. `/auth/me` 200 with a stored token, 401 with a bad token
   (token removed). Login: empty fields and invalid email blocked by the browser; wrong password shows
   "Invalid email or password."; success redirects to `/admin`. Logged-out visits to `/admin` and `/` redirect to
   login; refresh keeps the session; Sign out clears the token; API down shows the retry screen.
@@ -24,7 +32,7 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 - **Done (backend):** `PasswordService` (bcrypt), `UsersService`, `npm run seed:admin`, `POST /auth/login`,
   global `JwtAuthGuard` with `@Public()`, `GET /auth/me` with `@CurrentUser()`, global `ValidationPipe`,
   CORS from `CORS_ORIGINS`, Swagger at `/docs`, `npm run openapi:export` writing `openapi.json`.
-- **Verified (by Saad):** seed creates the admin (bcrypt `$2b$12$` hash) and is a no-op on re-run; login returns
+- **Verified (manually):** seed creates the admin (bcrypt `$2b$12$` hash) and is a no-op on re-run; login returns
   a token; wrong password 401; invalid body 400; `/auth/me` 200 with token, 401 without or with a tampered token;
   a deactivated admin is rejected with a still-valid token; CORS answers only allowed origins; `/docs` Authorize
   flow works; `openapi.json` exported. build, lint and Prettier pass.
@@ -38,7 +46,7 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 ### 2026-10-04 — Role cleanup: `admin` | `driver` (D24)
 - **Done (backend, uncommitted):** `Role` enum is `admin` | `driver`; `role` column has no default; JSDoc on the
   `User` entity; migration `ReplaceStaffRoleWithDriver` generated and applied. Spec, ARCHITECTURE and DECISIONS updated.
-- **Verified (by Saad):** `\dT+ user_role` lists `admin` and `driver`.
+- **Verified (manually):** `\dT+ user_role` lists `admin` and `driver`.
 - **Next:** `PasswordService`, `UsersService`, `seed:admin`, login, auth guard; then Drivers.
 - **Branch:** `feature/m0-auth` (backend).
 
@@ -47,7 +55,7 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 ### 2026-10-04 — Port 5000 and renamed Postgres user/db (D23)
 - **Done (backend, uncommitted):** port 3000 → 5000 (`.env.example`, `main.ts`, `env.validation.ts`, `CLAUDE.md`);
   Postgres names updated in `.env.example`, `docker-compose.yml` defaults and `docker/initdb/01-create-test-db.sql`.
-- **Verified (by Saad):** volume recreated; `\l` lists `car_rental_db` and `car_rental_db_test`; `migration:run`
+- **Verified (manually):** volume recreated; `\l` lists `car_rental_db` and `car_rental_db_test`; `migration:run`
   applied `CreateUsers` to the new database.
 - **Branch:** `feature/m0-auth` (backend).
 
@@ -70,7 +78,7 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 ---
 
 ### 2026-10-03 — Prettier formatting in both repos
-- **Done (by Saad, reviewed by Claude):** `singleQuote: false` in the backend `.prettierrc`, `npm run format`
+- **Done (reviewed by Claude):** `singleQuote: false` in the backend `.prettierrc`, `npm run format`
   over the backend; same `.prettierrc` and Prettier added to the frontend (`format` script), frontend formatted (D21).
 - **Verified:** formatting-only diffs; `prettier --check` clean in both repos; backend `build`, `test`, `test:e2e`,
   `lint` pass; frontend `build` passes, `lint` 0 errors (same 1 warning as before).
