@@ -2,13 +2,18 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseUUIDPipe,
   Post,
   Query,
 } from "@nestjs/common";
 import { ApiBody } from "@nestjs/swagger";
+import { CurrentUser } from "../auth/current-user.decorator.js";
+import type { AuthenticatedUser } from "../auth/jwt-auth.guard.js";
 import { Public } from "../auth/public.decorator.js";
+import { ApplicationStatus } from "./application.entity.js";
 import { ApplicationsService } from "./applications.service.js";
 import {
   ApplicationDetailDto,
@@ -67,5 +72,44 @@ export class ApplicationsController {
     @Param("id", ParseUUIDPipe) id: string,
   ): Promise<ApplicationDetailDto> {
     return this.applications.findOne(id);
+  }
+
+  /**
+   * `POST /applications/:id/approve`: creates the driver and marks the application approved.
+   *
+   * POST because it is an action with side effects, not an edit of a field. `@HttpCode(200)`
+   * because it returns the updated application rather than creating a resource at this URL.
+   */
+  @Post(":id/approve")
+  @HttpCode(HttpStatus.OK)
+  approve(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() admin: AuthenticatedUser,
+  ): Promise<ApplicationDetailDto> {
+    return this.applications.approve(id, admin.id);
+  }
+
+  /** `POST /applications/:id/reject`: rejects the application. No driver is created. */
+  @Post(":id/reject")
+  @HttpCode(HttpStatus.OK)
+  reject(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() admin: AuthenticatedUser,
+  ): Promise<ApplicationDetailDto> {
+    return this.applications.setStatus(
+      id,
+      ApplicationStatus.rejected,
+      admin.id,
+    );
+  }
+
+  /** `POST /applications/:id/hold`: puts the application on hold to decide later. */
+  @Post(":id/hold")
+  @HttpCode(HttpStatus.OK)
+  hold(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() admin: AuthenticatedUser,
+  ): Promise<ApplicationDetailDto> {
+    return this.applications.setStatus(id, ApplicationStatus.on_hold, admin.id);
   }
 }

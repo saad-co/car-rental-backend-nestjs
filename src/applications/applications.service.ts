@@ -1,13 +1,16 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { isEmail } from "class-validator";
-import { Repository } from "typeorm";
+import { DataSource, EntityManager, Repository } from "typeorm";
 import { isUniqueViolation } from "../database/postgres-errors.js";
-import { Application } from "./application.entity.js";
+import { Driver } from "../drivers/driver.entity.js";
+import { toUsE164 } from "../drivers/us-phone.js";
+import { Application, ApplicationStatus } from "./application.entity.js";
 import {
   ApplicationDetailDto,
   ApplicationListDto,
@@ -25,7 +28,8 @@ export interface ReceiveResult {
 type Submission = Record<string, unknown>;
 
 /**
- * Driver applications: intake from the website, and the admin list and detail views.
+ * Driver applications: intake from the website, the admin list and detail views, and review
+ * (approve, reject, on hold).
  *
  * Intake is lenient on purpose. The website is not ours and sends every value as text, so
  * instead of a strict DTO (which would reject a real application the day the form adds or
@@ -37,6 +41,8 @@ export class ApplicationsService {
   constructor(
     @InjectRepository(Application)
     private readonly applications: Repository<Application>,
+    /** The database connection, used to run several writes as one transaction. */
+    private readonly dataSource: DataSource,
   ) {}
 
   /**
@@ -163,6 +169,121 @@ export class ApplicationsService {
     if (!application) {
       throw new NotFoundException("Application not found.");
     }
+    return this.toDetail(application);
+  }
+
+  /**
+   * Approves an application: creates the Driver and marks the application approved, in one
+   * transaction. Either both writes are saved or neither is, so there can never be a driver
+   * without an approved application, or the other way round.
+   *
+   * @param adminId the admin approving it (stored as the reviewer).
+   * @throws NotFoundException if there is no application with this id.
+   * @throws ConflictException if it is already approved, or a driver already has this email or phone.
+   * @throws BadRequestException if the phone is not a valid US number.
+   */
+  async approve(id: string, adminId: string): Promise<ApplicationDetailDto> {
+    try {
+      const approved = await this.dataSource.transaction(async (manager) => {
+        const application = await this.loadForReview(manager, id);
+
+        const phone = toUsE164(application.phone);
+        if (!phone) {
+          throw new BadRequestException(
+            `Phone "${application.phone}" is not a valid US number, so no driver can be created.`,
+          );
+        }
+
+        // Checked first only to give a precise message. The unique constraints on `drivers`
+        // still decide if two approvals race; that case is caught below.
+        const existing = await manager.findOne(Driver, {
+          where: [{ email: application.email }, { phone }],
+        });
+        if (existing) {
+          throw new ConflictException(
+            existing.email === application.email
+              ? "A driver with this email already exists."
+              : "A driver with this phone number already exists.",
+          );
+        }
+
+        const driver = await manager.save(
+          manager.create(Driver, {
+            firstName: application.firstName,
+            lastName: application.lastName,
+            email: application.email,
+            phone,
+          }),
+        );
+
+        application.status = ApplicationStatus.approved;
+        application.driverId = driver.id;
+        application.reviewedById = adminId;
+        application.reviewedAt = new Date();
+        return manager.save(application);
+      });
+      return this.toDetail(approved);
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ConflictException(
+          "A driver with this email or phone number already exists.",
+        );
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Rejects an application or puts it on hold. No driver is created. Can be changed again
+   * later, unless the application has been approved.
+   *
+   * @throws NotFoundException if there is no application with this id.
+   * @throws ConflictException if it is already approved.
+   */
+  async setStatus(
+    id: string,
+    status: ApplicationStatus.rejected | ApplicationStatus.on_hold,
+    adminId: string,
+  ): Promise<ApplicationDetailDto> {
+    const updated = await this.dataSource.transaction(async (manager) => {
+      const application = await this.loadForReview(manager, id);
+      application.status = status;
+      application.reviewedById = adminId;
+      application.reviewedAt = new Date();
+      return manager.save(application);
+    });
+    return this.toDetail(updated);
+  }
+
+  /**
+   * Loads an application inside a transaction and locks its row until the transaction ends
+   * (`SELECT ... FOR UPDATE`). A second review of the same application (another admin, a
+   * double click) waits here, then sees the first one's result, so two approvals can never
+   * both create a driver.
+   *
+   * Only `approved` is final, because a driver was created from it.
+   */
+  private async loadForReview(
+    manager: EntityManager,
+    id: string,
+  ): Promise<Application> {
+    const application = await manager.findOne(Application, {
+      where: { id },
+      lock: { mode: "pessimistic_write" },
+    });
+    if (!application) {
+      throw new NotFoundException("Application not found.");
+    }
+    if (application.status === ApplicationStatus.approved) {
+      throw new ConflictException(
+        "This application is already approved and cannot be changed.",
+      );
+    }
+    return application;
+  }
+
+  /** Copies every detail field from the entity, field by field. */
+  private toDetail(application: Application): ApplicationDetailDto {
     return {
       ...this.toListItem(application),
       requestId: application.requestId,
