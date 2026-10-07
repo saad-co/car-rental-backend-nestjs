@@ -1,9 +1,19 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { isEmail } from "class-validator";
 import { Repository } from "typeorm";
 import { isUniqueViolation } from "../database/postgres-errors.js";
 import { Application } from "./application.entity.js";
+import {
+  ApplicationDetailDto,
+  ApplicationListDto,
+  ApplicationListItemDto,
+} from "./dto/application.dto.js";
+import { ListApplicationsQueryDto } from "./dto/list-applications-query.dto.js";
 
 /** Result of receiving a submission. `created` is false when it was a repeat of one already stored. */
 export interface ReceiveResult {
@@ -15,7 +25,7 @@ export interface ReceiveResult {
 type Submission = Record<string, unknown>;
 
 /**
- * Driver applications: intake from the website now; admin review in later steps.
+ * Driver applications: intake from the website, and the admin list and detail views.
  *
  * Intake is lenient on purpose. The website is not ours and sends every value as text, so
  * instead of a strict DTO (which would reject a real application the day the form adds or
@@ -119,6 +129,67 @@ export class ApplicationsService {
       });
       return { application: existing, created: false };
     }
+  }
+
+  /**
+   * One page of applications, newest first, optionally only one status.
+   *
+   * `skip` / `take` become SQL `OFFSET` / `LIMIT` (Mongoose: `.skip()` / `.limit()`).
+   * `findAndCount` also returns the total number of matching rows, for page numbers.
+   * `id` is a second sort key so rows received in the same millisecond keep a fixed order
+   * across pages.
+   */
+  async list(query: ListApplicationsQueryDto): Promise<ApplicationListDto> {
+    const [rows, total] = await this.applications.findAndCount({
+      where: query.status ? { status: query.status } : {},
+      order: { createdAt: "DESC", id: "DESC" },
+      skip: (query.page - 1) * query.limit,
+      take: query.limit,
+    });
+    return {
+      items: rows.map((row) => this.toListItem(row)),
+      total,
+      page: query.page,
+      limit: query.limit,
+    };
+  }
+
+  /**
+   * One application with all its details.
+   * @throws NotFoundException if there is no application with this id.
+   */
+  async findOne(id: string): Promise<ApplicationDetailDto> {
+    const application = await this.applications.findOneBy({ id });
+    if (!application) {
+      throw new NotFoundException("Application not found.");
+    }
+    return {
+      ...this.toListItem(application),
+      requestId: application.requestId,
+      zip: application.zip,
+      licenseStoragePath: application.licenseStoragePath,
+      ratingStoragePath: application.ratingStoragePath,
+      earningsStoragePath: application.earningsStoragePath,
+      payload: application.payload,
+      reviewedById: application.reviewedById,
+      reviewedAt: application.reviewedAt,
+      driverId: application.driverId,
+    };
+  }
+
+  /** Copies the list fields from the entity, field by field, so nothing else leaks out. */
+  private toListItem(application: Application): ApplicationListItemDto {
+    return {
+      id: application.id,
+      status: application.status,
+      firstName: application.firstName,
+      lastName: application.lastName,
+      email: application.email,
+      phone: application.phone,
+      city: application.city,
+      submittedAt: application.submittedAt,
+      receivedAt: application.createdAt,
+    };
   }
 
   /**
