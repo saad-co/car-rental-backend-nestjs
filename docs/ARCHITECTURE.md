@@ -1,7 +1,7 @@
 # Architecture
 
-> **Status 2026-10-07: partly built.** Built: API scaffold, Postgres + TypeORM, admin auth, OpenAPI export;
-> driver applications intake and review, drivers list; frontend app shell, generated API client, admin login and
+> **Status 2026-10-08: partly built.** Built: API scaffold, Postgres + TypeORM, admin auth, OpenAPI export;
+> driver applications intake and review, drivers list, driver logins (backend); frontend app shell, generated API client, admin login and
 > protected routes. The rest describes the target design.
 > As components are built, update this file to match the code. Where they differ, the code wins.
 
@@ -35,8 +35,10 @@ Reminder job ──► effective balance check ──► Quo SMS (off / dry_run 
 Full rules: `PHASE1_SPEC.md` sections 5–8.
 
 ## Security model
-- JWT bearer-token authentication for admins and (later) drivers; a global guard protects every route unless
-  marked public; the user is re-read from the database on each request (D25). Ledger adjustments and reversals are admin-only.
+- JWT bearer-token authentication for admins and drivers; a global guard protects every route unless marked
+  public; the user is re-read from the database on each request (D25). A second global guard makes routes
+  admin-only unless opened to drivers, and blocks everything until a temporary password is changed (D32, D33).
+- Drivers must confirm their email (one-time link, hashed token) before logging in (D33). Ledger adjustments and reversals are admin-only.
 - The admin web app keeps the token in `localStorage` and sends it as a bearer header; its route guard is
   display-only, the API enforces access (D28).
 - Only origins in `CORS_ORIGINS` may call the API from a browser (D27).
