@@ -26,6 +26,7 @@ Ad-hoc requests, feedback, open questions and follow-ups. Mark done with a date;
 | B20 | Swagger `/docs` exposure on staging | 2026-10-06 | Public locally; decide whether to hide or protect it when deployed. |
 | B21 | Token storage before go-live | 2026-10-06 | Admin token is in `localStorage` (D28). Consider an httpOnly cookie (needs cookie auth and CSRF protection in the API). |
 | B22 | Connect the gonzocar.com form to `POST /applications` | 2026-10-07 | Last step (D31). Needs: API deployed; `https://gonzocar.com` in `CORS_ORIGINS`; rate limiting (B16); the website's call to us must not block or break its submission if our API fails. |
+| B23 | Expired token during use | 2026-10-07 | A 401 from any API call should log the admin out and return to login; today the page shows an error. |
 
 ## Done
 | # | Item | Done | Notes |

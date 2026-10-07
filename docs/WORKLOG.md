@@ -4,6 +4,20 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-07 — Step A frontend: applications and drivers screens
+- **Done (frontend):** Applications list (status filter, pagination, filter and page in the URL), application
+  detail (full submission, approve / reject / on hold, approve confirmed in a modal, API errors shown), Drivers
+  list (status filter, pagination). Hooks per query and mutation in `applications.queries.ts` and
+  `drivers.queries.ts`. Copied from TailAdmin: Table, Badge, Pagination (made controlled), Modal.
+- **Verified (manually):** filters and paging (URL survives refresh); approve errors (non-US phone, duplicate phone)
+  shown; reject updates the badge and the list without a reload; approved shows no actions; drivers list.
+- **Not done:** driver detail page; frontend tests; a 401 during use (expired token) shows an error instead of
+  returning to login.
+- **Next:** merge both PRs; step B (driver login), starting with the admin-only role check.
+- **Branch:** `feature/driver-applications` (frontend).
+
+---
+
 ### 2026-10-07 — Step A backend: drivers, applications intake and review (D26, D31)
 - **Done (backend):** `drivers` table (unique lower-case email, unique `+1` phone via CHECK, active/inactive);
   `applications` table (unique `request_id`, full payload as jsonb minus `turnstile_token`, review fields,
