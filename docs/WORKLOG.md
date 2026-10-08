@@ -4,6 +4,20 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-08 — Plan update: deployment blocked, email parsing next (D34)
+- **State:** M0, step A (applications, drivers) and step B (driver login) are merged into `dev` in both repos.
+  Local flow verified end to end: website-shaped application → admin approval → welcome email → email
+  confirmation → driver login → forced password change → portal.
+- **Blocked:** Railway deployment and connecting the live website (B22, B24): no access to the client's Railway
+  account yet.
+- **Next:** payment email parsing, in a new chat. Start with requirements and the list for Saad (Gmail access,
+  sample emails, sender addresses, LLM: B4-B8); build the tables and the parser against saved sample emails.
+  Sample email shapes for reference: `gonzocar/tests/test_gmail_parser_addresses.py` (read-only, never copy code).
+- **Deferred:** security hardening (B25).
+- **Branch:** start `feature/email-parsing` from `dev` in both repos as needed.
+
+---
+
 ### 2026-10-08 — Step B frontend: driver pages; admin app admin-only
 - **Done (frontend):** `/driver/verify-email` (confirm button, not on page load, so email scanners cannot use up
   the token), `/driver/login`, forced `/driver/change-password`, placeholder `/driver` portal; login page shared

@@ -229,3 +229,14 @@ is admin-only; routes open to drivers say so (`@Roles(Role.admin, Role.driver)` 
 - Email goes through `MailService`: `MAIL_MODE=smtp` (Gmail App Password for now, B18) or `log` (printed, not sent;
   local only, because the console shows temporary passwords). `MAIL_MODE` has no default.
 **Why:** D26 flow with the fewest moving parts; no driver can end up with an account but no email.
+
+### D34 — 2026-10-08 — Deployment blocked; features first, hardening later; one chat per feature
+- Railway deployment waits for access to the client's Railway account (B24). Until then everything is built and
+  tested locally. Connecting the live website form (B22) needs a deployed API, so it waits too.
+- Next feature: payment email parsing (spec M3/M4), starting with what needs no outside access: tables and
+  parsing against saved sample emails. Gmail access, real samples and the LLM choice (B4-B8) are requested from Saad.
+- Security hardening (rate limiting, `/docs` exposure, token storage, production secrets) is deferred until the
+  features are done (B25). The Safety rules in `CLAUDE.md` still apply.
+- Each feature gets its own chat; the docs carry the state between chats (`CLAUDE.md`, "Sessions").
+**Why:** Saad and Abulkalam, 2026-10-08: show features to the client first; long chats lose detail.
+

@@ -25,7 +25,9 @@ Ad-hoc requests, feedback, open questions and follow-ups. Mark done with a date;
 | B19 | Deposit rules, vehicles and rentals, rental extensions | 2026-10-06 | Needed for the driver portal. Client has not answered how extensions work. |
 | B20 | Swagger `/docs` exposure on staging | 2026-10-06 | Public locally; decide whether to hide or protect it when deployed. |
 | B21 | Token storage before go-live | 2026-10-06 | Admin token is in `localStorage` (D28). Consider an httpOnly cookie (needs cookie auth and CSRF protection in the API). |
-| B22 | Connect the gonzocar.com form to `POST /applications` | 2026-10-07 | Last step (D31). Needs: API deployed; `https://gonzocar.com` in `CORS_ORIGINS`; rate limiting (B16); the website's call to us must not block or break its submission if our API fails. |
+| B22 | Connect the gonzocar.com form to `POST /applications` | 2026-10-07 | Last step (D31). Needs: API deployed; `https://gonzocar.com` in `CORS_ORIGINS`; rate limiting (B16); the website's call to us must not block or break its submission if our API fails. **Blocked by B24.** |
+| B24 | Access to the client's Railway account | 2026-10-08 | **Blocks deployment.** Needed to deploy backend, frontend and Postgres to staging. Until then everything runs locally. |
+| B25 | Security hardening (deferred) | 2026-10-08 | After the features: rate limiting on `POST /applications`, `/auth/login`, `/auth/verify-email`; Swagger `/docs` exposure (B20); token storage (B21); strong production secrets and `MAIL_MODE=smtp` on staging; Turnstile (B16). |
 
 ## Done
 | # | Item | Done | Notes |
