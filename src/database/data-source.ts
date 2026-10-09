@@ -2,6 +2,7 @@ import "reflect-metadata";
 import { DataSource } from "typeorm";
 import { Application } from "../applications/application.entity.js";
 import { Driver } from "../drivers/driver.entity.js";
+import { InboundEmail } from "../email-intake/inbound-email.entity.js";
 import { User } from "../users/user.entity.js";
 import { buildBaseOptions } from "./typeorm-options.js";
 
@@ -15,6 +16,6 @@ if (!databaseUrl) {
 
 export default new DataSource({
   ...buildBaseOptions(databaseUrl),
-  entities: [User, Driver, Application],
+  entities: [User, Driver, Application, InboundEmail],
   migrations: [`${import.meta.dirname}/migrations/*.{ts,js}`],
 });

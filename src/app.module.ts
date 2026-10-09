@@ -8,6 +8,7 @@ import { buildBaseOptions } from "./database/typeorm-options.js";
 import { DriversModule } from "./drivers/drivers.module.js";
 import { ApplicationsModule } from "./applications/applications.module.js";
 import { AuthModule } from "./auth/auth.module.js";
+import { EmailIntakeModule } from "./email-intake/email-intake.module.js";
 import { UsersModule } from "./users/users.module.js";
 
 @Module({
@@ -27,6 +28,7 @@ import { UsersModule } from "./users/users.module.js";
     AuthModule,
     ApplicationsModule,
     DriversModule,
+    EmailIntakeModule,
   ],
   controllers: [AppController],
   providers: [AppService],
