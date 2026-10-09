@@ -4,6 +4,41 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-09 — Source changed to Gmail IMAP; `verifyDkim` reads Gmail headers (D38)
+- **Done (backend):** `verifyDkim` accepts the signer as `header.d=` or Gmail's `header.i=@domain` (6 new tests with
+  real-shaped Cash App and Venmo headers); `imap-peek` simplified to one mailbox (`IMAP_USER`, `IMAP_PASSWORD`,
+  `IMAP_TRUSTED_SERVER`), scans the newest 300 messages, new `--from=<sender>` option; `.env.example` updated; spec
+  4 and 5.1 updated; D38 supersedes D36.
+- **Verified (manually):** read `gonzobilling@gmail.com` (20,301 messages) over IMAP with an app password; a real
+  Cash App email verifies as `cashapp` and not as the other providers. Gmail screenshots confirmed the routes.
+- **Found:** Stripe (846) and Chime (650) emails are in the inbox and in daily use, outside the accepted scope (B32);
+  Stripe payouts and Chime requests/transfers are not payments. Inbox goes back to 2024 (B33).
+- **Not done:** `verifyDkim` fix not yet run against a real Zelle email read through Gmail; the intake service; LLM
+  client; B30.
+- **Next:** run `imap:peek -- <UID>` on a Zelle and a Venmo email; decide Stripe/Chime with Saad; intake service
+  (plan mode first).
+- **Branch:** `feature/email-parsing` (backend).
+
+---
+
+### 2026-10-09 — Step 4: `inbound_emails` table (D37)
+- **Done (backend):** `InboundEmail` entity, `EmailIntakeModule` (registers the entity, no services yet), wired into
+  `AppModule` and `data-source.ts`; migration `CreateInboundEmails` generated, read, applied to the dev database.
+  Spec sections 4 and 5.1 updated for IMAP and the new message key. `imap-peek` now takes a list of mailboxes
+  (`IMAP_USER_n` / `IMAP_PASSWORD_n`).
+- **Verified (manually, psql, rolled-back transactions):** `\d inbound_emails` matches the entity; duplicate
+  `(mailbox, uid_validity, uid)` rejected; `rejected_unverified` without a reason rejected, with a reason accepted;
+  upper-case mailbox rejected; provider `chime` rejected. Build, lint and tests pass.
+- **Found:** all four pay mailboxes read; only Chase Zelle mail, `gonzopay@` (203) and `payashwood@` (11); none of
+  Cash App/Venmo (B31, asked Saad). One real email shows B30 (amount check can be fooled by memo amounts).
+- **Not done:** migration not applied to `car_rental_db_test`; no service writes rows yet; `payment_id`; Cash App and
+  Venmo samples; the LLM client.
+- **Next:** the intake service: fetch new messages per mailbox over IMAP (remember the last UID), run parse, verify,
+  extract (fake extractor first), validate, insert-or-skip into `inbound_emails`. Plan mode first.
+- **Branch:** `feature/email-parsing` (backend).
+
+---
+
 ### 2026-10-09 — IMAP route proven on a real Mailcow mailbox (D36)
 - **Done (backend):** `scripts/imap-peek.ts` (`npm run imap:peek`, dev tool, not in the build): read-only IMAP
   list of the newest messages, or `-- <UID>` to save one `.eml` to `../mail-samples` and run `parseRawEmail` +

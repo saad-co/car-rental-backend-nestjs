@@ -18,7 +18,7 @@ they already paid. When in doubt, the system flags for a human instead of guessi
 - Drivers, their payment handles (aliases), billing settings
 - Append-only driver ledger
 - Recurring rent charges and arrears
-- Payment intake: Gmail (Cash App, Venmo, Zelle notifications) and Plaid (Zelle deposits in the Chase account)
+- Payment intake: Gmail (Zelle, Cash App, Venmo, Stripe and Chime notifications; all five, D39) and Plaid (Zelle deposits in the Chase account)
 - LLM-based extraction and matching, with an unrecognised bucket for manual assignment
 - Two-stage posting for Zelle (reported → confirmed)
 - SMS reminders via Quo (formerly OpenPhone), inbound replies and delivery status
@@ -85,15 +85,17 @@ so the two repos cannot silently drift apart.
 `valueNormalized` (lowercased, trimmed, whitespace collapsed), `createdById`, `source` (`manual` | `assignment`).
 Unique on `(type, valueNormalized)`. **Lookups always filter by type.**
 
-**InboundEmail** — one row per Gmail message processed.
-`gmailMessageId` (unique), `fromAddress`, `subject`, `receivedAt`,
-`authDkimPass`, `authDkimDomain`, `provider` (`cashapp` | `venmo` | `zelle_chase` | `unknown`),
+**InboundEmail** — one row per mailbox message processed (read over IMAP, D38).
+`mailbox`, `imapUidValidity`, `imapUid` (unique together), `messageId` (informational), `fromAddress`, `subject`,
+`receivedAt` (IMAP internal date, not the sender's `Date` header),
+`authDkimPass`, `authDkimDomain`, `provider` (`cashapp` | `venmo` | `zelle_chase` | `stripe` | `chime` | `unknown`),
 `status` (`processed` | `rejected_unverified` | `extraction_failed` | `not_payment`),
-`statusReason`, `bodyText` (only for allow-listed payment senders), `paymentId` (nullable).
+`statusReason` (required for `rejected_unverified` and `extraction_failed`), `bodyText` (only for allow-listed
+payment senders), `paymentId` (nullable; added with the Payment table). Rows are never updated (D37).
 
 **Payment** — a money event from any source.
-`source` (`email_cashapp` | `email_venmo` | `email_zelle` | `plaid_zelle` | `manual`),
-`externalId` (Gmail message id or Plaid transaction id), unique on `(source, externalId)`.
+`source` (`email_cashapp` | `email_venmo` | `email_zelle` | `email_stripe` | `email_chime` | `plaid_zelle` | `manual`),
+`externalId` (the InboundEmail id or Plaid transaction id), unique on `(source, externalId)`.
 `amountCents`, `senderName`, `senderHandle`, `occurredAt`,
 `status` (`reported` | `confirmed` | `unmatched` | `rejected` | `discrepancy`),
 `driverId` (nullable), `matchMethod` (`alias` | `llm` | `manual`), `matchConfidence` (0–1),
@@ -121,12 +123,15 @@ Balance = sum(credits) − sum(debits). Never stored.
 
 ## 5. Payment intake
 
-### 5.1 Gmail
-- OAuth to the business mailbox, read-only scope.
-- Query **only allow-listed senders**. Never `in:anywhere` — the default search already excludes spam and trash, and that exclusion is a defence, not a limitation. Sender addresses go in config and are confirmed from real samples.
-- **Verify every message** from the `Authentication-Results` header: require `dkim=pass` **and** `header.d` exactly equal to the expected domain for that provider. Anything else → `rejected_unverified`, never credits anyone.
-- **Dedup on `gmailMessageId`.** If already in `InboundEmail`, skip it completely. Never reprocess, never overwrite its status.
-- Poll every few minutes with a received-time watermark plus a small overlap window.
+### 5.1 Mailbox intake (IMAP on `gonzobilling@gmail.com`, see D38)
+- Every payment email ends up in `gonzobilling@gmail.com` (Zelle via a Mailcow redirect, Cash App via a forward from
+  another Gmail, Venmo directly). Read it over IMAP (`imap.gmail.com`), read-only, with a Google app password
+  (credentials in `.env`). A mailbox that cannot be read is a visible failure, never skipped silently.
+- Process **only allow-listed senders**; the inbox holds unrelated mail (promotions, alerts) that must never enter the pipeline. Sender addresses go in config and are confirmed from real samples.
+- Start from a go-live point (UID or date), never from the start of the inbox (it holds 20,000+ messages back to 2024).
+- **Verify every message** from the `Authentication-Results` header written by the receiving server (`mx.google.com`; any other header is ignored): require `dkim=pass` **and** a signer domain (`header.d`, or Gmail's `header.i=@domain`) exactly equal to the expected domain for that provider. Anything else → `rejected_unverified`, never credits anyone.
+- **Dedup on `(mailbox, imapUidValidity, imapUid)`.** If already in `InboundEmail`, skip it completely. Never reprocess, never overwrite its status.
+- Poll every few minutes, remembering the last UID read.
 
 ### 5.2 Extraction (LLM)
 - For each verified email, send the cleaned body text to the LLM and require structured output:
@@ -160,6 +165,7 @@ An admin assigns an unmatched payment to a driver. This posts the payment and **
   - Plaid deposit with no email → matched and `confirmed` directly → ledger credit.
   - `reported` with no deposit after 72 hours → `discrepancy`, shown for review.
 - **Cash App and Venmo — one stage.** That money does not reach the bank as individual transactions, so there is nothing to confirm against. A verified, validated, matched email → `confirmed` → ledger credit.
+- **Stripe and Chime — one stage (assumed, to confirm; D39).** Stripe money reaches the bank only as lump-sum payouts, so the payout emails ("Your $X payout … is on the way") are never payments. Chime money-request, transfer-out and expiry emails are never payments either.
 - Ledger credit uses `idempotencyKey = payment:<paymentId>`. A payment can never credit twice.
 
 ---
@@ -234,7 +240,7 @@ Each milestone ends with passing tests and something demonstrable.
 
 ## 12. Open items (do not block; use the default and flag)
 
-- Exact sender addresses for Cash App, Venmo and Chase Zelle emails — confirm from real samples.
+- Exact sender addresses for Cash App, Venmo, Chase Zelle, Stripe and Chime emails — all confirmed from real emails (2026-10-09): Zelle `no.reply.alerts@chase.com` (signs `chase.com`), Cash App `cash@square.com` (`square.com`), Venmo `venmo@venmo.com` (`venmo.com`), Stripe `notifications@stripe.com` (`stripe.com`), Chime `alerts@account.chime.com` (signs the subdomain `account.chime.com`).
 - Reminder tier defaults and wording.
 - Late fees — not defined yet; no late fee logic in Phase 1.
 - LLM provider and model — choose one cheap, fast model with structured output support.

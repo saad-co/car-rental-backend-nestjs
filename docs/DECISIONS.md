@@ -265,3 +265,42 @@ identifies the receiving entity. **Status:** confirmed for Zelle on 2026-10-09: 
 `Authentication-Results: mail.gonzocar.com; dkim=pass header.d=chase.com ...; spf=pass; dmarc=pass`, and `verifyDkim`
 returns VERIFIED for `zelle_chase` and rejects the other providers. Cash App and Venmo not yet seen.
 
+### D37 — 2026-10-09 — `inbound_emails`: identity, immutability and database-enforced reasons
+- A message is identified by `(mailbox, imap_uid_validity, imap_uid)` (unique), not by a Gmail id. UIDs restart when
+  a mailbox's UIDVALIDITY changes, so the validity number is part of the key. `Message-ID` is stored for reference only.
+- `received_at` is the IMAP internal date (when our server received it); the `Date` header is sender-controlled.
+- Rows are insert-only: no `updated_at`, no update path. A seen message is skipped, never reprocessed.
+- CHECK: `rejected_unverified` and `extraction_failed` require a `status_reason` (no silent failure, in the database).
+  CHECK: mailbox lower-case, `imap_uid > 0`. UIDs are `bigint`, mapped to `number` by a column transformer.
+- `payment_id` is not added yet; the migration that creates `payments` adds it with its foreign key.
+- `provider` enum values come from `EXPECTED_DKIM_DOMAIN` plus `unknown`, so there is one list in code.
+**Why:** spec rules 3 and 5 enforced by Postgres, and a record of what happened that nothing can rewrite.
+
+### D38 — 2026-10-09 — Read `gonzobilling@gmail.com` over IMAP (supersedes D36)
+- All payment email arrives in `gonzobilling@gmail.com`: Zelle through the Mailcow `keep; redirect` rule, Cash App
+  through a forward from another Gmail account, Venmo directly (seen in real headers). The four Mailcow pay mailboxes
+  hold only Zelle, so reading them alone would miss Cash App and Venmo.
+- Source: IMAP `imap.gmail.com:993` on INBOX, read-only, with a Google app password (needs 2-Step Verification);
+  credentials in `.env` (`IMAP_HOST`, `IMAP_USER`, `IMAP_PASSWORD`, `IMAP_TRUSTED_SERVER`). No Gmail OAuth.
+- The only header we trust is the one written by `mx.google.com`. Gmail writes the signer as `header.i=@domain`,
+  not `header.d=`, so `verifyDkim` reads either (real Cash App and Venmo headers verified). Expected signing domains
+  confirmed: `square.com`, `venmo.com`, `chase.com`.
+- `inbound_emails` (D37) is unchanged: `mailbox` is `gonzobilling@gmail.com`, uid and validity are Gmail's.
+  Which pay address received a Zelle email is no longer a column; it stays in the stored headers if ever needed.
+- Mailcow reading remains possible (change `IMAP_HOST`) and is used only for debugging.
+**Why:** one complete source ("never miss a payment") with the fewest credentials and no restricted-scope OAuth.
+**Risk (D38):** the Cash App forward runs through a personal Gmail; if it breaks, payments stop arriving with no error
+(later: alert when a provider is silent for days).
+
+### D39 — 2026-10-09 — Phase 1 covers all five providers; go-live date deferred
+- Zelle (Chase), Cash App, Venmo, Stripe and Chime are all in scope (decision by Saad and Abulkalam, after the Gmail
+  inbox showed Stripe and Chime in daily use). `CLIENT_SCOPE.md` named only the first three; it stays as the
+  historical record and this entry wins.
+- Stripe and Chime post in one stage like Cash App and Venmo (assumed, to confirm with Saad).
+- Not payments, always `not_payment`: Stripe payouts, security and legal notices; Chime money requests, expired
+  requests and transfers out; Venmo "You paid …"; Cash App "You sent …"; statements and promotions.
+- `EmailProvider` and the `inbound_email_provider` database enum gain `stripe` and `chime`. Their signing domains are
+  confirmed from real emails first, then added to `EXPECTED_DKIM_DOMAIN` with a migration.
+- The go-live start point (B33) is deferred until the AI parser works end to end on real emails.
+**Why:** payments arriving through unsupported channels would be silently missing from balances.
+
