@@ -24,7 +24,7 @@ export interface VerifyDkimInput {
    */
   authenticationResults: string[];
   /**
-   * Host name of OUR mail server (the first word of the header it adds), e.g. `mail.gonzocar.com`.
+   * Host name of OUR mail server (the first word of the header it adds), e.g. `mx.google.com` for Gmail or `mail.gonzocar.com` for Mailcow.
    * Headers written by anyone else are ignored: a forger can put any text in a header.
    */
   trustedServerId: string;
@@ -87,8 +87,10 @@ interface ParsedHeader {
 
 /**
  * Splits `mail.example.com; dkim=pass (comment) header.d=chase.com header.s=x; spf=pass ...` into
- * the server id and its DKIM results. Parenthesised comments are dropped; a header can also hold
- * several DKIM results (one per signature).
+ * the server id and its DKIM results. The signing domain is read from `header.d=` (Mailcow) or
+ * `header.i=@domain` (Gmail). Parenthesised comments are dropped, which also removes Gmail's
+ * `arc=pass (... dkim=pass ...)` summary so it can never be mistaken for a DKIM result. A header
+ * can hold several DKIM results (one per signature).
  */
 function parseHeader(value: string): ParsedHeader {
   const [first = "", ...rest] = value
@@ -100,7 +102,10 @@ function parseHeader(value: string): ParsedHeader {
   const dkim = rest.flatMap((part) => {
     const result = /^dkim=(\w+)/.exec(part)?.[1];
     if (!result) return [];
-    const domain = /(?:^|\s)header\.d=(\S+)/.exec(part)?.[1] ?? "";
+    const d = /(?:^|\s)header\.d=(\S+)/.exec(part)?.[1];
+    const i = /(?:^|\s)header\.i=(\S+)/.exec(part)?.[1];
+    // Mailcow writes `header.d=chase.com`; Gmail writes `header.i=@chase.com` (the signer's identity).
+    const domain = d ?? i?.slice(i.lastIndexOf("@") + 1) ?? "";
     return [{ result, domain }];
   });
 
