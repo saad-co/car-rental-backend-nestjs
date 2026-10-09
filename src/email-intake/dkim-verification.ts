@@ -14,7 +14,8 @@ export const EXPECTED_DKIM_DOMAIN: Record<EmailProvider, string> = {
 };
 
 /** Outcome of the check. `reason` is stored in `InboundEmail.statusReason` when the email is rejected. */
-export type DkimVerdict = { verified: true } | { verified: false; reason: string };
+export type DkimVerdict =
+  { verified: true } | { verified: false; reason: string };
 
 export interface VerifyDkimInput {
   /**
@@ -40,27 +41,42 @@ export function verifyDkim(input: VerifyDkimInput): DkimVerdict {
   const expectedDomain = EXPECTED_DKIM_DOMAIN[input.provider];
 
   // Only the topmost header from our server counts. A forged copy lower down is ignored.
-  const header = input.authenticationResults.find((value) => parseHeader(value).serverId === trusted);
+  const header = input.authenticationResults.find(
+    (value) => parseHeader(value).serverId === trusted,
+  );
   if (!header) {
-    return { verified: false, reason: `No Authentication-Results header from ${trusted}` };
+    return {
+      verified: false,
+      reason: `No Authentication-Results header from ${trusted}`,
+    };
   }
 
   const dkimResults = parseHeader(header).dkim;
   if (dkimResults.length === 0) {
-    return { verified: false, reason: "No DKIM result in the Authentication-Results header" };
+    return {
+      verified: false,
+      reason: "No DKIM result in the Authentication-Results header",
+    };
   }
-  if (dkimResults.some((r) => r.result === "pass" && r.domain === expectedDomain)) {
+  if (
+    dkimResults.some((r) => r.result === "pass" && r.domain === expectedDomain)
+  ) {
     return { verified: true };
   }
 
-  const passedDomains = dkimResults.filter((r) => r.result === "pass").map((r) => r.domain);
+  const passedDomains = dkimResults
+    .filter((r) => r.result === "pass")
+    .map((r) => r.domain);
   if (passedDomains.length > 0) {
     return {
       verified: false,
       reason: `DKIM passed for ${passedDomains.join(", ")}, expected ${expectedDomain}`,
     };
   }
-  return { verified: false, reason: `DKIM result: ${dkimResults.map((r) => r.result).join(", ")}` };
+  return {
+    verified: false,
+    reason: `DKIM result: ${dkimResults.map((r) => r.result).join(", ")}`,
+  };
 }
 
 interface ParsedHeader {

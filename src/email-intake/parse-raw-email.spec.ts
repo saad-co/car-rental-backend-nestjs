@@ -25,7 +25,9 @@ describe("parseRawEmail", () => {
   });
 
   it("returns null / empty for missing headers instead of failing", async () => {
-    const parsed = await parseRawEmail(eml(["Content-Type: text/plain"], "Hello"));
+    const parsed = await parseRawEmail(
+      eml(["Content-Type: text/plain"], "Hello"),
+    );
     expect(parsed.fromAddress).toBeNull();
     expect(parsed.subject).toBe("");
     expect(parsed.date).toBeNull();
@@ -70,10 +72,7 @@ describe("parseRawEmail", () => {
   it("prefers the plain-text part and decodes quoted-printable", async () => {
     const parsed = await parseRawEmail(
       eml(
-        [
-          "From: a@b.com",
-          'Content-Type: multipart/alternative; boundary="b1"',
-        ],
+        ["From: a@b.com", 'Content-Type: multipart/alternative; boundary="b1"'],
         [
           "--b1",
           "Content-Type: text/plain",

@@ -24,7 +24,12 @@ export async function parseRawEmail(raw: Buffer): Promise<ParsedEmail> {
 
   const authenticationResults = parsed.headerLines
     .filter((header) => header.key === "authentication-results")
-    .map((header) => header.line.slice(header.line.indexOf(":") + 1).replace(/\s+/g, " ").trim());
+    .map((header) =>
+      header.line
+        .slice(header.line.indexOf(":") + 1)
+        .replace(/\s+/g, " ")
+        .trim(),
+    );
 
   return {
     fromAddress: parsed.from?.value[0]?.address?.toLowerCase() ?? null,

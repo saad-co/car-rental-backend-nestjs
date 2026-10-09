@@ -5,8 +5,15 @@ const SERVER = "mail.gonzocar.com";
 /** Synthetic headers shaped like what a Mailcow server writes. Replace with real ones once we have samples (B5). */
 const PASS_CHASE = `${SERVER}; dkim=pass header.d=chase.com header.s=sel1; spf=pass smtp.mailfrom=chase.com`;
 
-function verify(authenticationResults: string[], provider: "zelle_chase" | "venmo" = "zelle_chase") {
-  return verifyDkim({ authenticationResults, trustedServerId: SERVER, provider });
+function verify(
+  authenticationResults: string[],
+  provider: "zelle_chase" | "venmo" = "zelle_chase",
+) {
+  return verifyDkim({
+    authenticationResults,
+    trustedServerId: SERVER,
+    provider,
+  });
 }
 
 describe("verifyDkim", () => {
@@ -28,14 +35,22 @@ describe("verifyDkim", () => {
   });
 
   it("rejects look-alike domains", () => {
-    expect(verify([`${SERVER}; dkim=pass header.d=evilchase.com`]).verified).toBe(false);
-    expect(verify([`${SERVER}; dkim=pass header.d=chase.com.evil.com`]).verified).toBe(false);
+    expect(
+      verify([`${SERVER}; dkim=pass header.d=evilchase.com`]).verified,
+    ).toBe(false);
+    expect(
+      verify([`${SERVER}; dkim=pass header.d=chase.com.evil.com`]).verified,
+    ).toBe(false);
   });
 
   it("rejects dkim=fail, dkim=none and a missing DKIM result", () => {
-    expect(verify([`${SERVER}; dkim=fail header.d=chase.com`]).verified).toBe(false);
+    expect(verify([`${SERVER}; dkim=fail header.d=chase.com`]).verified).toBe(
+      false,
+    );
     expect(verify([`${SERVER}; dkim=none`]).verified).toBe(false);
-    expect(verify([`${SERVER}; spf=pass smtp.mailfrom=chase.com`]).verified).toBe(false);
+    expect(
+      verify([`${SERVER}; spf=pass smtp.mailfrom=chase.com`]).verified,
+    ).toBe(false);
   });
 
   it("ignores a header written by another server, even if it says pass", () => {

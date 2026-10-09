@@ -53,13 +53,19 @@ export function validateExtraction(
   }
   const o = output as Record<string, unknown>;
 
-  if (typeof o.is_payment !== "boolean") return fail("is_payment must be true or false");
+  if (typeof o.is_payment !== "boolean")
+    return fail("is_payment must be true or false");
   if (!o.is_payment) return { kind: "not_payment" };
 
   if (o.provider !== email.provider) {
-    return fail(`Provider ${String(o.provider)} does not match the verified sender (${email.provider})`);
+    return fail(
+      `Provider ${String(o.provider)} does not match the verified sender (${email.provider})`,
+    );
   }
-  if (!Number.isSafeInteger(o.amount_cents) || (o.amount_cents as number) <= 0) {
+  if (
+    !Number.isSafeInteger(o.amount_cents) ||
+    (o.amount_cents as number) <= 0
+  ) {
     return fail("amount_cents must be a positive integer");
   }
   const amountCents = o.amount_cents as number;
@@ -70,20 +76,28 @@ export function validateExtraction(
   if (o.sender_handle !== null && typeof o.sender_handle !== "string") {
     return fail("sender_handle must be a string or null");
   }
-  if (typeof o.confidence !== "number" || !(o.confidence >= 0 && o.confidence <= 1)) {
+  if (
+    typeof o.confidence !== "number" ||
+    !(o.confidence >= 0 && o.confidence <= 1)
+  ) {
     return fail("confidence must be a number from 0 to 1");
   }
 
   let occurredAt: Date | null = null;
   if (o.occurred_at !== null) {
-    occurredAt = typeof o.occurred_at === "string" ? new Date(o.occurred_at) : null;
+    occurredAt =
+      typeof o.occurred_at === "string" ? new Date(o.occurred_at) : null;
     if (occurredAt === null || Number.isNaN(occurredAt.getTime())) {
       return fail("occurred_at must be an ISO date string or null");
     }
   }
 
-  if (!amountAppearsInText(amountCents, `${email.subject}\n${email.bodyText}`)) {
-    return fail(`Amount ${formatDollars(amountCents)} does not appear in the email text`);
+  if (
+    !amountAppearsInText(amountCents, `${email.subject}\n${email.bodyText}`)
+  ) {
+    return fail(
+      `Amount ${formatDollars(amountCents)} does not appear in the email text`,
+    );
   }
 
   return {
@@ -92,7 +106,8 @@ export function validateExtraction(
       provider: email.provider,
       amountCents,
       senderName: o.sender_name.trim(),
-      senderHandle: o.sender_handle === null ? null : (o.sender_handle as string).trim(),
+      senderHandle:
+        o.sender_handle === null ? null : (o.sender_handle as string).trim(),
       occurredAt,
       confidence: o.confidence,
     },
@@ -116,14 +131,17 @@ function formatDollars(cents: number): string {
 function amountAppearsInText(cents: number, text: string): boolean {
   const dollars = Math.floor(cents / 100);
   const fraction = String(cents % 100).padStart(2, "0");
-  const wholeDollarForms = cents % 100 === 0 ? [`${dollars}`, withCommas(dollars)] : [];
+  const wholeDollarForms =
+    cents % 100 === 0 ? [`${dollars}`, withCommas(dollars)] : [];
   const forms = [
     `${dollars}.${fraction}`,
     `${withCommas(dollars)}.${fraction}`,
     ...wholeDollarForms,
   ];
   return forms.some((form) => {
-    const pattern = new RegExp(`(?<![\\d.,])${escapeRegExp(form)}(?!\\d|[.,]\\d)`);
+    const pattern = new RegExp(
+      `(?<![\\d.,])${escapeRegExp(form)}(?!\\d|[.,]\\d)`,
+    );
     return pattern.test(text);
   });
 }
