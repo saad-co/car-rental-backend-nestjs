@@ -102,9 +102,27 @@ describe("verifyDkim with Gmail's Authentication-Results", () => {
     expect(verifyGmail(VENMO, "venmo")).toEqual({ verified: true });
   });
 
+  /** Stripe: signed by stripe.com and by the sending service amazonses.com. */
+  const STRIPE = `${GMAIL}; dkim=pass header.i=@stripe.com header.s=sel1 header.b=EEEE; dkim=pass header.i=@amazonses.com header.s=sel2 header.b=FFFF; spf=pass (google.com: domain of bounce@bounce.stripe.com designates 54.240.37.195 as permitted sender) smtp.mailfrom=bounce@bounce.stripe.com; dmarc=pass (p=REJECT sp=REJECT dis=NONE) header.from=stripe.com`;
+
+  /** Chime: signed by the SUBDOMAIN account.chime.com (its From domain is chime.com) and by sendgrid.info. */
+  const CHIME = `${GMAIL}; dkim=pass header.i=@account.chime.com header.s=s1 header.b=GGGG; dkim=pass header.i=@sendgrid.info header.s=smtpapi header.b=HHHH; spf=pass (google.com: domain of bounces@em.account.chime.com designates 149.72.60.245 as permitted sender) smtp.mailfrom="bounces@em.account.chime.com"; dmarc=pass (p=REJECT sp=REJECT dis=NONE) header.from=chime.com`;
+
+  it("verifies real-shaped Stripe and Chime headers", () => {
+    expect(verifyGmail(STRIPE, "stripe")).toEqual({ verified: true });
+    expect(verifyGmail(CHIME, "chime")).toEqual({ verified: true });
+  });
+
+  it("requires Chime's exact signing subdomain, not the bare chime.com", () => {
+    const bare = `${GMAIL}; dkim=pass header.i=@chime.com header.s=s1 header.b=GGGG`;
+    expect(verifyGmail(bare, "chime").verified).toBe(false);
+  });
+
   it("does not let one provider's email pass as another's", () => {
     expect(verifyGmail(CASH_APP, "venmo").verified).toBe(false);
     expect(verifyGmail(VENMO, "zelle_chase").verified).toBe(false);
+    expect(verifyGmail(STRIPE, "chime").verified).toBe(false);
+    expect(verifyGmail(CHIME, "stripe").verified).toBe(false);
   });
 
   it("does not treat a sending-service signature (amazonses.com) as the provider's", () => {

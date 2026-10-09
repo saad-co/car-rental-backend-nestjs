@@ -1,16 +1,22 @@
 /** The payment providers whose emails we accept (spec section 5.1). */
-export type EmailProvider = "cashapp" | "venmo" | "zelle_chase";
+export type EmailProvider =
+  "cashapp" | "venmo" | "zelle_chase" | "stripe" | "chime";
 
 /**
  * The domain each provider's DKIM signature must be for. A signature from any other domain
  * (even a valid one) proves nothing about who sent the email.
  *
- * TODO(B4): these are assumptions. Confirm each one from the `Authentication-Results` of real sample emails.
+ * All five are confirmed from real emails read through Gmail (2026-10-09). Chime signs with the
+ * subdomain `account.chime.com`, not `chime.com`, and the match is exact. Each provider also
+ * gets a second signature from its sending service (`amazonses.com`, `sendgrid.info`), which
+ * proves nothing about the provider and is ignored.
  */
 export const EXPECTED_DKIM_DOMAIN: Record<EmailProvider, string> = {
   cashapp: "square.com",
   venmo: "venmo.com",
   zelle_chase: "chase.com",
+  stripe: "stripe.com",
+  chime: "account.chime.com",
 };
 
 /** Outcome of the check. `reason` is stored in `InboundEmail.statusReason` when the email is rejected. */
