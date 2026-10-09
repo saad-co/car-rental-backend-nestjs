@@ -240,3 +240,28 @@ is admin-only; routes open to drivers say so (`@Roles(Role.admin, Role.driver)` 
 - Each feature gets its own chat; the docs carry the state between chats (`CLAUDE.md`, "Sessions").
 **Why:** Saad and Abulkalam, 2026-10-08: show features to the client first; long chats lose detail.
 
+### D35 — 2026-10-08 — Email intake: trust only our own server's DKIM result; mailbox is Mailcow (IMAP)
+- The client's mail server (`mail.gonzocar.com`) is Mailcow, not Gmail. Reading the mailbox is therefore expected to
+  be over IMAP, not Gmail OAuth (spec 5.1 / B6 to be revised once Saad confirms the mailbox and login).
+- `verifyDkim` reads the `Authentication-Results` headers and uses only the topmost one whose first word is our own
+  server's name. Headers written by anyone else, or copies lower down, are ignored. Passes only on `dkim=pass` with
+  `header.d` exactly equal to the provider's domain (spec 5.1).
+- `EXPECTED_DKIM_DOMAIN` (`square.com`, `venmo.com`, `chase.com`) are assumptions from the reference system, to be
+  confirmed from real samples (B4). Mailcow adding this header is also unconfirmed (B5).
+- `validateExtraction` never trusts LLM output: shape checked, provider must equal the DKIM-verified one, amount must
+  literally appear in subject or body. `occurred_at` may be null (the email's `Date` header is the fallback; my
+  choice, not in the spec).
+**Why:** a forged email can carry a fake `Authentication-Results` header; an LLM can invent an amount or provider.
+
+### D36 — 2026-10-09 — Read the four Mailcow pay mailboxes over IMAP, not Gmail (tentative)
+- Each of `gonzopay@`, `payashwood@`, `payevergreen@`, `paysilver@` keeps a copy and redirects the original to
+  `gonzobilling@gmail.com` (sieve `keep; redirect`). The old system reads that Gmail account.
+- New system: IMAP to the four Mailcow mailboxes, one revocable Mailcow app password each (credentials in `.env`).
+  `InboundEmail` gets a column for the mailbox it came from (my addition, not in the spec), which also tells which
+  entity received the payment (B28).
+- `verifyDkim` takes the trusted server name as a parameter, so it works for Mailcow (`mail.gonzocar.com`) or Gmail.
+**Why:** the original message with our own server's DKIM verdict, no Gmail restricted-scope OAuth, and the mailbox
+identifies the receiving entity. **Status:** confirmed for Zelle on 2026-10-09: a real Chase email in `payashwood@` read over IMAP has
+`Authentication-Results: mail.gonzocar.com; dkim=pass header.d=chase.com ...; spf=pass; dmarc=pass`, and `verifyDkim`
+returns VERIFIED for `zelle_chase` and rejects the other providers. Cash App and Venmo not yet seen.
+

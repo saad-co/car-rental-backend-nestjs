@@ -4,6 +4,38 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-09 — IMAP route proven on a real Mailcow mailbox (D36)
+- **Done (backend):** `scripts/imap-peek.ts` (`npm run imap:peek`, dev tool, not in the build): read-only IMAP
+  list of the newest messages, or `-- <UID>` to save one `.eml` to `../mail-samples` and run `parseRawEmail` +
+  `verifyDkim` on it. Added `imapflow`, `IMAP_*` in `.env.example`.
+- **Verified (manually, `payashwood@` via Mailcow app password):** listed 15 messages; real Zelle email has
+  `mail.gonzocar.com; dkim=pass header.d=chase.com`, `spf=pass`, `dmarc=pass`; `verifyDkim` VERIFIED for
+  `zelle_chase`, rejected for the other two. Chase writes directly (no `Fwd:`); the mailbox also holds
+  non-payment mail (statements, tests, Mailcow notices).
+- **Found:** all four pay mailboxes `keep; redirect` to `gonzobilling@gmail.com` (B27). Admin Webmail button was
+  disabled and the protocol list has no SOGo option; not pursued.
+- **Not done:** Cash App and Venmo samples (which mailbox receives them?); the other three mailboxes not read yet.
+- **Next:** `InboundEmail` entity and migration (plan mode); explain how the files fit into NestJS (question 3).
+- **Branch:** `feature/email-parsing` (backend), uncommitted.
+
+---
+
+### 2026-10-08 — Email intake prototype: DKIM check, raw email parser, extraction validator (D35)
+- **Done (backend):** `src/email-intake/`: `verifyDkim` (trusts only our server's `Authentication-Results`, exact
+  `header.d`), `parseRawEmail` (mailparser: sender, subject, date, auth headers top to bottom, clean body text),
+  `PaymentExtractor` interface and `validateExtraction` (shape, provider, amount literally in text). Plain
+  functions, no Nest module, no database yet. Added `mailparser` and `@types/mailparser`.
+- **Verified:** `npx vitest run src/email-intake`: 23 tests pass. Emails in tests are synthetic.
+- **Found:** the mailbox is Mailcow (`mail.gonzocar.com`), so likely IMAP not Gmail OAuth; reference system
+  also receives forwards from four `gonzocar.com` pay inboxes (rewritten forwards would fail the DKIM rule).
+  Abulkalam could not log in to the Mailcow admin; asked Saad.
+- **Not done:** `InboundEmail` table, real LLM extractor (B8), mailbox fetch, matching, real sample emails.
+- **Next:** `InboundEmail` entity and migration (plan mode first), once the questions in BACKLOG are answered or
+  independently of them.
+- **Branch:** `feature/email-parsing` (backend), uncommitted.
+
+---
+
 ### 2026-10-08 — Plan update: deployment blocked, email parsing next (D34)
 - **State:** M0, step A (applications, drivers) and step B (driver login) are merged into `dev` in both repos.
   Local flow verified end to end: website-shaped application → admin approval → welcome email → email
