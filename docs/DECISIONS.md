@@ -304,3 +304,32 @@ returns VERIFIED for `zelle_chase` and rejects the other providers. Cash App and
 - The go-live start point (B33) is deferred until the AI parser works end to end on real emails.
 **Why:** payments arriving through unsupported channels would be silently missing from balances.
 
+### D40 — 2026-10-10 — Intake trigger: scheduled UID poll behind one `syncNewMessages()`
+- Triggers only say "look now"; `syncNewMessages()` is the only code that reads mail. First trigger: `@Cron` every
+  3 minutes. Later, optional: IMAP IDLE (B35), a "Sync now" button, a sync right before each SMS reminder batch.
+- Each run: connect, check UIDVALIDITY, search UIDs after the cursor from the allow-listed senders only, process
+  oldest first, log out. Cursor = highest UID already recorded (first run: the go-live UID, B33).
+- Guarded by a Postgres advisory lock (`pg_try_advisory_lock`) taken on one dedicated connection: a run that finds
+  the lock taken exits at once, so overlapping ticks or two server instances never process the same mail.
+- Never miss: a temporary failure (LLM or network down) records nothing and the same UID is retried next run; a
+  permanent failure is recorded with its reason; an email that keeps failing temporarily is recorded as failed
+  after a few attempts so it cannot block the queue.
+- Never duplicate: the unique key in the database, not just the lock. Correction to D37: `(mailbox, uid_validity,
+  uid)` does NOT catch a duplicate if Gmail ever changes UIDVALIDITY (the same email gets new keys). Dedup must
+  use Gmail's permanent message id (`X-GM-MSGID`, imapflow `emailId`, to verify) instead; migration with the
+  intake service. And the same payment notified by two different emails needs a payment-level key: the
+  provider's transaction id (B37).
+- Gmail API push (Pub/Sub) not used: OAuth with restricted-scope verification, a Cloud project and a public URL,
+  and it still needs a scheduled job.
+**Why:** about 20-40 payment emails a day; 3 minutes of delay is acceptable (Abulkalam, 2026-10-10) and polling
+survives restarts, deploys and sleep with no extra state.
+
+### D41 — 2026-10-10 — Provider APIs where they exist: Stripe confirmed, later
+- Stripe will be integrated through its webhooks and compared with the Stripe email (confirmed by Saad and
+  Abulkalam). Not now: after the email pipeline works. Details and prerequisites in B39.
+- Any other provider is integrated the same way if it offers a usable API. Zelle is already covered by Plaid
+  (spec 5.3). Cash App, Venmo and Chime personal accounts are not known to offer an API for incoming payments;
+  check each when we get there, and keep the email path for whichever has none.
+**Why:** a provider's own structured data is more reliable than reading its emails; the email stays as the source
+that always exists.
+
