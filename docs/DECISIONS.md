@@ -333,3 +333,11 @@ survives restarts, deploys and sleep with no extra state.
 **Why:** a provider's own structured data is more reliable than reading its emails; the email stays as the source
 that always exists.
 
+### D42 — 2026-10-10 — DKIM: a list of exact domains per provider (Chime signs with two)
+- `EXPECTED_DKIM_DOMAINS` gives each provider a list; a signature passes only if its domain equals one entry exactly.
+- Checked on all 28 real samples: Zelle `chase.com`, Cash App `square.com`, Venmo `venmo.com`, Stripe `stripe.com`
+  on every email type; Chime `account.chime.com` ("sent you money", via SendGrid) AND `chime.com` (requests,
+  transfers out, via Amazon SES). Corrects the earlier "Chime signs only `account.chime.com`".
+**Why:** with one domain, a genuine Chime email signed by `chime.com` was rejected as unverified; if it were a
+payment, it would be missed. Look-alikes (`mail.chime.com`, `evilchime.com`) are still rejected.
+

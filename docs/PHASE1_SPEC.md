@@ -240,7 +240,7 @@ Each milestone ends with passing tests and something demonstrable.
 
 ## 12. Open items (do not block; use the default and flag)
 
-- Exact sender addresses for Cash App, Venmo, Chase Zelle, Stripe and Chime emails — all confirmed from real emails (2026-10-09): Zelle `no.reply.alerts@chase.com` (signs `chase.com`), Cash App `cash@square.com` (`square.com`), Venmo `venmo@venmo.com` (`venmo.com`), Stripe `notifications@stripe.com` (`stripe.com`), Chime `alerts@account.chime.com` (signs the subdomain `account.chime.com`).
+- Exact sender addresses for Cash App, Venmo, Chase Zelle, Stripe and Chime emails — all confirmed from real emails (2026-10-09): Zelle `no.reply.alerts@chase.com` (signs `chase.com`), Cash App `cash@square.com` (`square.com`), Venmo `venmo@venmo.com` (`venmo.com`), Stripe `notifications@stripe.com` (`stripe.com`), Chime `alerts@account.chime.com` (signs with `account.chime.com` or `chime.com` depending on the email type, D42).
 - Reminder tier defaults and wording.
 - Late fees — not defined yet; no late fee logic in Phase 1.
 - LLM provider and model — choose one cheap, fast model with structured output support.

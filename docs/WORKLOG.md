@@ -4,6 +4,27 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-10 — AI extractor works on real emails: 28/28 (D40-D42)
+- **Done (backend, UNCOMMITTED, kept as is on purpose):** `LlmJsonClient` interface, `GeminiJsonClient` (JSON
+  schema output, 60 s timeout, SDK's silent retries off), `LlmPaymentExtractor` with rules + per-provider hints +
+  schema (adds `transaction_id`), fake-client tests; `extract-eval` script (replaces payer names/emails before
+  sending, compares with `../mail-samples/labels.json`); `llm-probe` script (lists models, times thinking settings);
+  DKIM accepts a list of exact domains per provider (Chime signs with `account.chime.com` and `chime.com`, D42);
+  `imap-peek` type fixes; `.env.example` LLM block. Committed earlier today: sender allow-list, Venmo blank-body
+  fix (`html-to-text`), `imap-peek --save`, `samples-show`.
+- **Verified:** 44 unit tests pass; type check clean. `npm run extract:eval` with `gemini-3.5-flash-lite`:
+  28/28 pass (Cash App 6, Chime 5, Stripe 6, Venmo 5, Zelle 6), including payouts, requests, transfers out and
+  "Payment sent". `gemini-flash-latest` was too slow (30-60 s, timeouts).
+- **Limits of this result:** small sample, few distinct payers; the memo-amount trap (B30) is not in the set any
+  more (it was the Mailcow copy); `occurred_at`, `transaction_id` and confidence (always 1) are not checked.
+- **Decided today:** intake by scheduled UID poll (D40); Stripe webhooks later (D41); B34-B39 opened.
+- **Next (start of next session):** 1) walk through every uncommitted file together, then commit; 2) widen the
+  sample set (older emails, more payers, the $317.85 memo email from Gmail, B36 sender/folder audit) and re-run;
+  3) plan the intake service (`syncNewMessages`, plan mode).
+- **Branch:** `feature/email-parsing` (backend).
+
+---
+
 ### 2026-10-09 — Source changed to Gmail IMAP; `verifyDkim` reads Gmail headers (D38)
 - **Done (backend):** `verifyDkim` accepts the signer as `header.d=` or Gmail's `header.i=@domain` (6 new tests with
   real-shaped Cash App and Venmo headers); `imap-peek` simplified to one mailbox (`IMAP_USER`, `IMAP_PASSWORD`,
