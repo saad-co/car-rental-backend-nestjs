@@ -5,6 +5,7 @@
  *
  *   npm run imap:peek                          sender counts for the newest messages + the newest few
  *   npm run imap:peek -- --from=cash@square.com   the newest messages from one sender (searches everything)
+ *   npm run imap:peek -- --from=cash@square.com --save   same, and saves each listed message as a .eml file
  *   npm run imap:peek -- 123                   saves UID 123 as a .eml file and shows what our own
  *                                              parseRawEmail + verifyDkim make of it
  *   npm run imap:peek -- 123 --body            same, and also prints the cleaned body text
@@ -44,6 +45,7 @@ const saveDir = path.resolve(process.env.IMAP_SAVE_DIR ?? "../mail-samples");
 const args = process.argv.slice(2);
 const showBody = args.includes("--body");
 const fromFilter = args.find((arg) => arg.startsWith("--from="))?.slice("--from=".length);
+const saveAll = args.includes("--save");
 const uidArg = args.find((arg) => !arg.startsWith("--"));
 
 const client = new ImapFlow({
@@ -134,22 +136,36 @@ async function listFromSender(sender: string): Promise<void> {
   }
   console.log(`\nNewest ${rows.length}:`);
   printRows(rows.reverse());
-  console.log("\nTo save one and check it: npm run imap:peek -- <UID>");
+  if (saveAll) {
+    console.log("");
+    for (const row of rows) {
+      const { file } = await saveMessage(row.uid);
+      console.log(`Saved UID ${row.uid} to ${file}`);
+    }
+  } else {
+    console.log("\nTo save one and check it: npm run imap:peek -- <UID>   (or add --save to save all of these)");
+  }
 }
 
-/** Saves one message as .eml, then shows what our own functions make of it. The body is printed only with --body. */
-async function inspectOne(uid: number): Promise<void> {
-  if (!Number.isInteger(uid) || uid < 1) throw new Error("The UID must be a positive whole number.");
-
+/** Downloads one message by UID and writes it as a .eml file in the samples folder (outside both repos). */
+async function saveMessage(uid: number): Promise<{ source: Buffer; file: string }> {
   const message = await client.fetchOne(String(uid), { source: true }, { uid: true });
   if (!message || !message.source) throw new Error(`No message with UID ${uid} in INBOX.`);
 
   await mkdir(saveDir, { recursive: true });
   const file = path.join(saveDir, `${user.split("@")[0]}-${uid}.eml`);
   await writeFile(file, message.source);
+  return { source: message.source, file };
+}
+
+/** Saves one message as .eml, then shows what our own functions make of it. The body is printed only with --body. */
+async function inspectOne(uid: number): Promise<void> {
+  if (!Number.isInteger(uid) || uid < 1) throw new Error("The UID must be a positive whole number.");
+
+  const { source, file } = await saveMessage(uid);
   console.log(`Saved to ${file}\n`);
 
-  const parsed = await parseRawEmail(message.source);
+  const parsed = await parseRawEmail(source);
   console.log(`From:    ${parsed.fromAddress}`);
   console.log(`Subject: ${parsed.subject}`);
   console.log(`Date:    ${parsed.date?.toISOString() ?? "none"}\n`);

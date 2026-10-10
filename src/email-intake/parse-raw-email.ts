@@ -1,3 +1,4 @@
+import { convert } from "html-to-text";
 import { simpleParser } from "mailparser";
 
 /** The parts of a raw email the intake pipeline needs. */
@@ -9,7 +10,7 @@ export interface ParsedEmail {
   date: Date | null;
   /** Every `Authentication-Results` value, top to bottom (newest first). Input for `verifyDkim`. */
   authenticationResults: string[];
-  /** Readable body text. If the email is HTML only, the markup (and `<style>`) is stripped. */
+  /** Readable body text. If the plain-text part is missing or blank (Venmo), the HTML is converted to text. */
   bodyText: string;
 }
 
@@ -36,6 +37,25 @@ export async function parseRawEmail(raw: Buffer): Promise<ParsedEmail> {
     subject: parsed.subject ?? "",
     date: parsed.date ?? null,
     authenticationResults,
-    bodyText: (parsed.text ?? "").trim(),
+    bodyText: readableBody(parsed.text, parsed.html),
   };
+}
+
+/**
+ * The readable text of an email. Normally the plain-text part. But Venmo sends a plain-text part
+ * that is BLANK and puts the real content only in the HTML, and mailparser does not fall back to
+ * the HTML when a (blank) text part exists. So when the plain text is empty, the HTML is converted
+ * to text, without images or `<style>` blocks and without link addresses.
+ */
+function readableBody(text: string | undefined, html: string | false): string {
+  const plain = (text ?? "").trim();
+  if (plain !== "" || html === false) return plain;
+  return convert(html, {
+    wordwrap: false,
+    selectors: [
+      { selector: "img", format: "skip" },
+      { selector: "style", format: "skip" },
+      { selector: "a", options: { ignoreHref: true } },
+    ],
+  }).trim();
 }

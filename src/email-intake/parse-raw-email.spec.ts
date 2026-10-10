@@ -89,4 +89,28 @@ describe("parseRawEmail", () => {
     );
     expect(parsed.bodyText).toBe("You were sent $120");
   });
+
+  it("falls back to the HTML when the plain-text part is blank (Venmo's shape)", async () => {
+    const parsed = await parseRawEmail(
+      eml(
+        ["From: a@b.com", 'Content-Type: multipart/alternative; boundary="b1"'],
+        [
+          "--b1",
+          "Content-Type: text/plain; charset=UTF-8",
+          "",
+          "",
+          "--b1",
+          "Content-Type: text/html; charset=UTF-8",
+          "",
+          '<html><head><style>p { color: red }</style></head><body><p>Pat paid you</p><p>TRANSACTION ID</p><p>123</p><img src="https://x.test/a.png"><a href="https://x.test/l">See transaction</a></body></html>',
+          "--b1--",
+        ].join("\r\n"),
+      ),
+    );
+    expect(parsed.bodyText).toContain("Pat paid you");
+    expect(parsed.bodyText).toContain("TRANSACTION ID");
+    expect(parsed.bodyText).toContain("See transaction");
+    expect(parsed.bodyText).not.toContain("color: red");
+    expect(parsed.bodyText).not.toContain("x.test");
+  });
 });
