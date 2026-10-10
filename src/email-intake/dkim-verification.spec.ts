@@ -113,9 +113,30 @@ describe("verifyDkim with Gmail's Authentication-Results", () => {
     expect(verifyGmail(CHIME, "chime")).toEqual({ verified: true });
   });
 
-  it("requires Chime's exact signing subdomain, not the bare chime.com", () => {
-    const bare = `${GMAIL}; dkim=pass header.i=@chime.com header.s=s1 header.b=GGGG`;
-    expect(verifyGmail(bare, "chime").verified).toBe(false);
+  it("accepts both of Chime's signing domains, each matched exactly", () => {
+    // Real: "sent you money" is signed by account.chime.com, requests and transfers by chime.com.
+    const signedBy = (domain: string) =>
+      `${GMAIL}; dkim=pass header.i=@${domain} header.s=s1 header.b=GGGG; dkim=pass header.i=@amazonses.com header.s=s2 header.b=IIII`;
+    expect(verifyGmail(signedBy("account.chime.com"), "chime").verified).toBe(
+      true,
+    );
+    expect(verifyGmail(signedBy("chime.com"), "chime").verified).toBe(true);
+    for (const lookAlike of [
+      "mail.chime.com",
+      "evilchime.com",
+      "chime.com.evil.com",
+    ]) {
+      expect(verifyGmail(signedBy(lookAlike), "chime").verified).toBe(false);
+    }
+  });
+
+  it("names every accepted domain when it rejects", () => {
+    const other = `${GMAIL}; dkim=pass header.i=@example.com`;
+    expect(verifyGmail(other, "chime")).toEqual({
+      verified: false,
+      reason:
+        "DKIM passed for example.com, expected account.chime.com or chime.com",
+    });
   });
 
   it("does not let one provider's email pass as another's", () => {

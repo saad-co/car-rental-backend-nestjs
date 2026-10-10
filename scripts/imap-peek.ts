@@ -15,9 +15,9 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { ImapFlow } from "imapflow";
+import { ImapFlow, type FetchMessageObject } from "imapflow";
 import {
-  EXPECTED_DKIM_DOMAIN,
+  EXPECTED_DKIM_DOMAINS,
   verifyDkim,
   type EmailProvider,
 } from "../src/email-intake/dkim-verification.js";
@@ -82,11 +82,12 @@ interface Row {
 }
 
 /** Turns an IMAP envelope into a printable row. Envelope data only: no bodies. */
-function toRow(message: { uid: number; envelope?: { date?: Date; from?: { address?: string }[]; subject?: string } }): Row {
+function toRow(message: FetchMessageObject): Row {
   const envelope = message.envelope;
   return {
     uid: message.uid,
-    date: envelope?.date ? envelope.date.toISOString().slice(0, 16).replace("T", " ") : "no date",
+    // imapflow types the date as a Date or a string, so normalise it first.
+    date: envelope?.date ? new Date(envelope.date).toISOString().slice(0, 16).replace("T", " ") : "no date",
     from: envelope?.from?.[0]?.address ?? "no sender",
     subject: envelope?.subject ?? "",
   };
@@ -125,7 +126,8 @@ async function listNewest(): Promise<void> {
 /** Searches the whole inbox for one sender and prints the newest matches. */
 async function listFromSender(sender: string): Promise<void> {
   const found = await client.search({ from: sender }, { uid: true });
-  const uids = found === false ? [] : found;
+  // The search answers false (or nothing) when there are no matches.
+  const uids = found || [];
   console.log(`${uids.length} messages from "${sender}" in INBOX (all time).`);
   if (uids.length === 0) return;
 
@@ -181,7 +183,7 @@ async function inspectOne(uid: number): Promise<void> {
   }
 
   console.log(`\nverifyDkim with trusted server "${trustedServerId}":`);
-  for (const provider of Object.keys(EXPECTED_DKIM_DOMAIN) as EmailProvider[]) {
+  for (const provider of Object.keys(EXPECTED_DKIM_DOMAINS) as EmailProvider[]) {
     const verdict = verifyDkim({
       authenticationResults: parsed.authenticationResults,
       trustedServerId,
