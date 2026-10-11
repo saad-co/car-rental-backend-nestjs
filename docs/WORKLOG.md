@@ -4,6 +4,33 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-11 — Cleaner application page (Saad's feedback)
+- **Done (frontend):** the application page is laid out like TailAdmin's transaction page: a header with the name,
+  status, submitted time and review buttons; the answers in underlined tabs (Contact, Driving, Rental, Documents, and
+  Other only when the website sends a field we have not placed); a side column with Review and Submission cards.
+  Empty fields are hidden; tracking (`utm_*`, `gclid`, `fbclid`), form internals and file paths are never shown.
+  New: `components/ui/tabs/Tabs.tsx` (adapted from TailAdmin's `TabWithUnderline`), `pages/Applications/applicationFields.ts`
+  (which field goes in which tab). No API change.
+- **Verified:** type check and lint pass; every tab checked in the browser on the fixture application, narrow and wide.
+- **Not done:** viewing the uploaded files (B17, client's Supabase bucket); medium/long lease values (B44).
+- **Branch:** `feature/application-details` (frontend).
+
+---
+
+### 2026-10-11 — gonzocar.com form connected to staging (B22)
+- **Done:** staging `CORS_ORIGINS` = staging frontend, `https://gonzocar.com`, `https://www.gonzocar.com`. On the
+  client's Lovable site, `src/lib/api.ts` now sends the same body a second time to
+  `https://backend-production-1f569.up.railway.app/applications`, only after the old system's request succeeds,
+  fire-and-forget (`keepalive`, 10 s abort, failures only `console.warn`). The old system's flow is unchanged.
+- **Verified:** CORS preflight: both gonzocar.com origins allowed, other origins blocked. One test application from
+  the live form: our API answered 201, it shows on the staging Applications page with every field.
+- **Not checked yet:** that the old system also received the test application (Saad to confirm, then reject it there).
+- **Note:** every real applicant now lands in staging too. Approving one there sends a real welcome email with a
+  login. `POST /applications` has no rate limiting yet (B16, B25).
+- **Branch:** `feature/email-parsing` (backend, docs only).
+
+---
+
 ### 2026-10-11 — Old-system drivers imported, local and staging (D44, D45)
 - **Done (backend):** `legacy:report` (read-only report of the old database), `drivers.legacy_id` migration,
   `legacy:import-drivers` (mapping + 8 tests, dry run by default, one transaction, `--apply --target=<db name>`),
