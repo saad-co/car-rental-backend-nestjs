@@ -4,6 +4,24 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-11 — Staging deployed on Railway (D43)
+- **Done:** project `car-rental-staging` on the client's Railway account (Postgres, backend, frontend), manual
+  `railway up` deploys. Backend: Node 24 pin, `migration:run:prod` (compiled migrations; data source now loads
+  `.js` or `.ts` migrations, never `.d.ts`), dashboard settings for start / pre-deploy / health check, admin
+  seeded. Frontend: Node 24 pin, static site.
+- **Verified:** all 8 migrations ran on the empty database; `/docs` 200; fake login 401; frontend `/` and a direct
+  `/admin/login` 200; backend URL in the bundle; CORS preflight allowed for the frontend origin; Abulkalam logged in
+  and opened Applications and Drivers in the browser. `ADMIN_*` removed afterwards.
+- **Found:** `railway.json` ignored by `railway up` (B40); dashboard changes are staged until applied; npm blocks
+  install scripts (bcrypt still works from its prebuilt binary).
+- **Not done:** email intake service; frontend has no Railway config file; real admin email; hardening (B25).
+- **Next:** walk through the extractor commits; then the intake service (`syncNewMessages`, plan mode), deployed
+  with `IMAP_*` / `LLM_*` variables once Saad confirms the key question (live names to the free Gemini tier or a
+  paid key).
+- **Branches:** backend `feature/email-parsing`, frontend `chore/railway-deploy`.
+
+---
+
 ### 2026-10-10 — AI extractor works on real emails: 28/28 (D40-D42)
 - **Done (backend, committed and pushed 2026-10-10; walkthrough still pending):** `LlmJsonClient` interface, `GeminiJsonClient` (JSON
   schema output, 60 s timeout, SDK's silent retries off), `LlmPaymentExtractor` with rules + per-provider hints +

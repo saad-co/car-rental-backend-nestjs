@@ -341,3 +341,21 @@ that always exists.
 **Why:** with one domain, a genuine Chime email signed by `chime.com` was rejected as unverified; if it were a
 payment, it would be missed. Look-alikes (`mail.chime.com`, `evilchime.com`) are still rejected.
 
+### D43 — 2026-10-11 — Staging on Railway: manual CLI deploys into a separate project
+- Client's Railway workspace `gonzomobility`, new project `car-rental-staging`: `Postgres` (private network only, no
+  public URL), `backend` (`backend-production-1f569.up.railway.app`), `frontend`
+  (`frontend-production-29af.up.railway.app`). The old system's project `cheerful-peace` is never touched.
+- Deploys are manual from the local folder: `railway up --service backend` / `--service frontend` (no GitHub source
+  yet). Commit before deploying so the running code is traceable.
+- Backend service settings live in the dashboard because `railway.json` was not applied (B40): start
+  `npm run start:prod`, pre-deploy `npm run migration:run:prod` (compiled migrations, every deploy), health check
+  `/docs`. Node pinned with `engines: 24.x` in both repos.
+- Variables: `DATABASE_URL=${{Postgres.DATABASE_URL}}`, `MAIL_MODE=smtp` (never `log` on a server, D33), a generated
+  `JWT_SECRET` never printed; secrets typed in the dashboard only. Dashboard edits are staged until "Apply / Deploy".
+- First admin seeded once through a temporary pre-deploy command, then `ADMIN_*` deleted. It is `admin@admin.com`:
+  replace with a real address before real use.
+- Frontend: Railpack serves the Vite build as a static site (Caddy), deep links work. `VITE_API_URL` is baked in at
+  build time, so a backend URL change needs a frontend redeploy.
+- Not on staging yet: email intake (no service), `IMAP_*` / `LLM_*` variables.
+**Why:** Saad and Abulkalam, 2026-10-11: deploy manually first, automate later; the client's live system stays isolated.
+
