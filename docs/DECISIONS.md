@@ -359,3 +359,32 @@ payment, it would be missed. Look-alikes (`mail.chime.com`, `evilchime.com`) are
 - Not on staging yet: email intake (no service), `IMAP_*` / `LLM_*` variables.
 **Why:** Saad and Abulkalam, 2026-10-11: deploy manually first, automate later; the client's live system stays isolated.
 
+### D44 — 2026-10-11 — Import drivers and applications from the old system's database (changes spec section 1)
+- Phase 1 now includes importing data from the old system (the spec said "no data migration"). Source: the Postgres
+  of the old Railway project `cheerful-peace`, read-only (Saad's explicit OK, 2026-10-11).
+- Safety: every connection to the old database is forced read-only (`default_transaction_read_only=on`); our code
+  never writes there. A dry-run report (counts, every conflict with our stricter constraints) comes before any
+  import; nothing is dropped silently.
+- Imported rows keep the old id, so the import can be re-run while the old system keeps running.
+- Imported drivers get no login and no email (only our approval flow creates logins and sends welcome emails).
+- Date of birth and address are copied too (Abulkalam, 2026-10-11). They are encrypted in the old database with the
+  old system's key, so copying them needs that key and our own encryption at rest (design in the import plan).
+- Billing fields wait for M2 and aliases for M1/M4; old aliases come in marked as legacy, for review (spec defect 1).
+- Go slowly and with full control: one table at a time, each reviewed.
+**Why:** payment matching needs the real drivers and their payment handles; the old database has them.
+
+### D45 — 2026-10-11 — Driver import rules (`npm run legacy:import-drivers`)
+- `drivers.legacy_id` (uuid, unique, null for drivers created here) = the old id; re-runs insert new and update
+  changed drivers, never duplicate. Until cut-over the old system is the source of truth for imported drivers.
+- Mapping: names trimmed; email trimmed and lower-cased; phone to `+1` with `toUsE164`; `terminated` → `inactive`,
+  `active` and `paused` → `active` (paused is a billing state, M2); old `created_at` kept (read as UTC).
+- Skipped, never guessed: invalid or missing email, non-US phone, email/phone shared by 2+ old drivers, email/phone
+  already used by another driver in our system (a driver created here is never overwritten or merged).
+- Script: dry run by default; `--apply` writes in one transaction; a remote target also needs `--target=staging`;
+  no logins, no email; output has counts and old ids only.
+- First run (local, 2026-10-11): 59 read, 54 imported (19 active, 35 inactive), 5 skipped and **left out on
+  purpose** (Abulkalam): `e88d5624` (active, no email), `d9b5e265` (paused) + `5706ebb7` (terminated) sharing an
+  email, `e192efc4` + `9ae7a39f` (terminated) sharing an email. Payments from the active and paused ones will not
+  match until they are added by hand or fixed in the old system and re-imported.
+**Why:** our rules (unique email = login, unique US phone) protect matching; 5 rows are not worth weakening them.
+

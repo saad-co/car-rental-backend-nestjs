@@ -25,7 +25,7 @@ they already paid. When in doubt, the system flags for a human instead of guessi
 - Payments dashboard, message templates, settings and automation switches
 
 **Not in Phase 1:** contracts and e-signature, vehicle condition / check-in, a driver
-mobile app, data migration from the existing system.
+mobile app. (Data import from the existing system is now in scope: drivers and applications first, D44.)
 
 **Reference system.** An existing app (FastAPI + Postgres) handles parts of this today.
 Use it as a reference for real-world behaviour and edge cases only — do not copy code.
