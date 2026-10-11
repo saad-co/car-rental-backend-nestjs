@@ -13,6 +13,8 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
   (which field goes in which tab). No API change.
 - **Verified:** type check and lint pass; every tab checked in the browser on the fixture application, narrow and wide.
 - **Not done:** viewing the uploaded files (B17, client's Supabase bucket); medium/long lease values (B44).
+- **Deployed:** staging frontend, from `feature/application-details` with the Node 24 pin merged in
+  (`chore/railway-deploy`).
 - **Branch:** `feature/application-details` (frontend).
 
 ---
