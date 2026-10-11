@@ -1,9 +1,12 @@
 /**
  * Developer tool: imports the old system's drivers into OUR database (D44, D45). NOT part of the API.
  *
- *   npm run legacy:import-drivers                                  dry run: shows what it would do, writes nothing
- *   npm run legacy:import-drivers -- --apply                       writes, if DATABASE_URL is a local database
- *   npm run legacy:import-drivers -- --apply --target=staging      writes to a REMOTE database (staging)
+ *   npm run legacy:import-drivers                                   dry run: shows what it would do, writes nothing
+ *   npm run legacy:import-drivers -- --apply --target=<db name>     writes; <db name> must equal the target
+ *                                                                   database's real name (printed by the dry run)
+ *
+ * The name check is what stops a leftover DATABASE_URL from writing to the wrong database. A host check would not:
+ * through a Railway tunnel the staging database also appears as localhost.
  *
  * Reads the old database read-only (LEGACY_DATABASE_URL, see legacy-db.ts) and writes to DATABASE_URL in ONE
  * transaction: if anything fails, nothing is written. Safe to re-run: `drivers.legacy_id` is unique, so a
@@ -26,16 +29,12 @@ const target = args
 
 const targetUrl = process.env.DATABASE_URL;
 if (!targetUrl) throw new Error("DATABASE_URL is missing.");
-const host = new URL(targetUrl).hostname;
+const { hostname: host, port } = new URL(targetUrl);
+// Local or tunnelled (both localhost): no SSL needed. A public address: encrypted.
 const isLocal = ["localhost", "127.0.0.1", "::1"].includes(host);
-
-console.log(`Target database: ${host} (${isLocal ? "local" : "REMOTE"})`);
-console.log(
-  apply ? "Mode: APPLY (writes)\n" : "Mode: dry run (writes nothing)\n",
-);
-if (apply && !isLocal && target !== "staging") {
+if (apply && !target) {
   throw new Error(
-    "Refusing to write to a remote database without --target=staging. Check DATABASE_URL first.",
+    "--apply needs --target=<database name>. Run without --apply first to see the name.",
   );
 }
 
@@ -60,6 +59,20 @@ const db = new pg.Client({
 });
 await db.connect();
 try {
+  const nameResult = await db.query<{ name: string }>(
+    "SELECT current_database() AS name",
+  );
+  const dbName = nameResult.rows[0]?.name;
+  console.log(`Target database: "${dbName}" on ${host}:${port || 5432}`);
+  console.log(
+    apply ? "Mode: APPLY (writes)\n" : "Mode: dry run (writes nothing)\n",
+  );
+  if (apply && target !== dbName) {
+    throw new Error(
+      `--target=${target} does not match the target database "${dbName}". Nothing written.`,
+    );
+  }
+
   await db.query("BEGIN");
   const existing = await db.query<ExistingDriver>(
     `SELECT id::text AS id, legacy_id::text AS "legacyId", first_name AS "firstName", last_name AS "lastName",
