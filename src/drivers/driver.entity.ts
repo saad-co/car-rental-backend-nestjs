@@ -71,6 +71,14 @@ export class Driver {
   @JoinColumn({ name: "user_id" })
   user?: User | null;
 
+  /**
+   * The driver's id in the old system, for drivers imported from it (D44); null for drivers created here.
+   * Unique, so re-running the import updates the same driver instead of creating a duplicate. Postgres allows
+   * any number of NULLs under a unique constraint, so drivers created here are not affected.
+   */
+  @Column({ name: "legacy_id", type: "uuid", nullable: true, unique: true })
+  legacyId: string | null;
+
   @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt: Date;
 
