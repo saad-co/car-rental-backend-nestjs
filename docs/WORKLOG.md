@@ -4,6 +4,21 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-11 — Old-system drivers imported, local and staging (D44, D45)
+- **Done (backend):** `legacy:report` (read-only report of the old database), `drivers.legacy_id` migration,
+  `legacy:import-drivers` (mapping + 8 tests, dry run by default, one transaction, `--apply --target=<db name>`),
+  shared read-only connection helper `scripts/legacy-db.ts`. Backend redeployed (migration ran on staging).
+- **Verified:** local and staging: 59 read, 54 inserted, 5 skipped (left out on purpose, D45); re-run 0 inserts, 54
+  unchanged; no logins created; staging Drivers page shows them. Wrong `--target` refused locally. 53 tests pass.
+- **How staging was reached:** `railway connect Postgres --tunnel-only` (SSH tunnel, the database never public); an SSH
+  key was created on Abulkalam's machine and registered on the client's Railway account (`railway ssh keys list`;
+  remove at hand-over if wanted). `DATABASE_URL` set only in that terminal, then removed.
+- **Not done:** aliases, applications, money history (B42); list counts (B43); drop email confirmation (B41).
+- **Next:** decide the next import (aliases need our alias table first) or start the intake service.
+- **Branch:** `feature/email-parsing` (backend).
+
+---
+
 ### 2026-10-11 — Staging deployed on Railway (D43)
 - **Done:** project `car-rental-staging` on the client's Railway account (Postgres, backend, frontend), manual
   `railway up` deploys. Backend: Node 24 pin, `migration:run:prod` (compiled migrations; data source now loads
