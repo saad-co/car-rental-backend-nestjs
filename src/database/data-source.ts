@@ -17,5 +17,9 @@ if (!databaseUrl) {
 export default new DataSource({
   ...buildBaseOptions(databaseUrl),
   entities: [User, Driver, Application, InboundEmail],
-  migrations: [`${import.meta.dirname}/migrations/*.{ts,js}`],
+  // `.ts` when run from the sources (tsx, local), `.js` when run compiled (production). Never
+  // both: the build also writes `.d.ts` type files next to each migration, which are not migrations.
+  migrations: [
+    `${import.meta.dirname}/migrations/*.${import.meta.filename.endsWith(".ts") ? "ts" : "js"}`,
+  ],
 });

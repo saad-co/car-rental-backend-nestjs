@@ -5,7 +5,7 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 ---
 
 ### 2026-10-10 — AI extractor works on real emails: 28/28 (D40-D42)
-- **Done (backend, UNCOMMITTED, kept as is on purpose):** `LlmJsonClient` interface, `GeminiJsonClient` (JSON
+- **Done (backend, committed and pushed 2026-10-10; walkthrough still pending):** `LlmJsonClient` interface, `GeminiJsonClient` (JSON
   schema output, 60 s timeout, SDK's silent retries off), `LlmPaymentExtractor` with rules + per-provider hints +
   schema (adds `transaction_id`), fake-client tests; `extract-eval` script (replaces payer names/emails before
   sending, compares with `../mail-samples/labels.json`); `llm-probe` script (lists models, times thinking settings);
@@ -18,7 +18,7 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 - **Limits of this result:** small sample, few distinct payers; the memo-amount trap (B30) is not in the set any
   more (it was the Mailcow copy); `occurred_at`, `transaction_id` and confidence (always 1) are not checked.
 - **Decided today:** intake by scheduled UID poll (D40); Stripe webhooks later (D41); B34-B39 opened.
-- **Next (start of next session):** 1) walk through every uncommitted file together, then commit; 2) widen the
+- **Next (start of next session):** 1) walk through the two 2026-10-10 commits (extractor code, docs) together until every file is understood; 2) widen the
   sample set (older emails, more payers, the $317.85 memo email from Gmail, B36 sender/folder audit) and re-run;
   3) plan the intake service (`syncNewMessages`, plan mode).
 - **Branch:** `feature/email-parsing` (backend).

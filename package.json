@@ -6,6 +6,9 @@
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
+  "engines": {
+    "node": "24.x"
+  },
   "scripts": {
     "build": "nest build",
     "deploy": "nest deploy",
@@ -25,6 +28,7 @@
     "migration:run": "npm run typeorm -- migration:run",
     "migration:revert": "npm run typeorm -- migration:revert",
     "migration:show": "npm run typeorm -- migration:show",
+    "migration:run:prod": "node --env-file-if-exists=.env ./node_modules/typeorm/cli.js migration:run -d dist/database/data-source.js",
     "imap:peek": "tsx --env-file-if-exists=.env scripts/imap-peek.ts",
     "samples:show": "tsx --env-file-if-exists=.env scripts/samples-show.ts",
     "extract:eval": "tsx --env-file-if-exists=.env scripts/extract-eval.ts",
