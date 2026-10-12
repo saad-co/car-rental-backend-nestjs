@@ -18,6 +18,7 @@ const good = {
   sender_handle: null,
   occurred_at: "2026-10-07T14:30:00Z",
   confidence: 0.97,
+  transaction_id: "12345",
 };
 
 function failedReason(output: unknown, input = email): string {
@@ -38,6 +39,7 @@ describe("validateExtraction", () => {
         senderHandle: null,
         occurredAt: new Date("2026-10-07T14:30:00Z"),
         confidence: 0.97,
+        transactionId: "12345",
       },
     });
   });
@@ -117,6 +119,23 @@ describe("validateExtraction", () => {
     expect(ok(120000, "Amount: 1200.00 USD")).toBe("payment");
     expect(ok(4550, "sent you $45.50 for gas")).toBe("payment");
     expect(ok(12000, "You were sent $120.")).toBe("payment");
+  });
+
+  it("keeps a transaction id only if it is written in the email", () => {
+    const idOf = (transaction_id: unknown) => {
+      const result = validateExtraction({ ...good, transaction_id }, email);
+      if (result.kind !== "payment") throw new Error(result.kind);
+      return result.payment.transactionId;
+    };
+    expect(idOf(" 12345 ")).toBe("12345");
+    expect(idOf(null)).toBeNull();
+    // Invented by the AI: dropped, but the payment itself is still valid.
+    expect(idOf("99999")).toBeNull();
+    // Too short to prove anything ("123" is inside "12345").
+    expect(idOf("123")).toBeNull();
+    expect(failedReason({ ...good, transaction_id: 12345 })).toMatch(
+      /transaction_id/,
+    );
   });
 
   it("accepts occurred_at: null", () => {

@@ -20,9 +20,12 @@ export const EXPECTED_DKIM_DOMAINS: Record<EmailProvider, readonly string[]> = {
   chime: ["account.chime.com", "chime.com"],
 };
 
-/** Outcome of the check. `reason` is stored in `InboundEmail.statusReason` when the email is rejected. */
+/**
+ * Outcome of the check. `domain` (the signing domain that passed) goes in `InboundEmail.authDkimDomain`;
+ * `reason` goes in `InboundEmail.statusReason` when the email is rejected.
+ */
 export type DkimVerdict =
-  { verified: true } | { verified: false; reason: string };
+  { verified: true; domain: string } | { verified: false; reason: string };
 
 export interface VerifyDkimInput {
   /**
@@ -65,12 +68,11 @@ export function verifyDkim(input: VerifyDkimInput): DkimVerdict {
       reason: "No DKIM result in the Authentication-Results header",
     };
   }
-  if (
-    dkimResults.some(
-      (r) => r.result === "pass" && expectedDomains.includes(r.domain),
-    )
-  ) {
-    return { verified: true };
+  const passed = dkimResults.find(
+    (r) => r.result === "pass" && expectedDomains.includes(r.domain),
+  );
+  if (passed) {
+    return { verified: true, domain: passed.domain };
   }
 
   const passedDomains = dkimResults

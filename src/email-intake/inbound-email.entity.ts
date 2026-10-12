@@ -23,6 +23,11 @@ export enum InboundEmailStatus {
   extraction_failed = "extraction_failed",
   /** Verified, but the email is not a payment (e.g. a Chase statement notice). */
   not_payment = "not_payment",
+  /**
+   * Verified payment whose provider transaction id is already stored from another email (B37), e.g. a
+   * duplicate forward. No second payment; `statusReason` names the existing one.
+   */
+  duplicate_payment = "duplicate_payment",
 }
 
 /** The providers we accept, plus `unknown` for an email whose sender is not one of them. */
@@ -56,18 +61,20 @@ const bigintAsNumber: ValueTransformer = {
  */
 @Entity("inbound_emails")
 @Unique("inbound_emails_message_key", ["mailbox", "imapUidValidity", "imapUid"])
+@Unique("inbound_emails_gmail_message_key", ["mailbox", "gmailMessageId"])
 @Index("inbound_emails_received_at_idx", ["receivedAt"])
 @Check("inbound_emails_mailbox_lowercase", `"mailbox" = lower("mailbox")`)
 @Check("inbound_emails_uid_positive", `"imap_uid" > 0`)
 @Check(
   "inbound_emails_failure_has_reason",
-  `"status" NOT IN ('rejected_unverified', 'extraction_failed') OR "status_reason" IS NOT NULL`,
+  // Compared as text: a CHECK written against enum literals cannot name a value added in the same migration.
+  `"status"::text NOT IN ('rejected_unverified', 'extraction_failed', 'duplicate_payment') OR "status_reason" IS NOT NULL`,
 )
 export class InboundEmail {
   @PrimaryGeneratedColumn("uuid")
   id: string;
 
-  /** The Mailcow mailbox the email was read from, e.g. `gonzopay@gonzocar.com` (lower-case). */
+  /** The mailbox the email was read from, `gonzobilling@gmail.com` (D38), lower-case. */
   @Column({ type: "varchar", length: 254 })
   mailbox: string;
 
@@ -86,6 +93,13 @@ export class InboundEmail {
   /** The message's number inside that mailbox. */
   @Column({ name: "imap_uid", type: "bigint", transformer: bigintAsNumber })
   imapUid: number;
+
+  /**
+   * Gmail's permanent id for the message (`X-GM-MSGID`, a 64-bit number kept as text). Unlike the UID, it
+   * never changes, even if Gmail resets UIDVALIDITY, so it is what stops an email being stored twice (D40).
+   */
+  @Column({ name: "gmail_message_id", type: "varchar", length: 32 })
+  gmailMessageId: string;
 
   /** The `Message-ID` header. For reference only (e.g. matching the Gmail copy); not used to deduplicate. */
   @Column({ name: "message_id", type: "varchar", length: 998, nullable: true })

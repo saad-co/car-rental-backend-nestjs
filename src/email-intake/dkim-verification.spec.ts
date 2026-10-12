@@ -18,12 +18,15 @@ function verify(
 
 describe("verifyDkim", () => {
   it("accepts dkim=pass for the provider's exact domain", () => {
-    expect(verify([PASS_CHASE])).toEqual({ verified: true });
+    expect(verify([PASS_CHASE])).toEqual({
+      verified: true,
+      domain: "chase.com",
+    });
   });
 
   it("accepts when one of several signatures matches, and ignores comments", () => {
     const header = `${SERVER}; dkim=pass (2048-bit key) header.d=other.com; dkim=pass (1024-bit key) header.d=chase.com`;
-    expect(verify([header])).toEqual({ verified: true });
+    expect(verify([header]).verified).toBe(true);
   });
 
   it("rejects a valid signature from another domain (e.g. a rewritten forward)", () => {
@@ -95,11 +98,17 @@ describe("verifyDkim with Gmail's Authentication-Results", () => {
   const VENMO = `${GMAIL}; dkim=pass header.i=@venmo.com header.s=sel1 header.b=CCCC; dkim=pass header.i=@amazonses.com header.s=sel2 header.b=DDDD; spf=pass (google.com: domain of bounce@amazonses.com designates 54.240.36.154 as permitted sender) smtp.mailfrom=bounce@amazonses.com; dmarc=pass (p=REJECT sp=REJECT dis=NONE) header.from=venmo.com`;
 
   it("verifies a real-shaped Cash App header", () => {
-    expect(verifyGmail(CASH_APP, "cashapp")).toEqual({ verified: true });
+    expect(verifyGmail(CASH_APP, "cashapp")).toEqual({
+      verified: true,
+      domain: "square.com",
+    });
   });
 
   it("verifies a real-shaped Venmo header", () => {
-    expect(verifyGmail(VENMO, "venmo")).toEqual({ verified: true });
+    expect(verifyGmail(VENMO, "venmo")).toEqual({
+      verified: true,
+      domain: "venmo.com",
+    });
   });
 
   /** Stripe: signed by stripe.com and by the sending service amazonses.com. */
@@ -109,8 +118,14 @@ describe("verifyDkim with Gmail's Authentication-Results", () => {
   const CHIME = `${GMAIL}; dkim=pass header.i=@account.chime.com header.s=s1 header.b=GGGG; dkim=pass header.i=@sendgrid.info header.s=smtpapi header.b=HHHH; spf=pass (google.com: domain of bounces@em.account.chime.com designates 149.72.60.245 as permitted sender) smtp.mailfrom="bounces@em.account.chime.com"; dmarc=pass (p=REJECT sp=REJECT dis=NONE) header.from=chime.com`;
 
   it("verifies real-shaped Stripe and Chime headers", () => {
-    expect(verifyGmail(STRIPE, "stripe")).toEqual({ verified: true });
-    expect(verifyGmail(CHIME, "chime")).toEqual({ verified: true });
+    expect(verifyGmail(STRIPE, "stripe")).toEqual({
+      verified: true,
+      domain: "stripe.com",
+    });
+    expect(verifyGmail(CHIME, "chime")).toEqual({
+      verified: true,
+      domain: "account.chime.com",
+    });
   });
 
   it("accepts both of Chime's signing domains, each matched exactly", () => {

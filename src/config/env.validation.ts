@@ -88,6 +88,72 @@ class EnvironmentVariables {
   @IsString()
   @IsNotEmpty()
   SMTP_PASSWORD?: string;
+
+  /**
+   * Payment-email intake on or off (spec rule 6). Text, not a boolean: with implicit conversion
+   * Boolean("false") would be true. Off by default, so no environment starts reading the real inbox
+   * by accident. The IMAP_* and LLM_* settings below are required only when it is "true".
+   */
+  @IsIn(["true", "false"])
+  EMAIL_INTAKE_ENABLED: "true" | "false" = "false";
+
+  /** IMAP server of the payment mailbox (`imap.gmail.com`, D38). */
+  @ValidateIf(intakeEnabled)
+  @IsString()
+  @IsNotEmpty()
+  IMAP_HOST?: string;
+
+  @IsInt()
+  @Min(1)
+  @Max(65535)
+  IMAP_PORT: number = 993;
+
+  /** The payment mailbox address, `gonzobilling@gmail.com`. */
+  @ValidateIf(intakeEnabled)
+  @IsEmail()
+  IMAP_USER?: string;
+
+  /** A Google App Password for that mailbox, never the account password. */
+  @ValidateIf(intakeEnabled)
+  @IsString()
+  @IsNotEmpty()
+  IMAP_PASSWORD?: string;
+
+  /** The only mail server whose `Authentication-Results` header is trusted (`mx.google.com`). */
+  @ValidateIf(intakeEnabled)
+  @IsString()
+  @IsNotEmpty()
+  IMAP_TRUSTED_SERVER?: string;
+
+  /**
+   * Go-live point (B33): the first run processes only emails with a UID ABOVE this number, never the
+   * inbox's whole history. Needed only while no email is stored yet; after that the highest stored
+   * UID is the cursor. Empty: the first run stops with an error instead of guessing.
+   * Text of digits, not a number: implicit conversion would turn an empty value into 0, the whole history.
+   */
+  @ValidateIf(
+    (env: EnvironmentVariables) =>
+      env.IMAP_START_AFTER_UID !== undefined && env.IMAP_START_AFTER_UID !== "",
+  )
+  @Matches(/^\d+$/, { message: "IMAP_START_AFTER_UID must be a whole number" })
+  IMAP_START_AFTER_UID?: string;
+
+  /** Key for the LLM that reads payment emails. Must be a PAID key for real emails (free tier data is used by Google). */
+  @ValidateIf(intakeEnabled)
+  @IsString()
+  @IsNotEmpty()
+  LLM_API_KEY?: string;
+
+  /** Exact model name, e.g. `gemini-3.5-flash-lite`, never a moving `-latest` alias. */
+  @ValidateIf(intakeEnabled)
+  @IsString()
+  @IsNotEmpty()
+  LLM_MODEL?: string;
+}
+
+/** True when payment-email intake is switched on. */
+function intakeEnabled(env: EnvironmentVariables): boolean {
+  return env.EMAIL_INTAKE_ENABLED === "true";
 }
 
 // Runs once at startup (ConfigModule calls it). If anything is missing or wrong the app

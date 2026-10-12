@@ -27,6 +27,11 @@ export interface ExtractedPayment {
   occurredAt: Date | null;
   /** 0 to 1. */
   confidence: number;
+  /**
+   * The provider's transaction id, only if it appears word for word in the email; otherwise null.
+   * It deduplicates payments (B37), so an invented id must never get through.
+   */
+  transactionId: string | null;
 }
 
 /**
@@ -83,6 +88,10 @@ export function validateExtraction(
     return fail("confidence must be a number from 0 to 1");
   }
 
+  if (o.transaction_id !== null && typeof o.transaction_id !== "string") {
+    return fail("transaction_id must be a string or null");
+  }
+
   let occurredAt: Date | null = null;
   if (o.occurred_at !== null) {
     occurredAt =
@@ -110,8 +119,24 @@ export function validateExtraction(
         o.sender_handle === null ? null : (o.sender_handle as string).trim(),
       occurredAt,
       confidence: o.confidence,
+      transactionId: transactionIdInText(
+        o.transaction_id,
+        `${email.subject}
+${email.bodyText}`,
+      ),
     },
   };
+}
+
+/**
+ * The transaction id if it is written in the email exactly as given, else null. Not a failure: the
+ * payment itself is still valid, it just cannot be deduplicated by id. Shorter than 4 characters is
+ * ignored, because a "1" or "AB" appears in almost any text.
+ */
+function transactionIdInText(id: string | null, text: string): string | null {
+  const trimmed = id?.trim() ?? "";
+  if (trimmed.length < 4 || !text.includes(trimmed)) return null;
+  return trimmed;
 }
 
 function fail(reason: string): ExtractionResult {

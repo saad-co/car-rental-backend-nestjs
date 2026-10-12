@@ -56,7 +56,7 @@ describe("parseRawEmail", () => {
         trustedServerId: "mail.gonzocar.com",
         provider: "zelle_chase",
       }),
-    ).toEqual({ verified: true });
+    ).toEqual({ verified: true, domain: "chase.com" });
   });
 
   it("strips HTML and style blocks when there is no plain-text part", async () => {

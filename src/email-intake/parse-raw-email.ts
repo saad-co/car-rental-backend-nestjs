@@ -6,6 +6,8 @@ export interface ParsedEmail {
   /** Lower-case address of the first `From`, or null if there is none. */
   fromAddress: string | null;
   subject: string;
+  /** The `Message-ID` header, or null. For reference only (never used to deduplicate). */
+  messageId: string | null;
   /** The `Date` header, or null if missing or unreadable. */
   date: Date | null;
   /** Every `Authentication-Results` value, top to bottom (newest first). Input for `verifyDkim`. */
@@ -35,6 +37,7 @@ export async function parseRawEmail(raw: Buffer): Promise<ParsedEmail> {
   return {
     fromAddress: parsed.from?.value[0]?.address?.toLowerCase() ?? null,
     subject: parsed.subject ?? "",
+    messageId: parsed.messageId ?? null,
     date: parsed.date ?? null,
     authenticationResults,
     bodyText: readableBody(parsed.text, parsed.html),
