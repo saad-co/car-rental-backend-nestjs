@@ -36,6 +36,7 @@
     "llm:probe": "tsx --env-file-if-exists=.env scripts/llm-probe.ts",
     "legacy:report": "tsx --env-file-if-exists=.env scripts/legacy-report.ts",
     "legacy:import-drivers": "tsx --env-file-if-exists=.env scripts/legacy-import-drivers.ts",
+    "legacy:import-aliases": "tsx --env-file-if-exists=.env scripts/legacy-import-aliases.ts",
     "seed:admin": "nest build && node --env-file-if-exists=.env dist/database/seed-admin.js",
     "openapi:export": "nest build && node --env-file-if-exists=.env dist/openapi/export-openapi.js"
   },

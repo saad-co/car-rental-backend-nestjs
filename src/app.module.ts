@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { ScheduleModule } from "@nestjs/schedule";
 import { TypeOrmModule } from "@nestjs/typeorm";
+import { AliasesModule } from "./aliases/aliases.module.js";
 import { AppController } from "./app.controller.js";
 import { AppService } from "./app.service.js";
 import { validateEnv } from "./config/env.validation.js";
@@ -34,6 +35,7 @@ import { UsersModule } from "./users/users.module.js";
     DriversModule,
     EmailIntakeModule,
     PaymentsModule,
+    AliasesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -82,7 +82,7 @@ describe("Admin lists: payments and the email log (test database)", () => {
 
   beforeAll(async () => {
     db = await openTestDatabase();
-    payments = new PaymentsService(db.getRepository(Payment));
+    payments = new PaymentsService(db);
     emails = new InboundEmailsService(
       db.getRepository(InboundEmail),
       db.getRepository(Payment),

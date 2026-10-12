@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { TypeOrmModule } from "@nestjs/typeorm";
+import { MatchingModule } from "../matching/matching.module.js";
 import { PaymentsModule } from "../payments/payments.module.js";
 import {
   EMAIL_INTAKE_DEPS,
@@ -24,7 +25,11 @@ import { LlmPaymentExtractor } from "./llm-payment-extractor.js";
  * never reads settings itself, so the e2e test can hand it a fake mailbox and a fake AI instead.
  */
 @Module({
-  imports: [TypeOrmModule.forFeature([InboundEmail]), PaymentsModule],
+  imports: [
+    TypeOrmModule.forFeature([InboundEmail]),
+    PaymentsModule,
+    MatchingModule,
+  ],
   controllers: [InboundEmailsController],
   providers: [
     InboundEmailsService,

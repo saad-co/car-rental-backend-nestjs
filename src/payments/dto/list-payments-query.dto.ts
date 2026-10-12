@@ -1,8 +1,8 @@
-import { IsEnum, IsOptional } from "class-validator";
+import { IsEnum, IsIn, IsOptional } from "class-validator";
 import { PaginationQueryDto } from "../../common/dto/pagination-query.dto.js";
 import { PaymentSource, PaymentStatus } from "../payment.entity.js";
 
-/** Query string of `GET /payments`, e.g. `?status=unmatched&source=email_zelle&page=1&limit=20`. */
+/** Query string of `GET /payments`, e.g. `?match=review&source=email_zelle&page=1&limit=20`. */
 export class ListPaymentsQueryDto extends PaginationQueryDto {
   /** Only payments with this status. Omit for all. */
   @IsOptional()
@@ -13,4 +13,12 @@ export class ListPaymentsQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsEnum(PaymentSource)
   source?: PaymentSource;
+
+  /**
+   * `assigned`: has a driver. `review`: matching looked at it and could not place it ("Needs review").
+   * Omit for all.
+   */
+  @IsOptional()
+  @IsIn(["assigned", "review"])
+  match?: "assigned" | "review";
 }
