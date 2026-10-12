@@ -5,7 +5,7 @@ import { InboundEmail, InboundEmailStatus } from "./inbound-email.entity.js";
 import { LlmRateLimitError } from "./llm-client.js";
 import type { MailboxMessage, MailboxReader } from "./mailbox-reader.js";
 import type { PaymentExtractor } from "./payment-extraction.js";
-import { processEmail, type ProcessedEmail } from "./process-email.js";
+import { EmailProcessor, type ProcessedEmail } from "./process-email.js";
 import { ALLOWED_SENDERS } from "./sender-provider.js";
 
 /** Everything the intake needs from outside. Null when intake is switched off (no IMAP or LLM settings). */
@@ -48,10 +48,20 @@ export class EmailIntakeService {
    */
   private readonly failedAttempts = new Map<string, number>();
 
+  /** Turns a raw email into what to store; null when intake is switched off. */
+  private readonly processor: EmailProcessor | null;
+
   constructor(
     private readonly dataSource: DataSource,
     @Inject(EMAIL_INTAKE_DEPS) private readonly deps: EmailIntakeDeps | null,
-  ) {}
+  ) {
+    this.processor = deps
+      ? new EmailProcessor({
+          trustedServerId: deps.trustedServerId,
+          extractor: deps.extractor,
+        })
+      : null;
+  }
 
   /**
    * One run: take the lock, read every new allow-listed email oldest first, store each one with its
@@ -111,7 +121,7 @@ export class EmailIntakeService {
           );
           continue;
         }
-        const processed = await this.process(message, deps);
+        const processed = await this.process(message);
         const status = await this.save(
           mailbox.mailbox,
           session.uidValidity,
@@ -164,25 +174,16 @@ export class EmailIntakeService {
   }
 
   /**
-   * Runs `processEmail`. If the AI fails, the error is re-thrown to stop the run (retry next time),
+   * Runs `EmailProcessor.process`. If the AI fails, the error is re-thrown to stop the run (retry next time),
    * until the same email has failed MAX_ATTEMPTS runs in a row; then it is recorded as failed.
    * A rate limit never counts toward that: the email waits until the AI answers again.
    */
-  private async process(
-    message: MailboxMessage,
-    deps: EmailIntakeDeps,
-  ): Promise<ProcessedEmail> {
+  private async process(message: MailboxMessage): Promise<ProcessedEmail> {
+    const processor = this.processor;
+    if (!processor) throw new Error("Email intake is switched off.");
     const key = message.gmailMessageId;
-    const processDeps = {
-      trustedServerId: deps.trustedServerId,
-      extractor: deps.extractor,
-    };
     try {
-      const result = await processEmail(
-        message.raw,
-        message.receivedAt,
-        processDeps,
-      );
+      const result = await processor.process(message.raw, message.receivedAt);
       this.failedAttempts.delete(key);
       return result;
     } catch (error) {
@@ -203,7 +204,7 @@ export class EmailIntakeService {
         );
       }
       this.failedAttempts.delete(key);
-      return processEmail(message.raw, message.receivedAt, processDeps, {
+      return processor.process(message.raw, message.receivedAt, {
         abandonReason: `AI failed ${MAX_ATTEMPTS} runs in a row: ${reason}`,
       });
     }

@@ -8,7 +8,7 @@ import { DataSource, IsNull, Not, type FindOptionsWhere } from "typeorm";
 import { normalizeAliasValue } from "../aliases/normalize-alias.js";
 import { AliasSource, PaymentAlias } from "../aliases/payment-alias.entity.js";
 import { Driver } from "../drivers/driver.entity.js";
-import { ALIAS_TYPE_BY_SOURCE } from "../matching/alias-lookup.js";
+import { ALIAS_TYPE_BY_SOURCE } from "../matching/alias-index.js";
 import { statusWhenAssigned } from "../matching/matching.service.js";
 import { ListPaymentsQueryDto } from "./dto/list-payments-query.dto.js";
 import {

@@ -6,7 +6,7 @@ export interface MailboxMessage {
   gmailMessageId: string;
   /** When our mail server received it (IMAP internal date). Not the sender's `Date` header. */
   receivedAt: Date;
-  /** The whole email, bytes as stored. Input for `processEmail`. */
+  /** The whole email, bytes as stored. Input for `EmailProcessor`. */
   raw: Buffer;
 }
 

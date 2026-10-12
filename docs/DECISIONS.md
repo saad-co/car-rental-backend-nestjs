@@ -412,3 +412,25 @@ payment, it would be missed. Look-alikes (`mail.chime.com`, `evilchime.com`) are
   merge two real payments. A second email with a stored transaction id → `duplicate_payment`, no second payment.
 - `EMAIL_INTAKE_ENABLED` (default `false`) is the switch until the settings table exists (spec rule 6).
 **Why:** never miss an email, never store one twice, enforced by the database where possible.
+
+### D48 — 2026-10-12 — Payment → driver matching: unique identifiers exact, everything else AI (B51, B52, B53)
+- **Exact, no AI, only on unique identifiers:** a `payment_aliases` entry of the payment's own method (type-filtered,
+  defect 1), or the payer handle equal to a driver's own email or phone (both unique). Two different drivers found →
+  no exact match.
+- **Everything else goes to the AI, with full context** (Abulkalam, 2026-10-12): payment method, amount, payer name and
+  handle; every driver's name, status, email, phone and aliases. Exact NAME equality is not a shortcut (a family
+  member or another driver with a close name, e.g. "Abcd" vs "Abcde", would be credited wrongly at 100%); the prompt
+  keeps confidence below 0.7 when another driver's name is close. The `name` match method value exists in the
+  database from a short-lived version but is no longer used.
+- **Thresholds:** AI ≥ 0.7 → assigned (Saad); below → "Needs review" with the suggestion. AI ≥ 0.9 → the payer name is
+  also saved as an `ai_match` alias. Constants in `matching.service.ts` until the settings table exists.
+- **Manual assign** (`POST /payments/:id/assign`) saves the payer name as a `manual` alias, but never takes an alias
+  from another driver (reported back; B54 open).
+- **Aliases:** many per driver, one driver per alias (`UNIQUE (type, value_normalized)`); types = payment methods +
+  `email`/`phone`; 54 imported from the old system. Driver-added aliases need admin approval (Saad, B53; not built yet).
+- **Statuses after matching** follow spec 6.3 / the accepted scope: Zelle → `reported` (bank confirms later, M5),
+  others → `confirmed`. Not discussed in chat before building; one-stage for Cash App/Venmo/Stripe/Chime is still
+  to confirm with Saad (B3, D39). No ledger yet: nothing is credited.
+- Matching runs after every intake run; a rate limit stops it until the next run (B49), any other AI error sends that
+  payment to review with the error.
+**Why:** an alias, email or phone is a fact someone confirmed; a name is a coincidence until checked with context.

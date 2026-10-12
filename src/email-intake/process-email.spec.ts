@@ -4,7 +4,7 @@ import type {
   ExtractionInput,
   PaymentExtractor,
 } from "./payment-extraction.js";
-import { processEmail } from "./process-email.js";
+import { EmailProcessor } from "./process-email.js";
 
 const GMAIL = "mx.google.com";
 const RECEIVED = new Date("2026-10-12T15:00:00Z");
@@ -45,9 +45,12 @@ const venmoPayment = {
 };
 
 const run = (raw: Buffer, extractor: PaymentExtractor) =>
-  processEmail(raw, RECEIVED, { trustedServerId: GMAIL, extractor });
+  new EmailProcessor({ trustedServerId: GMAIL, extractor }).process(
+    raw,
+    RECEIVED,
+  );
 
-describe("processEmail", () => {
+describe("EmailProcessor.process", () => {
   it("turns a verified payment email into a processed email and a payment", async () => {
     const extractor = new FakeExtractor(() => Promise.resolve(venmoPayment));
     const result = await run(venmoEmail(), extractor);
@@ -129,12 +132,12 @@ describe("processEmail", () => {
 
   it("records extraction_failed without calling the AI when the caller gives up on the email", async () => {
     const extractor = new FakeExtractor(() => Promise.resolve(venmoPayment));
-    const result = await processEmail(
-      venmoEmail(),
-      RECEIVED,
-      { trustedServerId: GMAIL, extractor },
-      { abandonReason: "AI failed 3 runs in a row: 503" },
-    );
+    const result = await new EmailProcessor({
+      trustedServerId: GMAIL,
+      extractor,
+    }).process(venmoEmail(), RECEIVED, {
+      abandonReason: "AI failed 3 runs in a row: 503",
+    });
 
     expect(result.email).toMatchObject({
       provider: "venmo",

@@ -156,27 +156,19 @@ describe("MatchingService.matchPending (test database)", () => {
     expect(ai.calls).toBe(1);
   });
 
-  it("assigns an exact driver name without asking the AI, unless two drivers share it", async () => {
-    const id = await addPayment(
-      PaymentSource.email_zelle,
-      "  TIMOTHY   SUTTON ",
-    );
+  it("sends an exact driver name to the AI too: only aliases, emails and phones skip it", async () => {
+    ai.answer = () =>
+      Promise.resolve({
+        driverId: tim,
+        confidence: 0.95,
+        explanation: "Same name",
+      });
+    const id = await addPayment(PaymentSource.email_zelle, "Timothy Sutton");
     await service().matchPending();
     expect(await reload(id)).toMatchObject({
       driverId: tim,
-      matchMethod: MatchMethod.name,
-      matchConfidence: 1,
+      matchMethod: MatchMethod.ai,
     });
-    expect(ai.calls).toBe(0);
-
-    await db.getRepository(Driver).save({
-      firstName: "Timothy",
-      lastName: "Sutton",
-      email: "tim2@example.com",
-      phone: "+13125550103",
-    });
-    await addPayment(PaymentSource.email_venmo, "Timothy Sutton");
-    await service().matchPending();
     expect(ai.calls).toBe(1);
   });
 

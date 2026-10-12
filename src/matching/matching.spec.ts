@@ -1,14 +1,14 @@
 import { AliasType } from "../aliases/normalize-alias.js";
 import { PaymentSource, PaymentStatus } from "../payments/payment.entity.js";
 import { validateMatch, type DriverCandidate } from "./ai-driver-matcher.js";
-import { buildAliasIndex, findByAlias } from "./alias-lookup.js";
+import { AliasIndex } from "./alias-index.js";
 import { statusWhenAssigned } from "./matching.service.js";
 
 const drivers = [
   { id: "d1", email: "tim@example.com", phone: "+13125550101" },
   { id: "d2", email: "kim@example.com", phone: "+13125550102" },
 ];
-const index = buildAliasIndex(
+const index = AliasIndex.build(
   [
     {
       driverId: "d1",
@@ -34,45 +34,38 @@ const payment = (
 describe("findByAlias", () => {
   it("matches an alias of the payment's own method, ignoring capitals and spaces", () => {
     expect(
-      findByAlias(payment(PaymentSource.email_zelle, "Timothy  Sutton"), index),
+      index.find(payment(PaymentSource.email_zelle, "Timothy  Sutton")),
     ).toEqual({
       driverId: "d1",
       explanation: 'Known zelle alias "TIMOTHY SUTTON"',
     });
     expect(
-      findByAlias(
-        payment(PaymentSource.email_cashapp, "college and beyond"),
-        index,
-      )?.driverId,
+      index.find(payment(PaymentSource.email_cashapp, "college and beyond"))
+        ?.driverId,
     ).toBe("d2");
   });
 
   it("never matches an alias of another method (type-filtered, defect 1)", () => {
     expect(
-      findByAlias(payment(PaymentSource.email_venmo, "Timothy Sutton"), index),
+      index.find(payment(PaymentSource.email_venmo, "Timothy Sutton")),
     ).toBeNull();
   });
 
   it("matches the driver's own email or phone shown as the handle", () => {
     expect(
-      findByAlias(
-        payment(PaymentSource.email_zelle, "T S", "TIM@example.com"),
-        index,
-      )?.driverId,
+      index.find(payment(PaymentSource.email_zelle, "T S", "TIM@example.com"))
+        ?.driverId,
     ).toBe("d1");
     expect(
-      findByAlias(
-        payment(PaymentSource.email_venmo, "K", "(312) 555-0102"),
-        index,
-      )?.driverId,
+      index.find(payment(PaymentSource.email_venmo, "K", "(312) 555-0102"))
+        ?.driverId,
     ).toBe("d2");
   });
 
   it("gives up when two different drivers are found (a human or the AI decides)", () => {
     expect(
-      findByAlias(
+      index.find(
         payment(PaymentSource.email_zelle, "Timothy Sutton", "kim@example.com"),
-        index,
       ),
     ).toBeNull();
   });
@@ -80,7 +73,14 @@ describe("findByAlias", () => {
 
 describe("validateMatch", () => {
   const list: DriverCandidate[] = [
-    { id: "d1", name: "Tim Sutton", status: "active", aliases: [] },
+    {
+      id: "d1",
+      name: "Tim Sutton",
+      status: "active",
+      email: "tim@example.com",
+      phone: "+13125550101",
+      aliases: [],
+    },
   ];
 
   it("keeps a known driver id with its confidence", () => {

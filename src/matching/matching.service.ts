@@ -11,13 +11,7 @@ import {
   PaymentStatus,
 } from "../payments/payment.entity.js";
 import type { AiDriverMatcher, DriverCandidate } from "./ai-driver-matcher.js";
-import {
-  addToIndex,
-  ALIAS_TYPE_BY_SOURCE,
-  buildAliasIndex,
-  findByAlias,
-  findByExactName,
-} from "./alias-lookup.js";
+import { ALIAS_TYPE_BY_SOURCE, AliasIndex } from "./alias-index.js";
 
 /** Injection token for the AI matcher (null when no LLM is configured). */
 export const AI_DRIVER_MATCHER = Symbol("AI_DRIVER_MATCHER");
@@ -73,18 +67,20 @@ export class MatchingService {
 
     const drivers = await this.dataSource.getRepository(Driver).find();
     const aliases = await this.dataSource.getRepository(PaymentAlias).find();
-    const index = buildAliasIndex(aliases, drivers);
+    const index = AliasIndex.build(aliases, drivers);
     const candidates: DriverCandidate[] = drivers.map((driver) => ({
       id: driver.id,
       name: `${driver.firstName} ${driver.lastName}`,
       status: driver.status,
+      email: driver.email,
+      phone: driver.phone,
       aliases: aliases
         .filter((alias) => alias.driverId === driver.id)
         .map((alias) => ({ type: alias.type, value: alias.value })),
     }));
 
     for (const payment of pending) {
-      const outcome = await this.matchOne(payment, index, drivers, candidates);
+      const outcome = await this.matchOne(payment, index, candidates);
       result[outcome]++;
     }
     return result;
@@ -92,11 +88,10 @@ export class MatchingService {
 
   private async matchOne(
     payment: Payment,
-    index: ReturnType<typeof buildAliasIndex>,
-    drivers: Driver[],
+    index: AliasIndex,
     candidates: DriverCandidate[],
   ): Promise<keyof MatchResult> {
-    const hit = findByAlias(payment, index);
+    const hit = index.find(payment);
     if (hit) {
       await this.assign(
         payment,
@@ -104,18 +99,6 @@ export class MatchingService {
         MatchMethod.alias,
         1,
         hit.explanation,
-      );
-      return "assigned";
-    }
-
-    const byName = findByExactName(payment.senderName, drivers);
-    if (byName) {
-      await this.assign(
-        payment,
-        byName.driverId,
-        MatchMethod.name,
-        1,
-        byName.explanation,
       );
       return "assigned";
     }
@@ -137,6 +120,7 @@ export class MatchingService {
           method: type,
           senderName: payment.senderName,
           senderHandle: payment.senderHandle,
+          amountCents: payment.amountCents,
         },
         candidates,
       );
@@ -151,15 +135,10 @@ export class MatchingService {
         if (match.confidence >= LEARN_ALIAS_CONFIDENCE) {
           await this.learnAlias(payment, match.driverId);
           // The outer `type` is set here: without it the AI is never asked.
-          addToIndex(
-            index,
-            type,
-            normalizeAliasValue(type, payment.senderName),
-            {
-              driverId: match.driverId,
-              value: payment.senderName,
-            },
-          );
+          index.add(type, normalizeAliasValue(type, payment.senderName), {
+            driverId: match.driverId,
+            value: payment.senderName,
+          });
         }
         return "assigned";
       }
