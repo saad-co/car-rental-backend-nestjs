@@ -138,7 +138,7 @@ class EnvironmentVariables {
   @Matches(/^\d+$/, { message: "IMAP_START_AFTER_UID must be a whole number" })
   IMAP_START_AFTER_UID?: string;
 
-  /** Key for the LLM that reads payment emails. Must be a PAID key for real emails (free tier data is used by Google). */
+  /** Key for the LLM that reads payment emails. The free Gemini key is approved for real emails (D46). */
   @ValidateIf(intakeEnabled)
   @IsString()
   @IsNotEmpty()

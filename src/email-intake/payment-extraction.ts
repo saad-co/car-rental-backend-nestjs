@@ -23,7 +23,11 @@ export interface ExtractedPayment {
   amountCents: number;
   senderName: string;
   senderHandle: string | null;
-  /** When the payment happened, if the extractor found it. The caller falls back to the email's own date. */
+  /**
+   * When the payment happened, only if the email gives an exact time with its time zone. Null otherwise
+   * (no date, a date without a time, or a time without a zone): the caller then uses the time our mail
+   * server received the email, which is exact (B50).
+   */
   occurredAt: Date | null;
   /** 0 to 1. */
   confidence: number;
@@ -94,11 +98,14 @@ export function validateExtraction(
 
   let occurredAt: Date | null = null;
   if (o.occurred_at !== null) {
-    occurredAt =
-      typeof o.occurred_at === "string" ? new Date(o.occurred_at) : null;
-    if (occurredAt === null || Number.isNaN(occurredAt.getTime())) {
+    if (typeof o.occurred_at !== "string") {
       return fail("occurred_at must be an ISO date string or null");
     }
+    const parsed = exactTime(o.occurred_at);
+    if (parsed === "invalid") {
+      return fail("occurred_at must be an ISO date string or null");
+    }
+    occurredAt = parsed;
   }
 
   if (
@@ -137,6 +144,31 @@ function transactionIdInText(id: string | null, text: string): string | null {
   const trimmed = id?.trim() ?? "";
   if (trimmed.length < 4 || !text.includes(trimmed)) return null;
   return trimmed;
+}
+
+/** `2026-10-10`, `2026-10-10T00:00:00Z`, `2026-10-10T00:00+00:00`: a date shown as midnight UTC. */
+const MIDNIGHT_UTC = /T00:00(:00(\.0+)?)?(Z|[+-]00:?00)$/i;
+/** A time that ends with `Z` or an offset such as `-05:00`. */
+const HAS_ZONE = /(Z|[+-]\d{2}:?\d{2})$/i;
+
+/**
+ * The payment time from the extractor, or null when it is not an exact moment (B50). Zelle and Venmo
+ * emails show only a date; the AI then writes midnight UTC, which is 7 PM the DAY BEFORE in Chicago. A
+ * time without a zone would be read in the server's own zone. In both cases the email's received time
+ * (our server's clock) is better, so null is returned and the caller uses it.
+ */
+function exactTime(text: string): Date | null | "invalid" {
+  const value = text.trim();
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "invalid";
+  if (
+    !value.includes("T") ||
+    MIDNIGHT_UTC.test(value) ||
+    !HAS_ZONE.test(value)
+  ) {
+    return null;
+  }
+  return date;
 }
 
 function fail(reason: string): ExtractionResult {

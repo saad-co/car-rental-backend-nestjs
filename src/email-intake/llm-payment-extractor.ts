@@ -20,7 +20,7 @@ Rules:
 2. amount_cents is the received amount in whole cents ("$317.85" is 31785, "$59" is 5900). Use the amount the email presents as the payment amount. Never take a figure from a memo or note, even if it looks like rent or a fee.
 3. sender_name is the payer's name exactly as the email writes it, keeping its capitalisation and punctuation.
 4. sender_handle is the payer's email address, phone number or @username only if the email shows one for the payer, otherwise null. Never use the business's own handle or account.
-5. occurred_at is when the payment was sent, as an ISO 8601 date or date-time, if the email shows it; otherwise null.
+5. occurred_at is when the payment was sent, as an ISO 8601 date-time WITH its UTC offset, only if the email shows a time of day. If the email shows only a date, or no date, occurred_at is null. Never invent a time such as midnight.
 6. transaction_id is the provider's transaction or payment id if the email shows one; otherwise null.
 7. provider is always the provider given with the email.
 8. confidence is how sure you are of the whole answer, from 0 to 1.

@@ -138,6 +138,24 @@ describe("validateExtraction", () => {
     );
   });
 
+  it("keeps only exact payment times; date-only and zone-less times become null (B50)", () => {
+    const timeOf = (occurred_at: string | null) => {
+      const result = validateExtraction({ ...good, occurred_at }, email);
+      if (result.kind !== "payment") throw new Error(result.kind);
+      return result.payment.occurredAt;
+    };
+    expect(timeOf("2026-10-10T15:05:00-05:00")).toEqual(
+      new Date("2026-10-10T20:05:00Z"),
+    );
+    // A date alone, or the midnight UTC the AI writes for it: 7 PM the day before in Chicago.
+    expect(timeOf("2026-10-10")).toBeNull();
+    expect(timeOf("2026-10-10T00:00:00Z")).toBeNull();
+    expect(timeOf("2026-10-10T00:00:00.000Z")).toBeNull();
+    expect(timeOf("2026-10-10T00:00:00+00:00")).toBeNull();
+    // No zone: would be read in the server's own time zone.
+    expect(timeOf("2026-10-10T15:05:00")).toBeNull();
+  });
+
   it("accepts occurred_at: null", () => {
     const result = validateExtraction({ ...good, occurred_at: null }, email);
     expect(result.kind === "payment" && result.payment.occurredAt).toBeNull();

@@ -18,6 +18,7 @@ import type {
   ExtractionInput,
   PaymentExtractor,
 } from "../src/email-intake/payment-extraction.js";
+import { LlmRateLimitError } from "../src/email-intake/llm-client.js";
 import { Payment, PaymentStatus } from "../src/payments/payment.entity.js";
 
 /**
@@ -90,8 +91,12 @@ class FakeMailbox implements MailboxReader {
 class FakeExtractor implements PaymentExtractor {
   calls = 0;
   failing = false;
+  rateLimited = false;
   extract(input: ExtractionInput): Promise<unknown> {
     this.calls++;
+    if (this.rateLimited) {
+      return Promise.reject(new LlmRateLimitError("429 quota exceeded"));
+    }
     if (this.failing) return Promise.reject(new Error("503 model overloaded"));
     const id = /Transaction ID (\S+)/.exec(input.bodyText)?.[1] ?? null;
     return Promise.resolve({
@@ -252,6 +257,22 @@ describe("EmailIntakeService.syncNewMessages (test database)", () => {
       InboundEmailStatus.extraction_failed,
       InboundEmailStatus.processed,
     ]);
+  });
+
+  it("waits out rate limits without ever giving up on the email (B49)", async () => {
+    mailbox.messages = [message(101, venmoRaw("TX1001"))];
+    extractor.rateLimited = true;
+    const intake = service();
+
+    // Far more runs than the 3-strike limit: each one stops at 101, none records it as failed.
+    for (let run = 0; run < 5; run++) {
+      await expect(intake.syncNewMessages()).rejects.toThrow(/rate-limited/);
+    }
+    expect(await emails()).toHaveLength(0);
+
+    extractor.rateLimited = false;
+    expect(await intake.syncNewMessages()).toEqual({ ran: true, stored: 1 });
+    expect((await emails())[0].status).toBe(InboundEmailStatus.processed);
   });
 
   it("does nothing while another run holds the lock", async () => {

@@ -4,6 +4,21 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-12 — Payment email intake service (M3), first live run (D46, D47)
+- **Done (backend):** `payments` table + `inbound_emails.gmail_message_id` + `duplicate_payment` status (migration
+  `AddPaymentsAndGmailId`); `processEmail` (parse → allow-list → DKIM → AI → validation); `MailboxReader` + imapflow
+  adapter; `EmailIntakeService.syncNewMessages()` (advisory lock, cursor, go-live point, one transaction per email,
+  3-strike rule); `@Cron` every 3 minutes behind `EMAIL_INTAKE_ENABLED` (default off); `npm run intake:peek`.
+  Fixes after the live run: date-only payment times use the received time (B50); rate limits never count as a
+  strike (B49). Free Gemini key approved for real emails (D46).
+- **Verified:** 62 unit + 9 e2e tests (test database, fake mailbox and AI). Live run locally
+  (`IMAP_START_AFTER_UID=22150`): 10 emails, 9 payments, 1 Zelle request correctly `not_payment`, 0 failures;
+  checked against Gmail. Rows from that run keep the old midnight times (stored before the B50 fix).
+- **Not done:** admin pages for payments and the email log (next: F1-F3); staging stays OFF until then; matching (M4).
+- **Branch:** `feature/email-parsing` (backend).
+
+---
+
 ### 2026-10-11 — Cleaner application page (Saad's feedback)
 - **Done (frontend):** the application page is laid out like TailAdmin's transaction page: a header with the name,
   status, submitted time and review buttons; the answers in underlined tabs (Contact, Driving, Rental, Documents, and

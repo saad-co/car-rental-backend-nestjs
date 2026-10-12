@@ -19,3 +19,15 @@ export interface LlmJsonRequest {
 export interface LlmJsonClient {
   generateJson(request: LlmJsonRequest): Promise<unknown>;
 }
+
+/**
+ * Thrown by an adapter when the provider refuses because of a rate limit or quota (HTTP 429). Nothing is
+ * wrong with the email: the same request works once the limit resets. The intake therefore retries these
+ * on every run WITHOUT counting them toward giving up on the email (B49).
+ */
+export class LlmRateLimitError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "LlmRateLimitError";
+  }
+}

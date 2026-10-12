@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from "@nestjs/common";
 import { DataSource, type EntityManager } from "typeorm";
 import { Payment, PaymentStatus } from "../payments/payment.entity.js";
 import { InboundEmail, InboundEmailStatus } from "./inbound-email.entity.js";
+import { LlmRateLimitError } from "./llm-client.js";
 import type { MailboxMessage, MailboxReader } from "./mailbox-reader.js";
 import type { PaymentExtractor } from "./payment-extraction.js";
 import { processEmail, type ProcessedEmail } from "./process-email.js";
@@ -165,6 +166,7 @@ export class EmailIntakeService {
   /**
    * Runs `processEmail`. If the AI fails, the error is re-thrown to stop the run (retry next time),
    * until the same email has failed MAX_ATTEMPTS runs in a row; then it is recorded as failed.
+   * A rate limit never counts toward that: the email waits until the AI answers again.
    */
   private async process(
     message: MailboxMessage,
@@ -184,8 +186,15 @@ export class EmailIntakeService {
       this.failedAttempts.delete(key);
       return result;
     } catch (error) {
-      const attempts = (this.failedAttempts.get(key) ?? 0) + 1;
       const reason = error instanceof Error ? error.message : String(error);
+      if (error instanceof LlmRateLimitError) {
+        // Not this email's fault: wait for the limit to reset, in order, without a strike (B49).
+        throw new Error(
+          `UID ${message.uid}: AI rate-limited, retried next run (not counted): ${reason}`,
+          { cause: error },
+        );
+      }
+      const attempts = (this.failedAttempts.get(key) ?? 0) + 1;
       if (attempts < MAX_ATTEMPTS) {
         this.failedAttempts.set(key, attempts);
         throw new Error(

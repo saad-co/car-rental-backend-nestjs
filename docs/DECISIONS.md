@@ -388,3 +388,27 @@ payment, it would be missed. Look-alikes (`mail.chime.com`, `evilchime.com`) are
   match until they are added by hand or fixed in the old system and re-imported.
 **Why:** our rules (unique email = login, unique US phone) protect matching; 5 rows are not worth weakening them.
 
+
+### D46 — 2026-10-12 — LLM: Gemini `gemini-3.5-flash-lite` on the FREE key, real emails included (settles B8)
+- Payment emails go to Gemini as they are, payer names included, on the existing free API key. Approved by Saad and
+  the client (2026-10-12). This replaces the 2026-10-10 rule "free key only with names replaced".
+- Known trade-off, accepted: on the free tier Google may use submitted content to improve its products, and rate
+  limits are lower. Moving to a paid key (about $1-2 a month at our volume) is a change of `LLM_API_KEY` only.
+- OpenAI stays the fallback (the extractor sits behind `LlmJsonClient`).
+**Why:** no cost and no billing setup now; the client accepts the data-use terms.
+
+### D47 — 2026-10-12 — Email intake service and the `payments` table (M3)
+- `syncNewMessages()` (D40): advisory lock; cursor = highest stored UID for the mailbox and UIDVALIDITY; first run
+  only above `IMAP_START_AFTER_UID` (missing → stop with an error); UIDVALIDITY change → stop with an error.
+- Dedup by Gmail's permanent id: `inbound_emails.gmail_message_id`, unique per mailbox (the D40 correction).
+- A temporary failure (AI, network) stops the run at that email, never skipping it (the cursor would pass it). The
+  same email failing 3 runs in a row is recorded `extraction_failed` with the error (count kept in memory).
+- One transaction per email: the email row and its payment, or neither.
+- `payments` created now with only extraction data, status `unmatched`; driver and match columns come with M4.
+  Unique `(source, external_id)` and `(source, transaction_id)`. **Deviation from spec section 4:** no
+  `inbound_emails.payment_id`; the link is `payments.external_id` (= the email row id), because `inbound_emails` rows
+  are never updated (D37).
+- `transaction_id` is kept only if it appears word for word in the email (4+ characters): an invented id must never
+  merge two real payments. A second email with a stored transaction id → `duplicate_payment`, no second payment.
+- `EMAIL_INTAKE_ENABLED` (default `false`) is the switch until the settings table exists (spec rule 6).
+**Why:** never miss an email, never store one twice, enforced by the database where possible.

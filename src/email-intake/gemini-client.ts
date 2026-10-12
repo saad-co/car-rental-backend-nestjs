@@ -1,5 +1,9 @@
-import { GoogleGenAI } from "@google/genai";
-import type { LlmJsonClient, LlmJsonRequest } from "./llm-client.js";
+import { ApiError, GoogleGenAI } from "@google/genai";
+import {
+  LlmRateLimitError,
+  type LlmJsonClient,
+  type LlmJsonRequest,
+} from "./llm-client.js";
 
 export interface GeminiClientOptions {
   /** From Google AI Studio. Read from `LLM_API_KEY`; never hard-coded. */
@@ -14,8 +18,8 @@ export interface GeminiClientOptions {
  * `LlmJsonClient` on top of Google's Gemini API (`@google/genai`). It forces a JSON answer that
  * follows the request's schema (`responseMimeType` + `responseJsonSchema`) and parses it.
  *
- * It never guesses: no answer, or an answer that is not JSON, is an error, and any error from the
- * API (e.g. `ApiError` with `status` 429 when rate-limited) is passed on unchanged.
+ * It never guesses: no answer, or an answer that is not JSON, is an error. A rate limit or quota
+ * refusal (HTTP 429) becomes `LlmRateLimitError`; any other API error is passed on unchanged.
  */
 export class GeminiJsonClient implements LlmJsonClient {
   private readonly ai: GoogleGenAI;
@@ -37,17 +41,27 @@ export class GeminiJsonClient implements LlmJsonClient {
   }
 
   async generateJson(request: LlmJsonRequest): Promise<unknown> {
-    const response = await this.ai.models.generateContent({
-      model: this.options.model,
-      contents: request.user,
-      config: {
-        systemInstruction: request.system,
-        responseMimeType: "application/json",
-        responseJsonSchema: request.schema,
-        // Extraction is not creative work: the same email should give the same answer.
-        temperature: 0,
-      },
-    });
+    const response = await this.ai.models
+      .generateContent({
+        model: this.options.model,
+        contents: request.user,
+        config: {
+          systemInstruction: request.system,
+          responseMimeType: "application/json",
+          responseJsonSchema: request.schema,
+          // Extraction is not creative work: the same email should give the same answer.
+          temperature: 0,
+        },
+      })
+      .catch((error: unknown) => {
+        if (error instanceof ApiError && error.status === 429) {
+          throw new LlmRateLimitError(
+            `Gemini rate limit or quota reached (429): ${error.message}`,
+            { cause: error },
+          );
+        }
+        throw error;
+      });
 
     const text = response.text;
     if (!text) {

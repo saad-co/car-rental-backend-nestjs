@@ -16,6 +16,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { ApiError } from "@google/genai";
+import { LlmRateLimitError } from "../src/email-intake/llm-client.js";
 import { verifyDkim } from "../src/email-intake/dkim-verification.js";
 import { GeminiJsonClient } from "../src/email-intake/gemini-client.js";
 import { LlmPaymentExtractor } from "../src/email-intake/llm-payment-extractor.js";
@@ -195,7 +196,7 @@ async function withOneRetryOnRateLimit<T>(call: () => Promise<T>): Promise<T> {
   try {
     return await call();
   } catch (error) {
-    if (!(error instanceof ApiError) || error.status !== 429) throw error;
+    if (!(error instanceof LlmRateLimitError)) throw error;
     console.log("     rate-limited (429): waiting 60 s, then one retry ...");
     await sleep(60_000);
     return call();
