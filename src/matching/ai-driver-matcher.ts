@@ -1,7 +1,4 @@
-import type {
-  LlmJsonClient,
-  LlmJsonRequest,
-} from "../email-intake/llm-client.js";
+import type { LlmJsonClient, LlmJsonRequest } from "../llm/llm-client.js";
 
 /** One driver as the AI sees it: everything that can identify a payer (D48). */
 export interface DriverCandidate {

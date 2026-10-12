@@ -5,7 +5,7 @@ import {
   PaymentAlias,
 } from "../src/aliases/payment-alias.entity.js";
 import { Driver } from "../src/drivers/driver.entity.js";
-import { LlmRateLimitError } from "../src/email-intake/llm-client.js";
+import { LlmRateLimitError } from "../src/llm/llm-client.js";
 import type {
   AiDriverMatcher,
   AiMatch,

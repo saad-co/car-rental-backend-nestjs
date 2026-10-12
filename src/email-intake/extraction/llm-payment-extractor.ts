@@ -1,8 +1,8 @@
 import {
   EXPECTED_DKIM_DOMAINS,
   type EmailProvider,
-} from "./dkim-verification.js";
-import type { LlmJsonClient, LlmJsonRequest } from "./llm-client.js";
+} from "../verification/dkim-verification.js";
+import type { LlmJsonClient, LlmJsonRequest } from "../../llm/llm-client.js";
 import type {
   ExtractionInput,
   PaymentExtractor,

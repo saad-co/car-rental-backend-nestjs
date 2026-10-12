@@ -15,8 +15,8 @@
  */
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { parseRawEmail } from "../src/email-intake/parse-raw-email.js";
-import { providerFromSender } from "../src/email-intake/sender-provider.js";
+import { parseRawEmail } from "../src/email-intake/verification/parse-raw-email.js";
+import { providerFromSender } from "../src/email-intake/verification/sender-provider.js";
 
 /** Same folder `imap-peek` saves to: outside both repos, because real emails contain driver names. */
 const samplesDir = path.resolve(process.env.IMAP_SAVE_DIR ?? "../mail-samples");
@@ -31,33 +31,51 @@ interface Label {
 }
 
 await mkdir(samplesDir, { recursive: true });
-const files = (await readdir(samplesDir)).filter((name) => name.endsWith(".eml")).sort();
+const files = (await readdir(samplesDir))
+  .filter((name) => name.endsWith(".eml"))
+  .sort();
 const labels = await readLabels();
 
 let added = 0;
 for (const [index, file] of files.entries()) {
-  const parsed = await parseRawEmail(await readFile(path.join(samplesDir, file)));
+  const parsed = await parseRawEmail(
+    await readFile(path.join(samplesDir, file)),
+  );
   console.log(`\n[${index + 1}/${files.length}] ${file}`);
-  console.log(`  From:     ${parsed.fromAddress}   (provider: ${providerFromSender(parsed.fromAddress) ?? "NOT ON THE ALLOW-LIST"})`);
+  console.log(
+    `  From:     ${parsed.fromAddress}   (provider: ${providerFromSender(parsed.fromAddress) ?? "NOT ON THE ALLOW-LIST"})`,
+  );
   console.log(`  Subject:  ${parsed.subject}`);
   console.log(`  Body:`);
   console.log(indent(bodyLines(parsed.bodyText)));
 
   if (!(file in labels)) {
-    labels[file] = { is_payment: null, amount_cents: null, sender_name: null, sender_handle: null };
+    labels[file] = {
+      is_payment: null,
+      amount_cents: null,
+      sender_name: null,
+      sender_handle: null,
+    };
     added++;
   }
 }
 
 await writeFile(labelsFile, `${JSON.stringify(labels, null, 2)}\n`);
-const unlabelled = Object.values(labels).filter((label) => label.is_payment === null).length;
-console.log(`\n${files.length} emails. ${added} new entries added to ${labelsFile}`);
+const unlabelled = Object.values(labels).filter(
+  (label) => label.is_payment === null,
+).length;
+console.log(
+  `\n${files.length} emails. ${added} new entries added to ${labelsFile}`,
+);
 console.log(`${unlabelled} still have "is_payment": null and need your label.`);
 
 /** The labels written so far, or an empty set if the file does not exist yet. */
 async function readLabels(): Promise<Record<string, Label>> {
   try {
-    return JSON.parse(await readFile(labelsFile, "utf8")) as Record<string, Label>;
+    return JSON.parse(await readFile(labelsFile, "utf8")) as Record<
+      string,
+      Label
+    >;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
     throw error; // a broken labels.json must be fixed by hand, never silently replaced

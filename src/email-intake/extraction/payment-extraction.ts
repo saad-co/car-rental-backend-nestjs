@@ -1,4 +1,4 @@
-import type { EmailProvider } from "./dkim-verification.js";
+import type { EmailProvider } from "../verification/dkim-verification.js";
 
 /** What goes to the extractor: only the email text, no driver data (spec 5.2). */
 export interface ExtractionInput {

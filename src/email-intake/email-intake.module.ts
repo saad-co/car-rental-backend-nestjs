@@ -9,12 +9,12 @@ import {
   type EmailIntakeDeps,
 } from "./email-intake.service.js";
 import { EmailIntakeScheduler } from "./email-intake.scheduler.js";
-import { GeminiJsonClient } from "./gemini-client.js";
-import { ImapMailboxReader } from "./imap-mailbox-reader.js";
+import { GeminiJsonClient } from "../llm/gemini-client.js";
+import { ImapMailboxReader } from "./mailbox/imap-mailbox-reader.js";
 import { InboundEmail } from "./inbound-email.entity.js";
 import { InboundEmailsController } from "./inbound-emails.controller.js";
 import { InboundEmailsService } from "./inbound-emails.service.js";
-import { LlmPaymentExtractor } from "./llm-payment-extractor.js";
+import { LlmPaymentExtractor } from "./extraction/llm-payment-extractor.js";
 
 /**
  * Payment email intake (spec M3): reads `gonzobilling@gmail.com` every 3 minutes, verifies, extracts and

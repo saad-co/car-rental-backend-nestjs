@@ -2,11 +2,17 @@ import { Inject, Injectable, Logger } from "@nestjs/common";
 import { DataSource, type EntityManager } from "typeorm";
 import { Payment, PaymentStatus } from "../payments/payment.entity.js";
 import { InboundEmail, InboundEmailStatus } from "./inbound-email.entity.js";
-import { LlmRateLimitError } from "./llm-client.js";
-import type { MailboxMessage, MailboxReader } from "./mailbox-reader.js";
-import type { PaymentExtractor } from "./payment-extraction.js";
-import { EmailProcessor, type ProcessedEmail } from "./process-email.js";
-import { ALLOWED_SENDERS } from "./sender-provider.js";
+import { LlmRateLimitError } from "../llm/llm-client.js";
+import type {
+  MailboxMessage,
+  MailboxReader,
+} from "./mailbox/mailbox-reader.js";
+import type { PaymentExtractor } from "./extraction/payment-extraction.js";
+import {
+  EmailProcessor,
+  type ProcessedEmail,
+} from "./verification/process-email.js";
+import { ALLOWED_SENDERS } from "./verification/sender-provider.js";
 
 /** Everything the intake needs from outside. Null when intake is switched off (no IMAP or LLM settings). */
 export interface EmailIntakeDeps {

@@ -11,12 +11,12 @@ import type {
   MailboxMessage,
   MailboxReader,
   MailboxSession,
-} from "../src/email-intake/mailbox-reader.js";
+} from "../src/email-intake/mailbox/mailbox-reader.js";
 import type {
   ExtractionInput,
   PaymentExtractor,
-} from "../src/email-intake/payment-extraction.js";
-import { LlmRateLimitError } from "../src/email-intake/llm-client.js";
+} from "../src/email-intake/extraction/payment-extraction.js";
+import { LlmRateLimitError } from "../src/llm/llm-client.js";
 import { Payment, PaymentStatus } from "../src/payments/payment.entity.js";
 import { openTestDatabase } from "./test-database.js";
 

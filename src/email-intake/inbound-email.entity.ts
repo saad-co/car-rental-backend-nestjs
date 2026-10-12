@@ -11,7 +11,7 @@ import {
 import {
   EXPECTED_DKIM_DOMAINS,
   type EmailProvider,
-} from "./dkim-verification.js";
+} from "./verification/dkim-verification.js";
 
 /** What happened to an email once the intake pipeline had looked at it. */
 export enum InboundEmailStatus {

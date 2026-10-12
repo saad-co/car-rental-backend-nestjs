@@ -14,13 +14,15 @@ import { GoogleGenAI, ThinkingLevel, type ThinkingConfig } from "@google/genai";
 
 function requireEnv(name: string): string {
   const value = process.env[name];
-  if (!value) throw new Error(`${name} is missing. Add it to .env (see .env.example).`);
+  if (!value)
+    throw new Error(`${name} is missing. Add it to .env (see .env.example).`);
   return value;
 }
 
 const model =
-  process.argv.find((arg) => arg.startsWith("--model="))?.slice("--model=".length) ??
-  requireEnv("LLM_MODEL");
+  process.argv
+    .find((arg) => arg.startsWith("--model="))
+    ?.slice("--model=".length) ?? requireEnv("LLM_MODEL");
 const ai = new GoogleGenAI({
   apiKey: requireEnv("LLM_API_KEY"),
   httpOptions: { timeout: 90_000, retryOptions: { attempts: 1 } },
@@ -29,14 +31,19 @@ const ai = new GoogleGenAI({
 console.log("Flash models available to this key:");
 for await (const found of await ai.models.list()) {
   if (found.name?.includes("flash")) {
-    console.log(`  ${found.name}${found.thinking ? "   (thinking model)" : ""}`);
+    console.log(
+      `  ${found.name}${found.thinking ? "   (thinking model)" : ""}`,
+    );
   }
 }
 
 const variants: { label: string; thinkingConfig?: ThinkingConfig }[] = [
   { label: "default" },
   { label: "thinkingBudget 0", thinkingConfig: { thinkingBudget: 0 } },
-  { label: "thinkingLevel MINIMAL", thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL } },
+  {
+    label: "thinkingLevel MINIMAL",
+    thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
+  },
 ];
 
 console.log(`\nTiming ${model} on a tiny JSON request:`);
@@ -51,16 +58,26 @@ for (const variant of variants) {
         responseMimeType: "application/json",
         responseJsonSchema: {
           type: "object",
-          properties: { amount_cents: { type: "integer" }, payer: { type: "string" } },
+          properties: {
+            amount_cents: { type: "integer" },
+            payer: { type: "string" },
+          },
           required: ["amount_cents", "payer"],
         },
         temperature: 0,
-        ...(variant.thinkingConfig ? { thinkingConfig: variant.thinkingConfig } : {}),
+        ...(variant.thinkingConfig
+          ? { thinkingConfig: variant.thinkingConfig }
+          : {}),
       },
     });
-    console.log(`  ${variant.label.padEnd(22)} ${Date.now() - started} ms   ${response.text?.trim()}`);
+    console.log(
+      `  ${variant.label.padEnd(22)} ${Date.now() - started} ms   ${response.text?.trim()}`,
+    );
   } catch (error) {
-    const message = error instanceof Error ? error.message.slice(0, 160) : String(error);
-    console.log(`  ${variant.label.padEnd(22)} ${Date.now() - started} ms   ERROR: ${message}`);
+    const message =
+      error instanceof Error ? error.message.slice(0, 160) : String(error);
+    console.log(
+      `  ${variant.label.padEnd(22)} ${Date.now() - started} ms   ERROR: ${message}`,
+    );
   }
 }

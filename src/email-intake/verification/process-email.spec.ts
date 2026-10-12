@@ -1,9 +1,9 @@
-import { PaymentSource } from "../payments/payment.entity.js";
-import { InboundEmailStatus } from "./inbound-email.entity.js";
+import { PaymentSource } from "../../payments/payment.entity.js";
+import { InboundEmailStatus } from "../inbound-email.entity.js";
 import type {
   ExtractionInput,
   PaymentExtractor,
-} from "./payment-extraction.js";
+} from "../extraction/payment-extraction.js";
 import { EmailProcessor } from "./process-email.js";
 
 const GMAIL = "mx.google.com";

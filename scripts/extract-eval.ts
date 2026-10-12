@@ -16,17 +16,17 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { ApiError } from "@google/genai";
-import { LlmRateLimitError } from "../src/email-intake/llm-client.js";
-import { verifyDkim } from "../src/email-intake/dkim-verification.js";
-import { GeminiJsonClient } from "../src/email-intake/gemini-client.js";
-import { LlmPaymentExtractor } from "../src/email-intake/llm-payment-extractor.js";
-import { parseRawEmail } from "../src/email-intake/parse-raw-email.js";
+import { LlmRateLimitError } from "../src/llm/llm-client.js";
+import { verifyDkim } from "../src/email-intake/verification/dkim-verification.js";
+import { GeminiJsonClient } from "../src/llm/gemini-client.js";
+import { LlmPaymentExtractor } from "../src/email-intake/extraction/llm-payment-extractor.js";
+import { parseRawEmail } from "../src/email-intake/verification/parse-raw-email.js";
 import {
   validateExtraction,
   type ExtractionInput,
   type ExtractionResult,
-} from "../src/email-intake/payment-extraction.js";
-import { providerFromSender } from "../src/email-intake/sender-provider.js";
+} from "../src/email-intake/extraction/payment-extraction.js";
+import { providerFromSender } from "../src/email-intake/verification/sender-provider.js";
 
 interface Label {
   is_payment: boolean | null;
@@ -38,12 +38,15 @@ interface Label {
 /** Reads a required setting from the environment; stops with a clear message if it is missing. */
 function requireEnv(name: string): string {
   const value = process.env[name];
-  if (!value) throw new Error(`${name} is missing. Add it to .env (see .env.example).`);
+  if (!value)
+    throw new Error(`${name} is missing. Add it to .env (see .env.example).`);
   return value;
 }
 
 const samplesDir = path.resolve(process.env.IMAP_SAVE_DIR ?? "../mail-samples");
-const only = process.argv.find((arg) => arg.startsWith("--only="))?.slice("--only=".length);
+const only = process.argv
+  .find((arg) => arg.startsWith("--only="))
+  ?.slice("--only=".length);
 const delayMs = Number(process.env.EVAL_DELAY_MS ?? 4000);
 const extraNames = (process.env.REDACT_EXTRA ?? "")
   .split(",")
@@ -52,34 +55,49 @@ const extraNames = (process.env.REDACT_EXTRA ?? "")
 /** The one server whose Authentication-Results we trust: Gmail's (D38), as in the real pipeline. */
 const trustedServerId = process.env.IMAP_TRUSTED_SERVER ?? "mx.google.com";
 const FAKE_EMAIL = "payer@example.com";
-const FAKE_WORDS = ["Pat", "Example", "Sample", "Tester", "Demo", "Placeholder"];
+const FAKE_WORDS = [
+  "Pat",
+  "Example",
+  "Sample",
+  "Tester",
+  "Demo",
+  "Placeholder",
+];
 
 const extractor = new LlmPaymentExtractor(
-  new GeminiJsonClient({ apiKey: requireEnv("LLM_API_KEY"), model: requireEnv("LLM_MODEL") }),
+  new GeminiJsonClient({
+    apiKey: requireEnv("LLM_API_KEY"),
+    model: requireEnv("LLM_MODEL"),
+  }),
 );
-const labels = JSON.parse(await readFile(path.join(samplesDir, "labels.json"), "utf8")) as Record<
-  string,
-  Label
->;
+const labels = JSON.parse(
+  await readFile(path.join(samplesDir, "labels.json"), "utf8"),
+) as Record<string, Label>;
 const files = Object.keys(labels)
   .filter((file) => only === undefined || file.includes(only))
   .sort();
 
 type Outcome = "PASS" | "FAIL" | "ERROR";
 const results: { provider: string; outcome: Outcome }[] = [];
-console.log(`Evaluating ${files.length} emails with ${process.env.LLM_MODEL} ...\n`);
+console.log(
+  `Evaluating ${files.length} emails with ${process.env.LLM_MODEL} ...\n`,
+);
 
 for (const [index, file] of files.entries()) {
   const label = labels[file];
   const prefix = `[${index + 1}/${files.length}] ${file}`;
   let provider = "?";
   try {
-    if (!label || label.is_payment === null) throw new Error("not labelled yet");
+    if (!label || label.is_payment === null)
+      throw new Error("not labelled yet");
     const checked = await evaluate(file, label);
     provider = checked.provider;
     results.push({ provider, outcome: checked.pass ? "PASS" : "FAIL" });
-    console.log(`${checked.pass ? "PASS" : "FAIL"} ${prefix} (${provider}): ${checked.detail}`);
-    if (!checked.pass) console.log(`     model said: ${JSON.stringify(checked.output)}`);
+    console.log(
+      `${checked.pass ? "PASS" : "FAIL"} ${prefix} (${provider}): ${checked.detail}`,
+    );
+    if (!checked.pass)
+      console.log(`     model said: ${JSON.stringify(checked.output)}`);
   } catch (error) {
     // Recorded and shown, never hidden: an error counts against the run like a failure.
     results.push({ provider, outcome: "ERROR" });
@@ -94,17 +112,28 @@ printSummary();
 async function evaluate(
   file: string,
   label: Label,
-): Promise<{ provider: string; pass: boolean; detail: string; output: unknown }> {
-  const parsed = await parseRawEmail(await readFile(path.join(samplesDir, file)));
+): Promise<{
+  provider: string;
+  pass: boolean;
+  detail: string;
+  output: unknown;
+}> {
+  const parsed = await parseRawEmail(
+    await readFile(path.join(samplesDir, file)),
+  );
   const provider = providerFromSender(parsed.fromAddress);
-  if (provider === null) throw new Error(`sender ${parsed.fromAddress} is not on the allow-list`);
+  if (provider === null)
+    throw new Error(`sender ${parsed.fromAddress} is not on the allow-list`);
 
   const dkim = verifyDkim({
     authenticationResults: parsed.authenticationResults,
     trustedServerId,
     provider,
   });
-  if (!dkim.verified) throw new Error(`DKIM not verified (${dkim.reason}), so the pipeline would never extract it`);
+  if (!dkim.verified)
+    throw new Error(
+      `DKIM not verified (${dkim.reason}), so the pipeline would never extract it`,
+    );
 
   process.stdout.write(`     asking ${process.env.LLM_MODEL} ...\r`);
 
@@ -117,7 +146,11 @@ async function evaluate(
   redact.assertGone(`${input.subject}\n${input.bodyText}`);
 
   const output = await withOneRetryOnRateLimit(() => extractor.extract(input));
-  const { pass, detail } = compare(label, validateExtraction(output, input), redact);
+  const { pass, detail } = compare(
+    label,
+    validateExtraction(output, input),
+    redact,
+  );
   return { provider, pass, detail, output };
 }
 
@@ -136,16 +169,25 @@ function makeRedactor(label: Label) {
         .map((word) => word.toLowerCase()),
     ),
   ];
-  const wordPattern = (word: string) => new RegExp(`(?<![A-Za-z])${escapeRegExp(word)}(?![A-Za-z])`, "gi");
-  const handlePattern = label.sender_handle ? new RegExp(escapeRegExp(label.sender_handle), "gi") : null;
+  const wordPattern = (word: string) =>
+    new RegExp(`(?<![A-Za-z])${escapeRegExp(word)}(?![A-Za-z])`, "gi");
+  const handlePattern = label.sender_handle
+    ? new RegExp(escapeRegExp(label.sender_handle), "gi")
+    : null;
 
   return {
     apply(text: string): string {
-      let result = handlePattern ? text.replace(handlePattern, FAKE_EMAIL) : text;
+      let result = handlePattern
+        ? text.replace(handlePattern, FAKE_EMAIL)
+        : text;
       words.forEach((word, i) => {
         const fake = FAKE_WORDS[i % FAKE_WORDS.length] ?? "Pat";
         result = result.replace(wordPattern(word), (found) =>
-          found === found.toUpperCase() ? fake.toUpperCase() : found === found.toLowerCase() ? fake.toLowerCase() : fake,
+          found === found.toUpperCase()
+            ? fake.toUpperCase()
+            : found === found.toLowerCase()
+              ? fake.toLowerCase()
+              : fake,
         );
       });
       return result;
@@ -154,7 +196,10 @@ function makeRedactor(label: Label) {
     assertGone(text: string): void {
       const left = words.filter((word) => wordPattern(word).test(text));
       if (handlePattern?.test(text)) left.push("(payer email)");
-      if (left.length > 0) throw new Error(`redaction failed, not sent: ${left.join(", ")} still present`);
+      if (left.length > 0)
+        throw new Error(
+          `redaction failed, not sent: ${left.join(", ")} still present`,
+        );
     },
   };
 }
@@ -168,26 +213,40 @@ function compare(
   if (!label.is_payment) {
     return result.kind === "not_payment"
       ? { pass: true, detail: "not a payment, as labelled" }
-      : { pass: false, detail: `expected not_payment, got ${describeResult(result)}` };
+      : {
+          pass: false,
+          detail: `expected not_payment, got ${describeResult(result)}`,
+        };
   }
-  if (result.kind !== "payment") return { pass: false, detail: `expected a payment, got ${describeResult(result)}` };
+  if (result.kind !== "payment")
+    return {
+      pass: false,
+      detail: `expected a payment, got ${describeResult(result)}`,
+    };
 
   const got = result.payment;
   const expectedName = redact.apply(label.sender_name ?? "");
   const expectedHandle = label.sender_handle === null ? null : FAKE_EMAIL;
   const problems: string[] = [];
-  if (got.amountCents !== label.amount_cents) problems.push(`amount ${got.amountCents} vs label ${label.amount_cents}`);
-  if (normalise(got.senderName) !== normalise(expectedName)) problems.push(`name "${got.senderName}" vs "${expectedName}"`);
-  if (normalise(got.senderHandle) !== normalise(expectedHandle)) problems.push(`handle "${got.senderHandle}" vs "${expectedHandle}"`);
+  if (got.amountCents !== label.amount_cents)
+    problems.push(`amount ${got.amountCents} vs label ${label.amount_cents}`);
+  if (normalise(got.senderName) !== normalise(expectedName))
+    problems.push(`name "${got.senderName}" vs "${expectedName}"`);
+  if (normalise(got.senderHandle) !== normalise(expectedHandle))
+    problems.push(`handle "${got.senderHandle}" vs "${expectedHandle}"`);
 
   return problems.length === 0
-    ? { pass: true, detail: `${got.amountCents} cents from "${got.senderName}" (confidence ${got.confidence})` }
+    ? {
+        pass: true,
+        detail: `${got.amountCents} cents from "${got.senderName}" (confidence ${got.confidence})`,
+      }
     : { pass: false, detail: problems.join("; ") };
 }
 
 function describeResult(result: ExtractionResult): string {
   if (result.kind === "failed") return `failed validation: ${result.reason}`;
-  if (result.kind === "payment") return `a payment of ${result.payment.amountCents} cents`;
+  if (result.kind === "payment")
+    return `a payment of ${result.payment.amountCents} cents`;
   return "not_payment";
 }
 
@@ -205,10 +264,13 @@ async function withOneRetryOnRateLimit<T>(call: () => Promise<T>): Promise<T> {
 
 function printSummary(): void {
   console.log("\nSummary per provider:");
-  const providers = [...new Set(results.map((result) => result.provider))].sort();
+  const providers = [
+    ...new Set(results.map((result) => result.provider)),
+  ].sort();
   for (const provider of providers) {
     const mine = results.filter((result) => result.provider === provider);
-    const count = (outcome: Outcome) => mine.filter((result) => result.outcome === outcome).length;
+    const count = (outcome: Outcome) =>
+      mine.filter((result) => result.outcome === outcome).length;
     console.log(
       `  ${provider.padEnd(12)} ${count("PASS")}/${mine.length} pass` +
         (count("FAIL") ? `, ${count("FAIL")} fail` : "") +
@@ -221,7 +283,9 @@ function printSummary(): void {
 }
 
 function normalise(value: string | null): string | null {
-  return value === null ? null : value.trim().replace(/\s+/g, " ").toLowerCase();
+  return value === null
+    ? null
+    : value.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
 function escapeRegExp(text: string): string {

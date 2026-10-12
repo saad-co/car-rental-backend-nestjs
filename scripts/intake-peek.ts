@@ -10,19 +10,22 @@
  *
  * Settings from `.env`: IMAP_HOST, IMAP_USER, IMAP_PASSWORD (IMAP_PORT optional, default 993).
  */
-import { ImapMailboxReader } from "../src/email-intake/imap-mailbox-reader.js";
-import { parseRawEmail } from "../src/email-intake/parse-raw-email.js";
-import { ALLOWED_SENDERS } from "../src/email-intake/sender-provider.js";
+import { ImapMailboxReader } from "../src/email-intake/mailbox/imap-mailbox-reader.js";
+import { parseRawEmail } from "../src/email-intake/verification/parse-raw-email.js";
+import { ALLOWED_SENDERS } from "../src/email-intake/verification/sender-provider.js";
 
 /** Reads a required setting from the environment; stops with a clear message if it is missing. */
 function requireEnv(name: string): string {
   const value = process.env[name];
-  if (!value) throw new Error(`${name} is missing. Add it to .env (see .env.example).`);
+  if (!value)
+    throw new Error(`${name} is missing. Add it to .env (see .env.example).`);
   return value;
 }
 
 const after = Number(
-  process.argv.find((arg) => arg.startsWith("--after="))?.slice("--after=".length) ?? 0,
+  process.argv
+    .find((arg) => arg.startsWith("--after="))
+    ?.slice("--after=".length) ?? 0,
 );
 
 const reader = new ImapMailboxReader({
@@ -35,7 +38,10 @@ const reader = new ImapMailboxReader({
 await reader.withInbox(async (session) => {
   const uids = await session.newUids(after, ALLOWED_SENDERS);
   console.log(`${reader.mailbox}: UIDVALIDITY ${session.uidValidity}`);
-  console.log(`${uids.length} allow-listed emails with UID above ${after}` + (uids.length ? ` (UIDs ${uids[0]} to ${uids.at(-1)})` : ""));
+  console.log(
+    `${uids.length} allow-listed emails with UID above ${after}` +
+      (uids.length ? ` (UIDs ${uids[0]} to ${uids.at(-1)})` : ""),
+  );
 
   for (const uid of uids.slice(-5)) {
     const message = await session.fetch(uid);

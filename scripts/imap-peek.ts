@@ -20,13 +20,14 @@ import {
   EXPECTED_DKIM_DOMAINS,
   verifyDkim,
   type EmailProvider,
-} from "../src/email-intake/dkim-verification.js";
-import { parseRawEmail } from "../src/email-intake/parse-raw-email.js";
+} from "../src/email-intake/verification/dkim-verification.js";
+import { parseRawEmail } from "../src/email-intake/verification/parse-raw-email.js";
 
 /** Reads a required setting from the environment; stops with a clear message if it is missing. */
 function requireEnv(name: string): string {
   const value = process.env[name];
-  if (!value) throw new Error(`${name} is missing. Add it to .env (see .env.example).`);
+  if (!value)
+    throw new Error(`${name} is missing. Add it to .env (see .env.example).`);
   return value;
 }
 
@@ -44,7 +45,9 @@ const saveDir = path.resolve(process.env.IMAP_SAVE_DIR ?? "../mail-samples");
 
 const args = process.argv.slice(2);
 const showBody = args.includes("--body");
-const fromFilter = args.find((arg) => arg.startsWith("--from="))?.slice("--from=".length);
+const fromFilter = args
+  .find((arg) => arg.startsWith("--from="))
+  ?.slice("--from=".length);
 const saveAll = args.includes("--save");
 const uidArg = args.find((arg) => !arg.startsWith("--"));
 
@@ -87,7 +90,9 @@ function toRow(message: FetchMessageObject): Row {
   return {
     uid: message.uid,
     // imapflow types the date as a Date or a string, so normalise it first.
-    date: envelope?.date ? new Date(envelope.date).toISOString().slice(0, 16).replace("T", " ") : "no date",
+    date: envelope?.date
+      ? new Date(envelope.date).toISOString().slice(0, 16).replace("T", " ")
+      : "no date",
     from: envelope?.from?.[0]?.address ?? "no sender",
     subject: envelope?.subject ?? "",
   };
@@ -95,7 +100,9 @@ function toRow(message: FetchMessageObject): Row {
 
 function printRows(rows: Row[]): void {
   rows.forEach((row) =>
-    console.log(`  UID ${String(row.uid).padEnd(6)} ${row.date}  ${row.from.padEnd(34)} ${row.subject}`),
+    console.log(
+      `  UID ${String(row.uid).padEnd(6)} ${row.date}  ${row.from.padEnd(34)} ${row.subject}`,
+    ),
   );
 }
 
@@ -107,16 +114,24 @@ async function listNewest(): Promise<void> {
 
   const rows: Row[] = [];
   const firstSeq = Math.max(1, total - scanCount + 1);
-  for await (const message of client.fetch(`${firstSeq}:*`, { uid: true, envelope: true })) {
+  for await (const message of client.fetch(`${firstSeq}:*`, {
+    uid: true,
+    envelope: true,
+  })) {
     rows.push(toRow(message));
   }
 
   const bySender = new Map<string, number>();
-  for (const row of rows) bySender.set(row.from, (bySender.get(row.from) ?? 0) + 1);
-  console.log(`\nMessages per sender address (newest ${rows.length} of ${total}):`);
+  for (const row of rows)
+    bySender.set(row.from, (bySender.get(row.from) ?? 0) + 1);
+  console.log(
+    `\nMessages per sender address (newest ${rows.length} of ${total}):`,
+  );
   [...bySender.entries()]
     .sort((a, b) => b[1] - a[1])
-    .forEach(([from, count]) => console.log(`  ${String(count).padStart(5)}  ${from}`));
+    .forEach(([from, count]) =>
+      console.log(`  ${String(count).padStart(5)}  ${from}`),
+    );
 
   console.log(`\nNewest ${Math.min(listCount, rows.length)}:`);
   printRows(rows.slice(-listCount).reverse());
@@ -133,7 +148,11 @@ async function listFromSender(sender: string): Promise<void> {
 
   const newest = uids.slice(-listCount);
   const rows: Row[] = [];
-  for await (const message of client.fetch(newest, { uid: true, envelope: true }, { uid: true })) {
+  for await (const message of client.fetch(
+    newest,
+    { uid: true, envelope: true },
+    { uid: true },
+  )) {
     rows.push(toRow(message));
   }
   console.log(`\nNewest ${rows.length}:`);
@@ -145,14 +164,23 @@ async function listFromSender(sender: string): Promise<void> {
       console.log(`Saved UID ${row.uid} to ${file}`);
     }
   } else {
-    console.log("\nTo save one and check it: npm run imap:peek -- <UID>   (or add --save to save all of these)");
+    console.log(
+      "\nTo save one and check it: npm run imap:peek -- <UID>   (or add --save to save all of these)",
+    );
   }
 }
 
 /** Downloads one message by UID and writes it as a .eml file in the samples folder (outside both repos). */
-async function saveMessage(uid: number): Promise<{ source: Buffer; file: string }> {
-  const message = await client.fetchOne(String(uid), { source: true }, { uid: true });
-  if (!message || !message.source) throw new Error(`No message with UID ${uid} in INBOX.`);
+async function saveMessage(
+  uid: number,
+): Promise<{ source: Buffer; file: string }> {
+  const message = await client.fetchOne(
+    String(uid),
+    { source: true },
+    { uid: true },
+  );
+  if (!message || !message.source)
+    throw new Error(`No message with UID ${uid} in INBOX.`);
 
   await mkdir(saveDir, { recursive: true });
   const file = path.join(saveDir, `${user.split("@")[0]}-${uid}.eml`);
@@ -162,7 +190,8 @@ async function saveMessage(uid: number): Promise<{ source: Buffer; file: string 
 
 /** Saves one message as .eml, then shows what our own functions make of it. The body is printed only with --body. */
 async function inspectOne(uid: number): Promise<void> {
-  if (!Number.isInteger(uid) || uid < 1) throw new Error("The UID must be a positive whole number.");
+  if (!Number.isInteger(uid) || uid < 1)
+    throw new Error("The UID must be a positive whole number.");
 
   const { source, file } = await saveMessage(uid);
   console.log(`Saved to ${file}\n`);
@@ -172,23 +201,33 @@ async function inspectOne(uid: number): Promise<void> {
   console.log(`Subject: ${parsed.subject}`);
   console.log(`Date:    ${parsed.date?.toISOString() ?? "none"}\n`);
 
-  console.log(`Authentication-Results headers (${parsed.authenticationResults.length}), top to bottom:`);
-  parsed.authenticationResults.forEach((header, i) => console.log(`  [${i}] ${header}`));
+  console.log(
+    `Authentication-Results headers (${parsed.authenticationResults.length}), top to bottom:`,
+  );
+  parsed.authenticationResults.forEach((header, i) =>
+    console.log(`  [${i}] ${header}`),
+  );
 
   if (showBody) {
-    console.log("\nBody text as parseRawEmail returns it (this is what the LLM will be given):");
+    console.log(
+      "\nBody text as parseRawEmail returns it (this is what the LLM will be given):",
+    );
     console.log("-----");
     console.log(parsed.bodyText);
     console.log("-----");
   }
 
   console.log(`\nverifyDkim with trusted server "${trustedServerId}":`);
-  for (const provider of Object.keys(EXPECTED_DKIM_DOMAINS) as EmailProvider[]) {
+  for (const provider of Object.keys(
+    EXPECTED_DKIM_DOMAINS,
+  ) as EmailProvider[]) {
     const verdict = verifyDkim({
       authenticationResults: parsed.authenticationResults,
       trustedServerId,
       provider,
     });
-    console.log(`  ${provider.padEnd(12)} ${verdict.verified ? "VERIFIED" : `rejected: ${verdict.reason}`}`);
+    console.log(
+      `  ${provider.padEnd(12)} ${verdict.verified ? "VERIFIED" : `rejected: ${verdict.reason}`}`,
+    );
   }
 }

@@ -1,6 +1,6 @@
 import { Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { GeminiJsonClient } from "../email-intake/gemini-client.js";
+import { GeminiJsonClient } from "../llm/gemini-client.js";
 import { AiDriverMatcher } from "./ai-driver-matcher.js";
 import { AI_DRIVER_MATCHER, MatchingService } from "./matching.service.js";
 

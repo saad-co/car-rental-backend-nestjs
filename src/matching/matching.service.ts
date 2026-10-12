@@ -3,7 +3,7 @@ import { DataSource, IsNull } from "typeorm";
 import { normalizeAliasValue } from "../aliases/normalize-alias.js";
 import { AliasSource, PaymentAlias } from "../aliases/payment-alias.entity.js";
 import { Driver } from "../drivers/driver.entity.js";
-import { LlmRateLimitError } from "../email-intake/llm-client.js";
+import { LlmRateLimitError } from "../llm/llm-client.js";
 import {
   MatchMethod,
   Payment,

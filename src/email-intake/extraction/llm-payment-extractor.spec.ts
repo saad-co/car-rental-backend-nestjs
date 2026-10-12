@@ -1,5 +1,5 @@
-import { EXPECTED_DKIM_DOMAINS } from "./dkim-verification.js";
-import type { LlmJsonClient, LlmJsonRequest } from "./llm-client.js";
+import { EXPECTED_DKIM_DOMAINS } from "../verification/dkim-verification.js";
+import type { LlmJsonClient, LlmJsonRequest } from "../../llm/llm-client.js";
 import {
   EXTRACTION_RULES,
   EXTRACTION_SCHEMA,

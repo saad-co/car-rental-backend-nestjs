@@ -1,14 +1,14 @@
-import { PaymentSource, type Payment } from "../payments/payment.entity.js";
+import { PaymentSource, type Payment } from "../../payments/payment.entity.js";
 import { verifyDkim, type EmailProvider } from "./dkim-verification.js";
 import {
   InboundEmailStatus,
   type InboundEmail,
-} from "./inbound-email.entity.js";
+} from "../inbound-email.entity.js";
 import { parseRawEmail, type ParsedEmail } from "./parse-raw-email.js";
 import {
   validateExtraction,
   type PaymentExtractor,
-} from "./payment-extraction.js";
+} from "../extraction/payment-extraction.js";
 import { providerFromSender } from "./sender-provider.js";
 
 /** The `inbound_emails` row to save, minus what only the mailbox knows (mailbox, UIDs, Gmail id). */
