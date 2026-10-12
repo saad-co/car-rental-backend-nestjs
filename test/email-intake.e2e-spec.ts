@@ -1,6 +1,4 @@
-/// <reference types="vite/client" />
-import { DataSource, type MigrationInterface } from "typeorm";
-import baseDataSource from "../src/database/data-source.js";
+import type { DataSource } from "typeorm";
 import {
   EmailIntakeService,
   type EmailIntakeDeps,
@@ -20,14 +18,7 @@ import type {
 } from "../src/email-intake/payment-extraction.js";
 import { LlmRateLimitError } from "../src/email-intake/llm-client.js";
 import { Payment, PaymentStatus } from "../src/payments/payment.entity.js";
-
-/**
- * The migration classes, loaded by Vite (the test runner) instead of by TypeORM: TypeORM imports the
- * `.ts` files with Node's own loader, which fails on their type-only imports.
- */
-const migrationModules = import.meta.glob<
-  Record<string, new () => MigrationInterface>
->("../src/database/migrations/*.ts", { eager: true });
+import { openTestDatabase } from "./test-database.js";
 
 const MAILBOX = "gonzobilling@gmail.com";
 const GMAIL = "mx.google.com";
@@ -131,19 +122,7 @@ describe("EmailIntakeService.syncNewMessages (test database)", () => {
   const payments = () => db.getRepository(Payment).find();
 
   beforeAll(async () => {
-    db = await new DataSource({
-      ...baseDataSource.options,
-      migrations: Object.values(migrationModules).flatMap((m) =>
-        Object.values(m),
-      ),
-    }).initialize();
-    const [{ name }] = (await db.query(
-      "SELECT current_database() AS name",
-    )) as [{ name: string }];
-    // The tests empty tables: refuse anything but a *_test database.
-    if (!name.endsWith("_test"))
-      throw new Error(`Refusing to run on database "${name}"`);
-    await db.runMigrations();
+    db = await openTestDatabase();
   });
 
   beforeEach(async () => {

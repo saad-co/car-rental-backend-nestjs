@@ -11,11 +11,13 @@ import { EmailIntakeScheduler } from "./email-intake.scheduler.js";
 import { GeminiJsonClient } from "./gemini-client.js";
 import { ImapMailboxReader } from "./imap-mailbox-reader.js";
 import { InboundEmail } from "./inbound-email.entity.js";
+import { InboundEmailsController } from "./inbound-emails.controller.js";
+import { InboundEmailsService } from "./inbound-emails.service.js";
 import { LlmPaymentExtractor } from "./llm-payment-extractor.js";
 
 /**
  * Payment email intake (spec M3): reads `gonzobilling@gmail.com` every 3 minutes, verifies, extracts and
- * stores each new payment email.
+ * stores each new payment email. Also serves the admin email log (`GET /inbound-emails`).
  *
  * The real mailbox and AI are built here from the settings and handed to the service as one value
  * (`EMAIL_INTAKE_DEPS`). Like passing dependencies into a factory function in Express: the service
@@ -23,7 +25,9 @@ import { LlmPaymentExtractor } from "./llm-payment-extractor.js";
  */
 @Module({
   imports: [TypeOrmModule.forFeature([InboundEmail]), PaymentsModule],
+  controllers: [InboundEmailsController],
   providers: [
+    InboundEmailsService,
     {
       provide: EMAIL_INTAKE_DEPS,
       inject: [ConfigService],

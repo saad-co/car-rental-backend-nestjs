@@ -37,7 +37,7 @@ export type InboundEmailProvider = EmailProvider | "unknown";
  * Same list as `EXPECTED_DKIM_DOMAINS` plus `unknown`, so adding a provider there adds it to the
  * database enum too (through a new migration) instead of the two lists drifting apart.
  */
-const PROVIDER_VALUES: InboundEmailProvider[] = [
+export const PROVIDER_VALUES: InboundEmailProvider[] = [
   ...(Object.keys(EXPECTED_DKIM_DOMAINS) as EmailProvider[]),
   "unknown",
 ];
