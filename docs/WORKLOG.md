@@ -4,6 +4,43 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-13 — Matching, aliases, one-stage payments, Payments / Email log / Drivers pages (D48, D49)
+- **Done (backend):** `payment_aliases` (UNIQUE type+value; types = payment methods + email/phone) and
+  `npm run legacy:import-aliases` (dry run, `--apply --target=<db>`, skips damaged old aliases); match columns on
+  `payments`; `MatchingService` after every intake run: exact alias / driver email / phone (no AI), everything else AI
+  with full context (70% assign, 90% also learns the alias, below 70% "Needs review"); `POST /payments/:id/assign`
+  (manual, saves the alias, never takes one from another driver); `GET /payments` (filters source, match, driverId),
+  `GET /inbound-emails`, `GET /drivers` with aliases and payment summary. Every matched payment is `confirmed`
+  (D49, Saad). Refactors: `AliasIndex` and `EmailProcessor` classes; `email-intake/` grouped into `mailbox/`,
+  `verification/`, `extraction/`; LLM clients moved to `src/llm/`. Rate limits (429) never count as a strike and log
+  as one warning line.
+- **Done (frontend):** Payments page (driver and how matched, Accept / Assign / Change, Needs review filter, no status
+  column), Email log page, Drivers list (clean) + driver detail page (aliases by method, recent payments), application
+  page with tabs, all times in Chicago with the UTC offset in the header.
+- **Verified:** 76 unit + 24 e2e tests; live local run on the real inbox from UID 22150: 16 emails, 13 payments, all
+  matched; alias dry run on real data: 52 unchanged, 8 skipped (5 left-out drivers, 3 damaged aliases).
+- **Branches:** backend and frontend `feature/email-parsing` (29 and 6 commits ahead of `dev`, no PR yet, B55).
+- **NEXT, exact steps (staging rollout, a short chat "02 - Payment email parsing (staging rollout)"):**
+  1. PRs into `dev` merged (backend first, then frontend); then deploy: `railway up --service backend` and
+     `--service frontend` from each repo (D43). The pre-deploy command runs the 7 new migrations.
+  2. Keep `EMAIL_INTAKE_ENABLED=false` until step 4.
+  3. Import the aliases into staging through the tunnel (`railway connect Postgres --tunnel-only`, set `DATABASE_URL` in
+     that terminal only, `--target=railway`): dry run must say Skipped 8 with 3 "leftover email formatting"; after
+     `--apply`, the damaged-alias count query must return 0:
+     `SELECT count(*) FROM payment_aliases WHERE length(value) > 80 OR value ~ '[{}]' OR value ~ '</?[a-zA-Z]'`.
+  4. In the Railway dashboard (typed by Abulkalam, then Apply): `EMAIL_INTAKE_ENABLED=true`, `IMAP_HOST`, `IMAP_USER`,
+     `IMAP_PASSWORD`, `IMAP_TRUSTED_SERVER=mx.google.com`, `LLM_API_KEY`, `LLM_MODEL=gemini-3.5-flash-lite`, and
+     `IMAP_START_AFTER_UID` (go-live point: **not decided**, 22150 or 22000; free key = 15 AI calls a minute, a big
+     backlog takes a while but loses nothing).
+  5. Watch the first ticks in the logs; Payments page should fill and every payment be assigned; UI walkthrough.
+  6. Then Saad opens `dev` → `main` so `main` matches staging.
+- **Not done / open:** B54 (re-assigning a payment matched through a wrong alias), B53 (driver-added aliases need admin
+  approval; alias add/remove screen), ledger and balances (M1/M2), Plaid (M5), Quo (M6), B43 list counts, B41, B16.
+  Note: a local `docker compose down -v` wipes the local database; rebuild = `migration:run`, `seed:admin`, both legacy
+  imports, then intake from `IMAP_START_AFTER_UID=22150`.
+
+---
+
 ### 2026-10-12 — Payment email intake service (M3), first live run (D46, D47)
 - **Done (backend):** `payments` table + `inbound_emails.gmail_message_id` + `duplicate_payment` status (migration
   `AddPaymentsAndGmailId`); `processEmail` (parse → allow-list → DKIM → AI → validation); `MailboxReader` + imapflow

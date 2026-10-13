@@ -90,8 +90,9 @@ Unique on `(type, valueNormalized)`. **Lookups always filter by type.**
 `receivedAt` (IMAP internal date, not the sender's `Date` header),
 `authDkimPass`, `authDkimDomain`, `provider` (`cashapp` | `venmo` | `zelle_chase` | `stripe` | `chime` | `unknown`),
 `status` (`processed` | `rejected_unverified` | `extraction_failed` | `not_payment`),
-`statusReason` (required for `rejected_unverified` and `extraction_failed`), `bodyText` (only for allow-listed
-payment senders), `paymentId` (nullable; added with the Payment table). Rows are never updated (D37).
+`statusReason` (required for `rejected_unverified`, `extraction_failed` and `duplicate_payment`), `gmailMessageId`
+(permanent Gmail id, unique per mailbox, D47), `bodyText` (only for allow-listed payment senders). Rows are never
+updated (D37). The link to the payment lives on the payment (`Payment.externalId` = the email row id), not here (D47).
 
 **Payment** — a money event from any source.
 `source` (`email_cashapp` | `email_venmo` | `email_zelle` | `email_stripe` | `email_chime` | `plaid_zelle` | `manual`),

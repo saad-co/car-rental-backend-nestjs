@@ -1,8 +1,9 @@
 # Architecture
 
-> **Status 2026-10-08: partly built.** Built: API scaffold, Postgres + TypeORM, admin auth, OpenAPI export;
-> driver applications intake and review, drivers list, driver logins (backend); frontend app shell, generated API client, admin login and
-> protected routes. The rest describes the target design.
+> **Status 2026-10-13: partly built.** Built: API scaffold, Postgres + TypeORM, admin auth, OpenAPI export; driver
+> applications and drivers (with logins); payment email intake (IMAP, DKIM, AI extraction), payments, payment aliases
+> and automatic matching, admin Payments / Email log / Drivers pages; staging on Railway (D43). Not built: ledger,
+> billing, Plaid, Quo SMS, settings. The rest describes the target design.
 > As components are built, update this file to match the code. Where they differ, the code wins.
 
 ## Components
@@ -18,21 +19,32 @@ through a client generated from the API's OpenAPI document.
 ## External services
 | Service | Used for | Direction |
 |---|---|---|
-| Gmail API | Cash App, Venmo and Chase Zelle notification emails | API polls |
+| Gmail (IMAP) | Zelle, Cash App, Venmo, Stripe and Chime notification emails in `gonzobilling@gmail.com` (D38) | API polls every 3 minutes |
 | Plaid | Zelle deposits in the Chase business account | Webhook + scheduled sync |
 | LLM | Extracting payment data from emails; matching payments to drivers | API calls |
 | Quo (formerly OpenPhone) | Outbound SMS reminders; inbound replies and delivery status | API calls + webhooks |
 
 ## Payment data flow
 ```
-Gmail ──► verify sender (DKIM) ──► LLM extract + validate ──► Payment (reported / confirmed)
-Plaid ──► filter: incoming, posted, Zelle ──► Payment (confirmed) ──┐
-                                                                     ├─► match (alias → LLM → bucket)
-                                                                     └─► LedgerEntry (credit)
+Gmail ──► allow-listed sender + DKIM ──► LLM extract + validate ──► Payment (unmatched)   [built, D47]
+Payment ──► match: alias / email / phone exact, else LLM (70% assign, below → review) ──► Payment (confirmed)   [built, D48, D49]
+Plaid ──► filter: incoming, posted, Zelle ──► Payment (bank check, M5)                      [not built]
+Confirmed Payment ──► LedgerEntry (credit, once per payment)                                  [not built, M1]
 Billing job (America/Chicago) ──► LedgerEntry (rent debit)
 Reminder job ──► effective balance check ──► Quo SMS (off / dry_run / live)
 ```
 Full rules: `PHASE1_SPEC.md` sections 5–8.
+
+## Backend modules (payment side)
+| Folder | Role |
+|---|---|
+| `src/email-intake/` | Module, 3-minute scheduler, `EmailIntakeService` (lock, cursor, one transaction per email), email log API. Subfolders: `mailbox/` (IMAP reader behind an interface), `verification/` (DKIM, sender allow-list, parser, `EmailProcessor`), `extraction/` (LLM prompt and answer validation) |
+| `src/llm/` | `LlmJsonClient` interface, Gemini adapter, `LlmRateLimitError` (shared by intake and matching) |
+| `src/payments/` | `payments` table, admin list, manual assign |
+| `src/aliases/` | `payment_aliases` table, normalisation |
+| `src/matching/` | `MatchingService`, `AliasIndex`, AI driver matcher |
+
+`scripts/` holds developer tools (not part of the API): IMAP peek, extraction evaluation, old-database report and imports.
 
 ## Security model
 - JWT bearer-token authentication for admins and drivers; a global guard protects every route unless marked
