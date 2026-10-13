@@ -4,6 +4,7 @@ import {
   IsIn,
   IsInt,
   IsNotEmpty,
+  IsOptional,
   IsString,
   IsUrl,
   Matches,
@@ -149,11 +150,81 @@ class EnvironmentVariables {
   @IsString()
   @IsNotEmpty()
   LLM_MODEL?: string;
+
+  /**
+   * What the chat does with a text the admin sends (spec rule 7, D50). `off`: refused. `dry_run`: saved and
+   * shown as "Dry run: not sent", never sent. `live`: really sent through Quo. Defaults to `dry_run` and the
+   * code must never change that default. Becomes a setting in the database with the Settings page (M7).
+   */
+  @IsIn(["off", "dry_run", "live"])
+  SMS_MODE: "off" | "dry_run" | "live" = "dry_run";
+
+  /** Key of the client's Quo account (Quo settings > API). Required only when SMS_MODE is `live`. */
+  @ValidateIf(smsLive)
+  @IsString()
+  @IsNotEmpty()
+  QUO_API_KEY?: string;
+
+  /** Id (`PN...`) of the Quo number the drivers text; find it with `npm run quo:numbers`. Required when `live`. */
+  @ValidateIf(smsLive)
+  @Matches(/^PN\w+$/, { message: "QUO_PHONE_NUMBER_ID must start with PN" })
+  QUO_PHONE_NUMBER_ID?: string;
+
+  /** Signing secret of the Quo webhook (`whsec_...`, shown once when the webhook is created). Required when `live`. */
+  @ValidateIf(smsLive)
+  @Matches(/^whsec_.+/, {
+    message: "QUO_WEBHOOK_SECRET must start with whsec_",
+  })
+  QUO_WEBHOOK_SECRET?: string;
+
+  /**
+   * Where files texted in by drivers are copied (S3-compatible bucket: MinIO locally, a Railway Storage
+   * Bucket on staging). Optional: with no bucket, files stay "pending" in the chat. Once S3_BUCKET is set,
+   * the other S3_* settings are required.
+   */
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  S3_BUCKET?: string;
+
+  /** Address of the S3 API, e.g. `http://localhost:9000` (MinIO) or `https://storage.railway.app`. */
+  @ValidateIf(s3Configured)
+  @IsUrl({ require_tld: false, require_protocol: true })
+  S3_ENDPOINT?: string;
+
+  /** `auto` for Railway; any value works for MinIO. */
+  @IsString()
+  @IsNotEmpty()
+  S3_REGION: string = "auto";
+
+  @ValidateIf(s3Configured)
+  @IsString()
+  @IsNotEmpty()
+  S3_ACCESS_KEY_ID?: string;
+
+  @ValidateIf(s3Configured)
+  @IsString()
+  @IsNotEmpty()
+  S3_SECRET_ACCESS_KEY?: string;
+
+  /** `true` for MinIO (bucket in the path, not the host name). Text, not a boolean, like EMAIL_INTAKE_ENABLED. */
+  @IsIn(["true", "false"])
+  S3_FORCE_PATH_STYLE: "true" | "false" = "false";
 }
 
 /** True when payment-email intake is switched on. */
 function intakeEnabled(env: EnvironmentVariables): boolean {
   return env.EMAIL_INTAKE_ENABLED === "true";
+}
+
+/** True when texts are really sent, which is when the Quo settings are needed. */
+function smsLive(env: EnvironmentVariables): boolean {
+  return env.SMS_MODE === "live";
+}
+
+/** True when a file bucket is configured, which is when the rest of the S3 settings are needed. */
+function s3Configured(env: EnvironmentVariables): boolean {
+  return env.S3_BUCKET !== undefined && env.S3_BUCKET !== "";
 }
 
 // Runs once at startup (ConfigModule calls it). If anything is missing or wrong the app
