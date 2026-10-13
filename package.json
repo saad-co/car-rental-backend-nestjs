@@ -34,6 +34,7 @@
     "samples:show": "tsx --env-file-if-exists=.env scripts/samples-show.ts",
     "extract:eval": "tsx --env-file-if-exists=.env scripts/extract-eval.ts",
     "llm:probe": "tsx --env-file-if-exists=.env scripts/llm-probe.ts",
+    "quo:numbers": "tsx --env-file-if-exists=.env scripts/quo-numbers.ts",
     "legacy:report": "tsx --env-file-if-exists=.env scripts/legacy-report.ts",
     "legacy:import-drivers": "tsx --env-file-if-exists=.env scripts/legacy-import-drivers.ts",
     "legacy:import-aliases": "tsx --env-file-if-exists=.env scripts/legacy-import-aliases.ts",
