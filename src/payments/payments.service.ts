@@ -35,6 +35,7 @@ export class PaymentsService {
     const where: FindOptionsWhere<Payment> = {
       ...(query.status && { status: query.status }),
       ...(query.source && { source: query.source }),
+      ...(query.driverId && { driverId: query.driverId }),
       ...(query.match === "assigned" && { driverId: Not(IsNull()) }),
       // Looked at by matching and not placed. Payments not looked at yet are left out: they are seconds old.
       ...(query.match === "review" && {

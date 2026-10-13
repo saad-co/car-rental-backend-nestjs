@@ -2,7 +2,11 @@ import {
   AliasType,
   normalizeAliasValue,
 } from "../../src/aliases/normalize-alias.js";
-import { planAliasImport, type LegacyAliasRow } from "./alias-mapping.js";
+import {
+  looksDamaged,
+  planAliasImport,
+  type LegacyAliasRow,
+} from "./alias-mapping.js";
 
 const drivers = new Map([
   ["old-a", "our-a"],
@@ -116,5 +120,25 @@ describe("planAliasImport", () => {
     expect(plan.skips[0]?.reason).toBe(
       "already an alias of another driver in our system",
     );
+  });
+
+  it("skips aliases that are leftover email styling, keeps real names and handles", () => {
+    const damaged =
+      "} .Anchor-Text-Color A { Color: #0060F0; } Zelle ® Payment Jaime Preciado Araiza";
+    expect(looksDamaged(damaged)).toBe(true);
+    expect(looksDamaged("<b>Pat</b>")).toBe(true);
+    expect(looksDamaged("x".repeat(81))).toBe(true);
+    expect(looksDamaged("College And Beyond")).toBe(false);
+    expect(looksDamaged("$robert-triche_ii")).toBe(false);
+
+    const plan = planAliasImport(
+      [row("1", "old-a", "zelle", damaged), row("2", "old-a", "zelle", "Pat")],
+      drivers,
+      [],
+    );
+    expect(plan.inserts.map((a) => a.value)).toEqual(["Pat"]);
+    expect(plan.skips).toEqual([
+      { legacyId: "1", reason: "value looks like leftover email formatting" },
+    ]);
   });
 });

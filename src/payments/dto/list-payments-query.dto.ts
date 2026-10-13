@@ -1,4 +1,4 @@
-import { IsEnum, IsIn, IsOptional } from "class-validator";
+import { IsEnum, IsIn, IsOptional, IsUUID } from "class-validator";
 import { PaginationQueryDto } from "../../common/dto/pagination-query.dto.js";
 import { PaymentSource, PaymentStatus } from "../payment.entity.js";
 
@@ -13,6 +13,11 @@ export class ListPaymentsQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsEnum(PaymentSource)
   source?: PaymentSource;
+
+  /** Only payments assigned to this driver (the driver page). Omit for all. */
+  @IsOptional()
+  @IsUUID()
+  driverId?: string;
 
   /**
    * `assigned`: has a driver. `review`: matching looked at it and could not place it ("Needs review").

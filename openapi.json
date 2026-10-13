@@ -551,6 +551,16 @@
             }
           },
           {
+            "name": "driverId",
+            "required": false,
+            "in": "query",
+            "description": "Only payments assigned to this driver (the driver page). Omit for all.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
             "name": "match",
             "required": false,
             "in": "query",
@@ -968,6 +978,41 @@
           "driverId"
         ]
       },
+      "DriverAliasDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "zelle",
+              "cashapp",
+              "venmo",
+              "chime",
+              "stripe",
+              "email",
+              "phone"
+            ]
+          },
+          "value": {
+            "type": "string",
+            "description": "As entered or as the provider wrote it."
+          },
+          "source": {
+            "type": "string",
+            "description": "Imported from the old system, learned from a confident AI match, or entered by an admin.",
+            "enum": [
+              "legacy",
+              "manual",
+              "ai_match"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "value",
+          "source"
+        ]
+      },
       "DriverDto": {
         "type": "object",
         "properties": {
@@ -998,6 +1043,23 @@
             "format": "date-time",
             "type": "string",
             "description": "When the driver was created (the application's approval)."
+          },
+          "aliases": {
+            "description": "Every payment alias of the driver, grouped by payment method then by value. Empty if none yet.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DriverAliasDto"
+            }
+          },
+          "paymentCount": {
+            "type": "number",
+            "description": "Number of payments assigned to this driver."
+          },
+          "lastPaymentAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "When the driver's most recent payment happened; null if none."
           }
         },
         "required": [
@@ -1007,7 +1069,10 @@
           "email",
           "phone",
           "status",
-          "createdAt"
+          "createdAt",
+          "aliases",
+          "paymentCount",
+          "lastPaymentAt"
         ]
       },
       "DriverListDto": {

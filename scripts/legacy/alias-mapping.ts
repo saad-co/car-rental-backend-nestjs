@@ -42,6 +42,16 @@ const TYPES: Record<string, AliasType> = {
 };
 
 /**
+ * True when an old alias is not a real name or handle: the old email parser sometimes saved a chunk of the
+ * email's own styling (`.Anchor-Text-Color A { Color: #0060F0; } Zelle Payment Jane Doe`). Real names and
+ * handles are short and never contain braces or tags. Such an alias could never match a payment, so it is
+ * left out instead of cluttering the driver's page.
+ */
+export function looksDamaged(value: string): boolean {
+  return value.length > 80 || /[{}]/.test(value) || /<\/?[a-z]/i.test(value);
+}
+
+/**
  * Decides, for every old alias, insert / unchanged / skip. Pure: reads nothing, writes nothing.
  * Never guesses: an alias whose driver was not imported, or that would point at two drivers, is skipped with
  * the reason (one alias, one driver: a wrong owner would credit the wrong driver).
@@ -68,6 +78,10 @@ export function planAliasImport(
     const value = (row.alias_value ?? "").trim();
     if (value === "") {
       skip("empty value");
+      continue;
+    }
+    if (looksDamaged(value)) {
+      skip("value looks like leftover email formatting");
       continue;
     }
     const driverId = ourDriverByLegacyId.get(row.driver_id);
