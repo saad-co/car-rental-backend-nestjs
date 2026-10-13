@@ -112,7 +112,7 @@ describe("MatchingService.matchPending (test database)", () => {
     expect(ai.calls).toBe(0);
   });
 
-  it("assigns a confident AI match (Zelle → reported) and learns the alias at 0.9+, so the next one needs no AI", async () => {
+  it("assigns a confident AI match (status confirmed) and learns the alias at 0.9+, so the next one needs no AI", async () => {
     ai.answer = () =>
       Promise.resolve({
         driverId: tim,
@@ -125,7 +125,7 @@ describe("MatchingService.matchPending (test database)", () => {
     expect(await reload(first)).toMatchObject({
       driverId: tim,
       matchMethod: MatchMethod.ai,
-      status: PaymentStatus.reported,
+      status: PaymentStatus.confirmed,
     });
     expect(
       await db.getRepository(PaymentAlias).findOneBy({ driverId: tim }),

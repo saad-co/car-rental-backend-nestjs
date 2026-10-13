@@ -20,7 +20,7 @@ they already paid. When in doubt, the system flags for a human instead of guessi
 - Recurring rent charges and arrears
 - Payment intake: Gmail (Zelle, Cash App, Venmo, Stripe and Chime notifications; all five, D39) and Plaid (Zelle deposits in the Chase account)
 - LLM-based extraction and matching, with an unrecognised bucket for manual assignment
-- Two-stage posting for Zelle (reported → confirmed)
+- One-stage posting: a matched payment is `confirmed` from its verified email (D49). Zelle two-stage is deferred to the bank check (M5)
 - SMS reminders via Quo (formerly OpenPhone), inbound replies and delivery status
 - Payments dashboard, message templates, settings and automation switches
 
@@ -159,7 +159,8 @@ Balance = sum(credits) − sum(debits). Never stored.
 An admin assigns an unmatched payment to a driver. This posts the payment and **creates an alias** from the sender handle/name, so the same sender matches automatically next time. Logged in AuditLog.
 
 ### 6.3 Posting rules
-- **Zelle — two stages.**
+**Current rule (D49, 2026-10-13, Saad): one stage for every method.** A verified, validated email matched to a driver (alias, AI or manual) → `confirmed` → ledger credit. `reported` and `discrepancy` stay in the status list for the bank check (M5) and are not used until then. The Zelle two-stage design below is the original plan, kept for M5.
+- **Zelle — two stages (deferred to M5, not current).**
   - Chase Zelle email → payment `reported`. Suppresses reminders. No ledger credit yet.
   - Plaid deposit → pair with a `reported` email payment (same amount, within 72 hours, matching sender) → `confirmed` → ledger credit.
   - Plaid deposit with no email → matched and `confirmed` directly → ledger credit.
@@ -176,8 +177,8 @@ An admin assigns an unmatched payment to a driver. This posts the payment and **
   - `daily`: one debit per day.
   - `weekly`: one debit on `billingDueWeekday`.
   - `idempotencyKey = rent:<driverId>:<date>` — re-running a day never double-bills.
-- **Effective balance for reminders** = ledger balance + sum of `reported` (unconfirmed) payments.
-  This is what stops a driver being chased for money they just sent.
+- **Effective balance for reminders** = ledger balance (every matched payment is already `confirmed` and credited, D49).
+  If two-stage Zelle returns with M5, add the sum of `reported` payments here, so a driver is not chased for money just sent.
 - Days late: daily drivers = `ceil(-effectiveBalance / rate)`; weekly = days since the unpaid due date.
 - Reference rule from the existing system: daily drivers are late at 2+ days behind, weekly at 48+ hours. Make both thresholds settings.
 
@@ -233,7 +234,7 @@ Each milestone ends with passing tests and something demonstrable.
 | M3 | Gmail intake, DKIM verification, LLM extraction | Unverified email rejected; seen message skipped; extraction validated |
 | M4 | Matching, unrecognised bucket, assignment → alias | Assigned sender auto-matches next time; type-filtered lookup tested |
 | M5 | Plaid Zelle sync and two-stage posting | Non-Zelle and outgoing transactions ignored; pairing works; 72h discrepancy fires |
-| M6 | Quo SMS, tiers, webhooks, opt-out | Paid or reported driver is not messaged; dry_run sends nothing |
+| M6 | Quo SMS, tiers, webhooks, opt-out | Paid driver is not messaged; dry_run sends nothing |
 | M7 | Dashboard, settings, email log, hardening | All section 10 screens working on real data |
 
 ---

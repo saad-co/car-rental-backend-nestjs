@@ -26,16 +26,20 @@ export enum PaymentSource {
   manual = "manual",
 }
 
-/** Where a payment is in its life (spec 6.3). Until matching exists (M4), every new payment is `unmatched`. */
+/**
+ * Where a payment is in its life. Today (B56, D49) every payment is `unmatched` until matching assigns it a
+ * driver, and then `confirmed`: one stage for every method, the email is the confirmation.
+ * `reported` and `discrepancy` are kept for the bank check (Plaid, M5), which may bring the Zelle two-stage back.
+ */
 export enum PaymentStatus {
-  /** Zelle email matched to a driver; waits for the bank deposit. Stops reminders, no ledger credit yet. */
+  /** Reserved for Zelle two-stage posting (M5): matched from the email, waiting for the bank deposit. Not used now. */
   reported = "reported",
-  /** Final: credited to the driver's ledger. */
+  /** Assigned to a driver; the email confirmed it. Credited to the ledger once it exists (M1). */
   confirmed = "confirmed",
-  /** Not assigned to a driver yet; shown in the unrecognised bucket. */
+  /** Not assigned to a driver yet ("Needs review" once matching has looked at it). */
   unmatched = "unmatched",
   rejected = "rejected",
-  /** Something does not add up (e.g. a Zelle email with no deposit after 72 hours); a human checks it. */
+  /** Reserved for the bank check (M5): something does not add up; a human checks it. Not used now. */
   discrepancy = "discrepancy",
 }
 

@@ -434,3 +434,16 @@ payment, it would be missed. Look-alikes (`mail.chime.com`, `evilchime.com`) are
 - Matching runs after every intake run; a rate limit stops it until the next run (B49), any other AI error sends that
   payment to review with the error.
 **Why:** an alias, email or phone is a fact someone confirmed; a name is a coincidence until checked with context.
+
+### D49 — 2026-10-13 — One-stage posting: every matched payment is confirmed (Saad; closes B3; changes D8/D39 and spec 6.3)
+- Saad: keep it simple for now; all payments are confirmed from their email, change later if required. A matched
+  payment (alias, AI or manual) goes straight to `confirmed`; unmatched ones stay `unmatched` ("Needs review").
+- The Zelle two-stage design (reported → confirmed by the bank deposit, 72h discrepancy) from the accepted scope and
+  spec 6.3 is deferred to the bank check (Plaid, M5). `reported` and `discrepancy` stay in the `payment_status`
+  database enum, unused, so M5 needs no enum migration.
+- The Payments page no longer shows a Status column (it would read "Confirmed" everywhere). Needs review vs assigned
+  is shown in the Driver column and the filters.
+- Reasoning recorded: a Zelle "you received money" email comes from Chase itself and passes the DKIM check, so it is
+  already the bank's notice. What is given up for now: a net for cancelled/failed Zelle transfers and for forged
+  emails that would pass DKIM.
+**Why:** the two-stage state was never moved forward (no Plaid yet) and confused the team; Saad asked for the simple model.

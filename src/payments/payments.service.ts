@@ -9,7 +9,6 @@ import { normalizeAliasValue } from "../aliases/normalize-alias.js";
 import { AliasSource, PaymentAlias } from "../aliases/payment-alias.entity.js";
 import { Driver } from "../drivers/driver.entity.js";
 import { ALIAS_TYPE_BY_SOURCE } from "../matching/alias-index.js";
-import { statusWhenAssigned } from "../matching/matching.service.js";
 import { ListPaymentsQueryDto } from "./dto/list-payments-query.dto.js";
 import {
   AssignPaymentResultDto,
@@ -63,7 +62,7 @@ export class PaymentsService {
 
   /**
    * Assigns (or re-assigns) a payment to a driver by hand (spec 6.2): method `manual`, who did it, and the
-   * status that follows (Zelle `reported`, others `confirmed`). The payer's name is saved as the driver's
+   * status `confirmed` (one stage for every method, B56). The payer's name is saved as the driver's
    * alias so the next payment from them matches by itself, unless that alias already belongs to another
    * driver: it is then left alone and reported back (one alias, one driver; the admin decides).
    *
@@ -99,7 +98,7 @@ export class PaymentsService {
         matchExplanation: "Assigned by an admin",
         matchedById: adminId,
         matchAttemptedAt: new Date(),
-        status: statusWhenAssigned(payment.source),
+        status: PaymentStatus.confirmed,
       });
 
       let aliasSaved = false;

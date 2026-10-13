@@ -127,7 +127,7 @@ describe("Payments: review filter and manual assign (test database)", () => {
     expect(result.payment).toMatchObject({
       driver: { id: tim },
       matchMethod: MatchMethod.manual,
-      status: PaymentStatus.reported, // Zelle waits for the bank
+      status: PaymentStatus.confirmed, // one stage for every method (B56)
     });
     expect(
       await db.getRepository(Payment).findOneByOrFail({ id }),

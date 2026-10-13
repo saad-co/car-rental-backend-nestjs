@@ -7,7 +7,6 @@ import { LlmRateLimitError } from "../llm/llm-client.js";
 import {
   MatchMethod,
   Payment,
-  PaymentSource,
   PaymentStatus,
 } from "../payments/payment.entity.js";
 import type { AiDriverMatcher, DriverCandidate } from "./ai-driver-matcher.js";
@@ -25,16 +24,6 @@ export const LEARN_ALIAS_CONFIDENCE = 0.9;
 export interface MatchResult {
   assigned: number;
   review: number;
-}
-
-/**
- * The status of a payment once it has a driver (spec 6.3). Zelle waits for the bank deposit (M5); the
- * other methods are final. No ledger yet: when it exists it credits `confirmed` payments once, by key.
- */
-export function statusWhenAssigned(source: PaymentSource): PaymentStatus {
-  return source === PaymentSource.email_zelle
-    ? PaymentStatus.reported
-    : PaymentStatus.confirmed;
 }
 
 /**
@@ -180,7 +169,7 @@ export class MatchingService {
         matchConfidence: confidence,
         matchExplanation: explanation,
         matchAttemptedAt: new Date(),
-        status: statusWhenAssigned(payment.source),
+        status: PaymentStatus.confirmed,
       },
     );
   }

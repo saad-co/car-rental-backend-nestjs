@@ -1,8 +1,7 @@
 import { AliasType } from "../aliases/normalize-alias.js";
-import { PaymentSource, PaymentStatus } from "../payments/payment.entity.js";
+import { PaymentSource } from "../payments/payment.entity.js";
 import { validateMatch, type DriverCandidate } from "./ai-driver-matcher.js";
 import { AliasIndex } from "./alias-index.js";
-import { statusWhenAssigned } from "./matching.service.js";
 
 const drivers = [
   { id: "d1", email: "tim@example.com", phone: "+13125550101" },
@@ -111,19 +110,5 @@ describe("validateMatch", () => {
       validateMatch({ driver_id: "d1", confidence: 2 }, list),
     ).toThrow(/confidence/);
     expect(() => validateMatch("d1", list)).toThrow(/JSON object/);
-  });
-});
-
-describe("statusWhenAssigned", () => {
-  it("Zelle waits for the bank (reported); the others are final (confirmed)", () => {
-    expect(statusWhenAssigned(PaymentSource.email_zelle)).toBe(
-      PaymentStatus.reported,
-    );
-    expect(statusWhenAssigned(PaymentSource.email_cashapp)).toBe(
-      PaymentStatus.confirmed,
-    );
-    expect(statusWhenAssigned(PaymentSource.email_venmo)).toBe(
-      PaymentStatus.confirmed,
-    );
   });
 });
