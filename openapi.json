@@ -440,6 +440,221 @@
           "Drivers"
         ]
       }
+    },
+    "/inbound-emails": {
+      "get": {
+        "operationId": "InboundEmailsController_list",
+        "parameters": [
+          {
+            "name": "provider",
+            "required": false,
+            "in": "query",
+            "description": "Only emails from this provider. Omit for all.",
+            "schema": {
+              "$ref": "#/components/schemas/InboundEmailProvider"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "description": "Only emails with this outcome. Omit for all.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "processed",
+                "rejected_unverified",
+                "extraction_failed",
+                "not_payment",
+                "duplicate_payment"
+              ]
+            }
+          },
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "description": "Page number, starting at 1.",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "description": "Items per page (1 to 100).",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InboundEmailListDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`GET /inbound-emails`: one page of processed emails with their outcome, newest first.",
+        "tags": [
+          "InboundEmails"
+        ]
+      }
+    },
+    "/payments": {
+      "get": {
+        "operationId": "PaymentsController_list",
+        "parameters": [
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "description": "Only payments with this status. Omit for all.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "reported",
+                "confirmed",
+                "unmatched",
+                "rejected",
+                "discrepancy"
+              ]
+            }
+          },
+          {
+            "name": "source",
+            "required": false,
+            "in": "query",
+            "description": "Only payments from this source. Omit for all.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "email_zelle",
+                "email_cashapp",
+                "email_venmo",
+                "email_stripe",
+                "email_chime",
+                "plaid_zelle",
+                "manual"
+              ]
+            }
+          },
+          {
+            "name": "driverId",
+            "required": false,
+            "in": "query",
+            "description": "Only payments assigned to this driver (the driver page). Omit for all.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "match",
+            "required": false,
+            "in": "query",
+            "description": "`assigned`: has a driver. `review`: matching looked at it and could not place it (\"Needs review\").\nOmit for all.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "assigned",
+                "review"
+              ]
+            }
+          },
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "description": "Page number, starting at 1.",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "description": "Items per page (1 to 100).",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentListDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`GET /payments`: one page of payments, most recent first. `?match=review` lists \"Needs review\".",
+        "tags": [
+          "Payments"
+        ]
+      }
+    },
+    "/payments/{id}/assign": {
+      "post": {
+        "operationId": "PaymentsController_assign",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignPaymentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssignPaymentResultDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`POST /payments/:id/assign`: assigns or re-assigns a payment to a driver and saves the payer's name as\nthat driver's alias (unless another driver already owns it, which the answer reports).\n`404` unknown payment, `400` unknown driver, `409` a rejected or discrepancy payment.",
+        "tags": [
+          "Payments"
+        ]
+      }
     }
   },
   "info": {
@@ -763,6 +978,41 @@
           "driverId"
         ]
       },
+      "DriverAliasDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "zelle",
+              "cashapp",
+              "venmo",
+              "chime",
+              "stripe",
+              "email",
+              "phone"
+            ]
+          },
+          "value": {
+            "type": "string",
+            "description": "As entered or as the provider wrote it."
+          },
+          "source": {
+            "type": "string",
+            "description": "Imported from the old system, learned from a confident AI match, or entered by an admin.",
+            "enum": [
+              "legacy",
+              "manual",
+              "ai_match"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "value",
+          "source"
+        ]
+      },
       "DriverDto": {
         "type": "object",
         "properties": {
@@ -793,6 +1043,23 @@
             "format": "date-time",
             "type": "string",
             "description": "When the driver was created (the application's approval)."
+          },
+          "aliases": {
+            "description": "Every payment alias of the driver, grouped by payment method then by value. Empty if none yet.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DriverAliasDto"
+            }
+          },
+          "paymentCount": {
+            "type": "number",
+            "description": "Number of payments assigned to this driver."
+          },
+          "lastPaymentAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "When the driver's most recent payment happened; null if none."
           }
         },
         "required": [
@@ -802,7 +1069,10 @@
           "email",
           "phone",
           "status",
-          "createdAt"
+          "createdAt",
+          "aliases",
+          "paymentCount",
+          "lastPaymentAt"
         ]
       },
       "DriverListDto": {
@@ -830,6 +1100,327 @@
           "total",
           "page",
           "limit"
+        ]
+      },
+      "InboundEmailProvider": {
+        "type": "string",
+        "enum": [
+          "cashapp",
+          "venmo",
+          "zelle_chase",
+          "stripe",
+          "chime",
+          "unknown"
+        ]
+      },
+      "InboundEmailDto": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/InboundEmailProvider"
+              }
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "receivedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "When our mail server received it."
+          },
+          "fromAddress": {
+            "type": "string",
+            "nullable": true
+          },
+          "subject": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "processed",
+              "rejected_unverified",
+              "extraction_failed",
+              "not_payment",
+              "duplicate_payment"
+            ]
+          },
+          "statusReason": {
+            "type": "string",
+            "nullable": true,
+            "description": "Why it was rejected or failed (always set for those statuses)."
+          },
+          "authDkimPass": {
+            "type": "boolean",
+            "description": "True only when DKIM passed for the provider's own domain."
+          },
+          "authDkimDomain": {
+            "type": "string",
+            "nullable": true,
+            "description": "The signing domain that passed, e.g. `venmo.com`."
+          },
+          "imapUid": {
+            "type": "number",
+            "description": "The message's UID in the mailbox (for finding it in Gmail by hand if needed)."
+          },
+          "paymentId": {
+            "type": "string",
+            "nullable": true,
+            "description": "The payment this email created, if any."
+          }
+        },
+        "required": [
+          "provider",
+          "id",
+          "receivedAt",
+          "fromAddress",
+          "subject",
+          "status",
+          "statusReason",
+          "authDkimPass",
+          "authDkimDomain",
+          "imapUid",
+          "paymentId"
+        ]
+      },
+      "InboundEmailListDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InboundEmailDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "description": "Number of emails matching the filters, across all pages."
+          },
+          "page": {
+            "type": "number"
+          },
+          "limit": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit"
+        ]
+      },
+      "PaymentDriverDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "firstName": {
+            "type": "string"
+          },
+          "lastName": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "firstName",
+          "lastName"
+        ]
+      },
+      "PaymentDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "email_zelle",
+              "email_cashapp",
+              "email_venmo",
+              "email_stripe",
+              "email_chime",
+              "plaid_zelle",
+              "manual"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "reported",
+              "confirmed",
+              "unmatched",
+              "rejected",
+              "discrepancy"
+            ]
+          },
+          "amountCents": {
+            "type": "number",
+            "description": "Integer cents. The frontend formats it; never a float."
+          },
+          "senderName": {
+            "type": "string",
+            "description": "The payer's name exactly as the provider wrote it."
+          },
+          "senderHandle": {
+            "type": "string",
+            "nullable": true
+          },
+          "transactionId": {
+            "type": "string",
+            "nullable": true,
+            "description": "The provider's transaction id, when the email showed one."
+          },
+          "occurredAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "When the payment happened (exact time from the email, or when the email arrived)."
+          },
+          "extractionConfidence": {
+            "type": "number",
+            "nullable": true,
+            "description": "How sure the AI was about what it read from the email, 0 to 1. Null for sources without AI."
+          },
+          "externalId": {
+            "type": "string",
+            "description": "The record it came from; for email sources, the id of the inbound email."
+          },
+          "driver": {
+            "nullable": true,
+            "description": "The driver it is assigned to. Null while unmatched.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PaymentDriverDto"
+              }
+            ]
+          },
+          "suggestedDriver": {
+            "nullable": true,
+            "description": "The AI's best guess when it was not sure enough: \"Needs review\".",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PaymentDriverDto"
+              }
+            ]
+          },
+          "matchMethod": {
+            "type": "string",
+            "nullable": true,
+            "description": "How it was assigned: alias, exact name, AI or by an admin.",
+            "enum": [
+              "alias",
+              "name",
+              "ai",
+              "manual"
+            ]
+          },
+          "matchConfidence": {
+            "type": "number",
+            "nullable": true,
+            "description": "1 for alias and name, the AI's confidence for AI matches and suggestions, null for manual."
+          },
+          "matchExplanation": {
+            "type": "string",
+            "nullable": true,
+            "description": "One line on why (the alias, the AI's reason, or why matching failed)."
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "source",
+          "status",
+          "amountCents",
+          "senderName",
+          "senderHandle",
+          "transactionId",
+          "occurredAt",
+          "extractionConfidence",
+          "externalId",
+          "driver",
+          "suggestedDriver",
+          "matchMethod",
+          "matchConfidence",
+          "matchExplanation",
+          "createdAt"
+        ]
+      },
+      "PaymentListDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PaymentDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "description": "Number of payments matching the filters, across all pages."
+          },
+          "page": {
+            "type": "number"
+          },
+          "limit": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit"
+        ]
+      },
+      "AssignPaymentDto": {
+        "type": "object",
+        "properties": {
+          "driverId": {
+            "type": "string",
+            "description": "The driver the payment belongs to.",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "driverId"
+        ]
+      },
+      "AssignPaymentResultDto": {
+        "type": "object",
+        "properties": {
+          "payment": {
+            "$ref": "#/components/schemas/PaymentDto"
+          },
+          "aliasSaved": {
+            "type": "boolean",
+            "description": "True if the payer's name was saved as a new alias of the driver."
+          },
+          "aliasOwnedBy": {
+            "nullable": true,
+            "description": "The driver who already owns the payer's name as an alias, if it is someone else: that alias is NOT\nmoved (one alias, one driver); the admin decides.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PaymentDriverDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "payment",
+          "aliasSaved",
+          "aliasOwnedBy"
         ]
       }
     }

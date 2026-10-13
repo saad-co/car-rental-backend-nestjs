@@ -12,5 +12,8 @@ export default defineConfig({
     root: "./",
     include: ["**/*.e2e-spec.ts"],
     env: { DATABASE_URL: env.DATABASE_URL_TEST },
+    // One file at a time: the files share the test database and empty its tables, so running them in
+    // parallel would let one file wipe another's rows mid-test.
+    fileParallelism: false,
   },
 });

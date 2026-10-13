@@ -1,6 +1,8 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
+import { ScheduleModule } from "@nestjs/schedule";
 import { TypeOrmModule } from "@nestjs/typeorm";
+import { AliasesModule } from "./aliases/aliases.module.js";
 import { AppController } from "./app.controller.js";
 import { AppService } from "./app.service.js";
 import { validateEnv } from "./config/env.validation.js";
@@ -8,6 +10,8 @@ import { buildBaseOptions } from "./database/typeorm-options.js";
 import { DriversModule } from "./drivers/drivers.module.js";
 import { ApplicationsModule } from "./applications/applications.module.js";
 import { AuthModule } from "./auth/auth.module.js";
+import { EmailIntakeModule } from "./email-intake/email-intake.module.js";
+import { PaymentsModule } from "./payments/payments.module.js";
 import { UsersModule } from "./users/users.module.js";
 
 @Module({
@@ -23,10 +27,15 @@ import { UsersModule } from "./users/users.module.js";
         autoLoadEntities: true, // pick up entities registered via TypeOrmModule.forFeature
       }),
     }),
+    // Runs @Cron methods (the email intake every 3 minutes). Registered once, here.
+    ScheduleModule.forRoot(),
     UsersModule,
     AuthModule,
     ApplicationsModule,
     DriversModule,
+    EmailIntakeModule,
+    PaymentsModule,
+    AliasesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

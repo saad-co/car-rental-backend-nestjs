@@ -18,14 +18,14 @@ they already paid. When in doubt, the system flags for a human instead of guessi
 - Drivers, their payment handles (aliases), billing settings
 - Append-only driver ledger
 - Recurring rent charges and arrears
-- Payment intake: Gmail (Cash App, Venmo, Zelle notifications) and Plaid (Zelle deposits in the Chase account)
+- Payment intake: Gmail (Zelle, Cash App, Venmo, Stripe and Chime notifications; all five, D39) and Plaid (Zelle deposits in the Chase account)
 - LLM-based extraction and matching, with an unrecognised bucket for manual assignment
-- Two-stage posting for Zelle (reported → confirmed)
+- One-stage posting: a matched payment is `confirmed` from its verified email (D49). Zelle two-stage is deferred to the bank check (M5)
 - SMS reminders via Quo (formerly OpenPhone), inbound replies and delivery status
 - Payments dashboard, message templates, settings and automation switches
 
 **Not in Phase 1:** contracts and e-signature, vehicle condition / check-in, a driver
-mobile app, data migration from the existing system.
+mobile app. (Data import from the existing system is now in scope: drivers and applications first, D44.)
 
 **Reference system.** An existing app (FastAPI + Postgres) handles parts of this today.
 Use it as a reference for real-world behaviour and edge cases only — do not copy code.
@@ -85,15 +85,18 @@ so the two repos cannot silently drift apart.
 `valueNormalized` (lowercased, trimmed, whitespace collapsed), `createdById`, `source` (`manual` | `assignment`).
 Unique on `(type, valueNormalized)`. **Lookups always filter by type.**
 
-**InboundEmail** — one row per Gmail message processed.
-`gmailMessageId` (unique), `fromAddress`, `subject`, `receivedAt`,
-`authDkimPass`, `authDkimDomain`, `provider` (`cashapp` | `venmo` | `zelle_chase` | `unknown`),
+**InboundEmail** — one row per mailbox message processed (read over IMAP, D38).
+`mailbox`, `imapUidValidity`, `imapUid` (unique together), `messageId` (informational), `fromAddress`, `subject`,
+`receivedAt` (IMAP internal date, not the sender's `Date` header),
+`authDkimPass`, `authDkimDomain`, `provider` (`cashapp` | `venmo` | `zelle_chase` | `stripe` | `chime` | `unknown`),
 `status` (`processed` | `rejected_unverified` | `extraction_failed` | `not_payment`),
-`statusReason`, `bodyText` (only for allow-listed payment senders), `paymentId` (nullable).
+`statusReason` (required for `rejected_unverified`, `extraction_failed` and `duplicate_payment`), `gmailMessageId`
+(permanent Gmail id, unique per mailbox, D47), `bodyText` (only for allow-listed payment senders). Rows are never
+updated (D37). The link to the payment lives on the payment (`Payment.externalId` = the email row id), not here (D47).
 
 **Payment** — a money event from any source.
-`source` (`email_cashapp` | `email_venmo` | `email_zelle` | `plaid_zelle` | `manual`),
-`externalId` (Gmail message id or Plaid transaction id), unique on `(source, externalId)`.
+`source` (`email_cashapp` | `email_venmo` | `email_zelle` | `email_stripe` | `email_chime` | `plaid_zelle` | `manual`),
+`externalId` (the InboundEmail id or Plaid transaction id), unique on `(source, externalId)`.
 `amountCents`, `senderName`, `senderHandle`, `occurredAt`,
 `status` (`reported` | `confirmed` | `unmatched` | `rejected` | `discrepancy`),
 `driverId` (nullable), `matchMethod` (`alias` | `llm` | `manual`), `matchConfidence` (0–1),
@@ -121,12 +124,15 @@ Balance = sum(credits) − sum(debits). Never stored.
 
 ## 5. Payment intake
 
-### 5.1 Gmail
-- OAuth to the business mailbox, read-only scope.
-- Query **only allow-listed senders**. Never `in:anywhere` — the default search already excludes spam and trash, and that exclusion is a defence, not a limitation. Sender addresses go in config and are confirmed from real samples.
-- **Verify every message** from the `Authentication-Results` header: require `dkim=pass` **and** `header.d` exactly equal to the expected domain for that provider. Anything else → `rejected_unverified`, never credits anyone.
-- **Dedup on `gmailMessageId`.** If already in `InboundEmail`, skip it completely. Never reprocess, never overwrite its status.
-- Poll every few minutes with a received-time watermark plus a small overlap window.
+### 5.1 Mailbox intake (IMAP on `gonzobilling@gmail.com`, see D38)
+- Every payment email ends up in `gonzobilling@gmail.com` (Zelle via a Mailcow redirect, Cash App via a forward from
+  another Gmail, Venmo directly). Read it over IMAP (`imap.gmail.com`), read-only, with a Google app password
+  (credentials in `.env`). A mailbox that cannot be read is a visible failure, never skipped silently.
+- Process **only allow-listed senders**; the inbox holds unrelated mail (promotions, alerts) that must never enter the pipeline. Sender addresses go in config and are confirmed from real samples.
+- Start from a go-live point (UID or date), never from the start of the inbox (it holds 20,000+ messages back to 2024).
+- **Verify every message** from the `Authentication-Results` header written by the receiving server (`mx.google.com`; any other header is ignored): require `dkim=pass` **and** a signer domain (`header.d`, or Gmail's `header.i=@domain`) exactly equal to the expected domain for that provider. Anything else → `rejected_unverified`, never credits anyone.
+- **Dedup on `(mailbox, imapUidValidity, imapUid)`.** If already in `InboundEmail`, skip it completely. Never reprocess, never overwrite its status.
+- Poll every few minutes, remembering the last UID read.
 
 ### 5.2 Extraction (LLM)
 - For each verified email, send the cleaned body text to the LLM and require structured output:
@@ -154,12 +160,14 @@ Balance = sum(credits) − sum(debits). Never stored.
 An admin assigns an unmatched payment to a driver. This posts the payment and **creates an alias** from the sender handle/name, so the same sender matches automatically next time. Logged in AuditLog.
 
 ### 6.3 Posting rules
-- **Zelle — two stages.**
+**Current rule (D49, 2026-10-13, Saad): one stage for every method.** A verified, validated email matched to a driver (alias, AI or manual) → `confirmed` → ledger credit. `reported` and `discrepancy` stay in the status list for the bank check (M5) and are not used until then. The Zelle two-stage design below is the original plan, kept for M5.
+- **Zelle — two stages (deferred to M5, not current).**
   - Chase Zelle email → payment `reported`. Suppresses reminders. No ledger credit yet.
   - Plaid deposit → pair with a `reported` email payment (same amount, within 72 hours, matching sender) → `confirmed` → ledger credit.
   - Plaid deposit with no email → matched and `confirmed` directly → ledger credit.
   - `reported` with no deposit after 72 hours → `discrepancy`, shown for review.
 - **Cash App and Venmo — one stage.** That money does not reach the bank as individual transactions, so there is nothing to confirm against. A verified, validated, matched email → `confirmed` → ledger credit.
+- **Stripe and Chime — one stage (assumed, to confirm; D39).** Stripe money reaches the bank only as lump-sum payouts, so the payout emails ("Your $X payout … is on the way") are never payments. Chime money-request, transfer-out and expiry emails are never payments either.
 - Ledger credit uses `idempotencyKey = payment:<paymentId>`. A payment can never credit twice.
 
 ---
@@ -170,8 +178,8 @@ An admin assigns an unmatched payment to a driver. This posts the payment and **
   - `daily`: one debit per day.
   - `weekly`: one debit on `billingDueWeekday`.
   - `idempotencyKey = rent:<driverId>:<date>` — re-running a day never double-bills.
-- **Effective balance for reminders** = ledger balance + sum of `reported` (unconfirmed) payments.
-  This is what stops a driver being chased for money they just sent.
+- **Effective balance for reminders** = ledger balance (every matched payment is already `confirmed` and credited, D49).
+  If two-stage Zelle returns with M5, add the sum of `reported` payments here, so a driver is not chased for money just sent.
 - Days late: daily drivers = `ceil(-effectiveBalance / rate)`; weekly = days since the unpaid due date.
 - Reference rule from the existing system: daily drivers are late at 2+ days behind, weekly at 48+ hours. Make both thresholds settings.
 
@@ -227,14 +235,14 @@ Each milestone ends with passing tests and something demonstrable.
 | M3 | Gmail intake, DKIM verification, LLM extraction | Unverified email rejected; seen message skipped; extraction validated |
 | M4 | Matching, unrecognised bucket, assignment → alias | Assigned sender auto-matches next time; type-filtered lookup tested |
 | M5 | Plaid Zelle sync and two-stage posting | Non-Zelle and outgoing transactions ignored; pairing works; 72h discrepancy fires |
-| M6 | Quo SMS, tiers, webhooks, opt-out | Paid or reported driver is not messaged; dry_run sends nothing |
+| M6 | Quo SMS, tiers, webhooks, opt-out | Paid driver is not messaged; dry_run sends nothing |
 | M7 | Dashboard, settings, email log, hardening | All section 10 screens working on real data |
 
 ---
 
 ## 12. Open items (do not block; use the default and flag)
 
-- Exact sender addresses for Cash App, Venmo and Chase Zelle emails — confirm from real samples.
+- Exact sender addresses for Cash App, Venmo, Chase Zelle, Stripe and Chime emails — all confirmed from real emails (2026-10-09): Zelle `no.reply.alerts@chase.com` (signs `chase.com`), Cash App `cash@square.com` (`square.com`), Venmo `venmo@venmo.com` (`venmo.com`), Stripe `notifications@stripe.com` (`stripe.com`), Chime `alerts@account.chime.com` (signs with `account.chime.com` or `chime.com` depending on the email type, D42).
 - Reminder tier defaults and wording.
 - Late fees — not defined yet; no late fee logic in Phase 1.
 - LLM provider and model — choose one cheap, fast model with structured output support.

@@ -4,6 +4,222 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-13 — Matching, aliases, one-stage payments, Payments / Email log / Drivers pages (D48, D49)
+- **Done (backend):** `payment_aliases` (UNIQUE type+value; types = payment methods + email/phone) and
+  `npm run legacy:import-aliases` (dry run, `--apply --target=<db>`, skips damaged old aliases); match columns on
+  `payments`; `MatchingService` after every intake run: exact alias / driver email / phone (no AI), everything else AI
+  with full context (70% assign, 90% also learns the alias, below 70% "Needs review"); `POST /payments/:id/assign`
+  (manual, saves the alias, never takes one from another driver); `GET /payments` (filters source, match, driverId),
+  `GET /inbound-emails`, `GET /drivers` with aliases and payment summary. Every matched payment is `confirmed`
+  (D49, Saad). Refactors: `AliasIndex` and `EmailProcessor` classes; `email-intake/` grouped into `mailbox/`,
+  `verification/`, `extraction/`; LLM clients moved to `src/llm/`. Rate limits (429) never count as a strike and log
+  as one warning line.
+- **Done (frontend):** Payments page (driver and how matched, Accept / Assign / Change, Needs review filter, no status
+  column), Email log page, Drivers list (clean) + driver detail page (aliases by method, recent payments), application
+  page with tabs, all times in Chicago with the UTC offset in the header.
+- **Verified:** 76 unit + 24 e2e tests; live local run on the real inbox from UID 22150: 16 emails, 13 payments, all
+  matched; alias dry run on real data: 52 unchanged, 8 skipped (5 left-out drivers, 3 damaged aliases).
+- **Branches:** backend and frontend `feature/email-parsing` (29 and 6 commits ahead of `dev`, no PR yet, B55).
+- **NEXT, exact steps (staging rollout, a short chat "02 - Payment email parsing (staging rollout)"):**
+  1. PRs into `dev` merged (backend first, then frontend); then deploy: `railway up --service backend` and
+     `--service frontend` from each repo (D43). The pre-deploy command runs the 7 new migrations.
+  2. Keep `EMAIL_INTAKE_ENABLED=false` until step 4.
+  3. Import the aliases into staging through the tunnel (`railway connect Postgres --tunnel-only`, set `DATABASE_URL` in
+     that terminal only, `--target=railway`): dry run must say Skipped 8 with 3 "leftover email formatting"; after
+     `--apply`, the damaged-alias count query must return 0:
+     `SELECT count(*) FROM payment_aliases WHERE length(value) > 80 OR value ~ '[{}]' OR value ~ '</?[a-zA-Z]'`.
+  4. In the Railway dashboard (typed by Abulkalam, then Apply): `EMAIL_INTAKE_ENABLED=true`, `IMAP_HOST`, `IMAP_USER`,
+     `IMAP_PASSWORD`, `IMAP_TRUSTED_SERVER=mx.google.com`, `LLM_API_KEY`, `LLM_MODEL=gemini-3.5-flash-lite`, and
+     `IMAP_START_AFTER_UID` (go-live point: **not decided**, 22150 or 22000; free key = 15 AI calls a minute, a big
+     backlog takes a while but loses nothing).
+  5. Watch the first ticks in the logs; Payments page should fill and every payment be assigned; UI walkthrough.
+  6. Then Saad opens `dev` → `main` so `main` matches staging.
+- **Not done / open:** B54 (re-assigning a payment matched through a wrong alias), B53 (driver-added aliases need admin
+  approval; alias add/remove screen), ledger and balances (M1/M2), Plaid (M5), Quo (M6), B43 list counts, B41, B16.
+  Note: a local `docker compose down -v` wipes the local database; rebuild = `migration:run`, `seed:admin`, both legacy
+  imports, then intake from `IMAP_START_AFTER_UID=22150`.
+
+---
+
+### 2026-10-12 — Payment email intake service (M3), first live run (D46, D47)
+- **Done (backend):** `payments` table + `inbound_emails.gmail_message_id` + `duplicate_payment` status (migration
+  `AddPaymentsAndGmailId`); `processEmail` (parse → allow-list → DKIM → AI → validation); `MailboxReader` + imapflow
+  adapter; `EmailIntakeService.syncNewMessages()` (advisory lock, cursor, go-live point, one transaction per email,
+  3-strike rule); `@Cron` every 3 minutes behind `EMAIL_INTAKE_ENABLED` (default off); `npm run intake:peek`.
+  Fixes after the live run: date-only payment times use the received time (B50); rate limits never count as a
+  strike (B49). Free Gemini key approved for real emails (D46).
+- **Verified:** 62 unit + 9 e2e tests (test database, fake mailbox and AI). Live run locally
+  (`IMAP_START_AFTER_UID=22150`): 10 emails, 9 payments, 1 Zelle request correctly `not_payment`, 0 failures;
+  checked against Gmail. Rows from that run keep the old midnight times (stored before the B50 fix).
+- **Not done:** admin pages for payments and the email log (next: F1-F3); staging stays OFF until then; matching (M4).
+- **Branch:** `feature/email-parsing` (backend).
+
+---
+
+### 2026-10-11 — Cleaner application page (Saad's feedback)
+- **Done (frontend):** the application page is laid out like TailAdmin's transaction page: a header with the name,
+  status, submitted time and review buttons; the answers in underlined tabs (Contact, Driving, Rental, Documents, and
+  Other only when the website sends a field we have not placed); a side column with Review and Submission cards.
+  Empty fields are hidden; tracking (`utm_*`, `gclid`, `fbclid`), form internals and file paths are never shown.
+  New: `components/ui/tabs/Tabs.tsx` (adapted from TailAdmin's `TabWithUnderline`), `pages/Applications/applicationFields.ts`
+  (which field goes in which tab). No API change.
+- **Verified:** type check and lint pass; every tab checked in the browser on the fixture application, narrow and wide.
+- **Not done:** viewing the uploaded files (B17, client's Supabase bucket); medium/long lease values (B44).
+- **Deployed:** staging frontend, from `feature/application-details` with the Node 24 pin merged in
+  (`chore/railway-deploy`).
+- **Branch:** `feature/application-details` (frontend).
+
+---
+
+### 2026-10-11 — gonzocar.com form connected to staging (B22)
+- **Done:** staging `CORS_ORIGINS` = staging frontend, `https://gonzocar.com`, `https://www.gonzocar.com`. On the
+  client's Lovable site, `src/lib/api.ts` now sends the same body a second time to
+  `https://backend-production-1f569.up.railway.app/applications`, only after the old system's request succeeds,
+  fire-and-forget (`keepalive`, 10 s abort, failures only `console.warn`). The old system's flow is unchanged.
+- **Verified:** CORS preflight: both gonzocar.com origins allowed, other origins blocked. One test application from
+  the live form: our API answered 201, it shows on the staging Applications page with every field.
+- **Not checked yet:** that the old system also received the test application (Saad to confirm, then reject it there).
+- **Note:** every real applicant now lands in staging too. Approving one there sends a real welcome email with a
+  login. `POST /applications` has no rate limiting yet (B16, B25).
+- **Branch:** `feature/email-parsing` (backend, docs only).
+
+---
+
+### 2026-10-11 — Old-system drivers imported, local and staging (D44, D45)
+- **Done (backend):** `legacy:report` (read-only report of the old database), `drivers.legacy_id` migration,
+  `legacy:import-drivers` (mapping + 8 tests, dry run by default, one transaction, `--apply --target=<db name>`),
+  shared read-only connection helper `scripts/legacy-db.ts`. Backend redeployed (migration ran on staging).
+- **Verified:** local and staging: 59 read, 54 inserted, 5 skipped (left out on purpose, D45); re-run 0 inserts, 54
+  unchanged; no logins created; staging Drivers page shows them. Wrong `--target` refused locally. 53 tests pass.
+- **How staging was reached:** `railway connect Postgres --tunnel-only` (SSH tunnel, the database never public); an SSH
+  key was created on Abulkalam's machine and registered on the client's Railway account (`railway ssh keys list`;
+  remove at hand-over if wanted). `DATABASE_URL` set only in that terminal, then removed.
+- **Not done:** aliases, applications, money history (B42); list counts (B43); drop email confirmation (B41).
+- **Next:** decide the next import (aliases need our alias table first) or start the intake service.
+- **Branch:** `feature/email-parsing` (backend).
+
+---
+
+### 2026-10-11 — Staging deployed on Railway (D43)
+- **Done:** project `car-rental-staging` on the client's Railway account (Postgres, backend, frontend), manual
+  `railway up` deploys. Backend: Node 24 pin, `migration:run:prod` (compiled migrations; data source now loads
+  `.js` or `.ts` migrations, never `.d.ts`), dashboard settings for start / pre-deploy / health check, admin
+  seeded. Frontend: Node 24 pin, static site.
+- **Verified:** all 8 migrations ran on the empty database; `/docs` 200; fake login 401; frontend `/` and a direct
+  `/admin/login` 200; backend URL in the bundle; CORS preflight allowed for the frontend origin; Abulkalam logged in
+  and opened Applications and Drivers in the browser. `ADMIN_*` removed afterwards.
+- **Found:** `railway.json` ignored by `railway up` (B40); dashboard changes are staged until applied; npm blocks
+  install scripts (bcrypt still works from its prebuilt binary).
+- **Not done:** email intake service; frontend has no Railway config file; real admin email; hardening (B25).
+- **Next:** walk through the extractor commits; then the intake service (`syncNewMessages`, plan mode), deployed
+  with `IMAP_*` / `LLM_*` variables once Saad confirms the key question (live names to the free Gemini tier or a
+  paid key).
+- **Branches:** backend `feature/email-parsing`, frontend `chore/railway-deploy`.
+
+---
+
+### 2026-10-10 — AI extractor works on real emails: 28/28 (D40-D42)
+- **Done (backend, committed and pushed 2026-10-10; walkthrough still pending):** `LlmJsonClient` interface, `GeminiJsonClient` (JSON
+  schema output, 60 s timeout, SDK's silent retries off), `LlmPaymentExtractor` with rules + per-provider hints +
+  schema (adds `transaction_id`), fake-client tests; `extract-eval` script (replaces payer names/emails before
+  sending, compares with `../mail-samples/labels.json`); `llm-probe` script (lists models, times thinking settings);
+  DKIM accepts a list of exact domains per provider (Chime signs with `account.chime.com` and `chime.com`, D42);
+  `imap-peek` type fixes; `.env.example` LLM block. Committed earlier today: sender allow-list, Venmo blank-body
+  fix (`html-to-text`), `imap-peek --save`, `samples-show`.
+- **Verified:** 44 unit tests pass; type check clean. `npm run extract:eval` with `gemini-3.5-flash-lite`:
+  28/28 pass (Cash App 6, Chime 5, Stripe 6, Venmo 5, Zelle 6), including payouts, requests, transfers out and
+  "Payment sent". `gemini-flash-latest` was too slow (30-60 s, timeouts).
+- **Limits of this result:** small sample, few distinct payers; the memo-amount trap (B30) is not in the set any
+  more (it was the Mailcow copy); `occurred_at`, `transaction_id` and confidence (always 1) are not checked.
+- **Decided today:** intake by scheduled UID poll (D40); Stripe webhooks later (D41); B34-B39 opened.
+- **Next (start of next session):** 1) walk through the two 2026-10-10 commits (extractor code, docs) together until every file is understood; 2) widen the
+  sample set (older emails, more payers, the $317.85 memo email from Gmail, B36 sender/folder audit) and re-run;
+  3) plan the intake service (`syncNewMessages`, plan mode).
+- **Branch:** `feature/email-parsing` (backend).
+
+---
+
+### 2026-10-09 — Source changed to Gmail IMAP; `verifyDkim` reads Gmail headers (D38)
+- **Done (backend):** `verifyDkim` accepts the signer as `header.d=` or Gmail's `header.i=@domain` (6 new tests with
+  real-shaped Cash App and Venmo headers); `imap-peek` simplified to one mailbox (`IMAP_USER`, `IMAP_PASSWORD`,
+  `IMAP_TRUSTED_SERVER`), scans the newest 300 messages, new `--from=<sender>` option; `.env.example` updated; spec
+  4 and 5.1 updated; D38 supersedes D36.
+- **Verified (manually):** read `gonzobilling@gmail.com` (20,301 messages) over IMAP with an app password; a real
+  Cash App email verifies as `cashapp` and not as the other providers. Gmail screenshots confirmed the routes.
+- **Found:** Stripe (846) and Chime (650) emails are in the inbox and in daily use, outside the accepted scope (B32);
+  Stripe payouts and Chime requests/transfers are not payments. Inbox goes back to 2024 (B33).
+- **Not done:** `verifyDkim` fix not yet run against a real Zelle email read through Gmail; the intake service; LLM
+  client; B30.
+- **Next:** run `imap:peek -- <UID>` on a Zelle and a Venmo email; decide Stripe/Chime with Saad; intake service
+  (plan mode first).
+- **Branch:** `feature/email-parsing` (backend).
+
+---
+
+### 2026-10-09 — Step 4: `inbound_emails` table (D37)
+- **Done (backend):** `InboundEmail` entity, `EmailIntakeModule` (registers the entity, no services yet), wired into
+  `AppModule` and `data-source.ts`; migration `CreateInboundEmails` generated, read, applied to the dev database.
+  Spec sections 4 and 5.1 updated for IMAP and the new message key. `imap-peek` now takes a list of mailboxes
+  (`IMAP_USER_n` / `IMAP_PASSWORD_n`).
+- **Verified (manually, psql, rolled-back transactions):** `\d inbound_emails` matches the entity; duplicate
+  `(mailbox, uid_validity, uid)` rejected; `rejected_unverified` without a reason rejected, with a reason accepted;
+  upper-case mailbox rejected; provider `chime` rejected. Build, lint and tests pass.
+- **Found:** all four pay mailboxes read; only Chase Zelle mail, `gonzopay@` (203) and `payashwood@` (11); none of
+  Cash App/Venmo (B31, asked Saad). One real email shows B30 (amount check can be fooled by memo amounts).
+- **Not done:** migration not applied to `car_rental_db_test`; no service writes rows yet; `payment_id`; Cash App and
+  Venmo samples; the LLM client.
+- **Next:** the intake service: fetch new messages per mailbox over IMAP (remember the last UID), run parse, verify,
+  extract (fake extractor first), validate, insert-or-skip into `inbound_emails`. Plan mode first.
+- **Branch:** `feature/email-parsing` (backend).
+
+---
+
+### 2026-10-09 — IMAP route proven on a real Mailcow mailbox (D36)
+- **Done (backend):** `scripts/imap-peek.ts` (`npm run imap:peek`, dev tool, not in the build): read-only IMAP
+  list of the newest messages, or `-- <UID>` to save one `.eml` to `../mail-samples` and run `parseRawEmail` +
+  `verifyDkim` on it. Added `imapflow`, `IMAP_*` in `.env.example`.
+- **Verified (manually, `payashwood@` via Mailcow app password):** listed 15 messages; real Zelle email has
+  `mail.gonzocar.com; dkim=pass header.d=chase.com`, `spf=pass`, `dmarc=pass`; `verifyDkim` VERIFIED for
+  `zelle_chase`, rejected for the other two. Chase writes directly (no `Fwd:`); the mailbox also holds
+  non-payment mail (statements, tests, Mailcow notices).
+- **Found:** all four pay mailboxes `keep; redirect` to `gonzobilling@gmail.com` (B27). Admin Webmail button was
+  disabled and the protocol list has no SOGo option; not pursued.
+- **Not done:** Cash App and Venmo samples (which mailbox receives them?); the other three mailboxes not read yet.
+- **Next:** `InboundEmail` entity and migration (plan mode); explain how the files fit into NestJS (question 3).
+- **Branch:** `feature/email-parsing` (backend), uncommitted.
+
+---
+
+### 2026-10-08 — Email intake prototype: DKIM check, raw email parser, extraction validator (D35)
+- **Done (backend):** `src/email-intake/`: `verifyDkim` (trusts only our server's `Authentication-Results`, exact
+  `header.d`), `parseRawEmail` (mailparser: sender, subject, date, auth headers top to bottom, clean body text),
+  `PaymentExtractor` interface and `validateExtraction` (shape, provider, amount literally in text). Plain
+  functions, no Nest module, no database yet. Added `mailparser` and `@types/mailparser`.
+- **Verified:** `npx vitest run src/email-intake`: 23 tests pass. Emails in tests are synthetic.
+- **Found:** the mailbox is Mailcow (`mail.gonzocar.com`), so likely IMAP not Gmail OAuth; reference system
+  also receives forwards from four `gonzocar.com` pay inboxes (rewritten forwards would fail the DKIM rule).
+  Abulkalam could not log in to the Mailcow admin; asked Saad.
+- **Not done:** `InboundEmail` table, real LLM extractor (B8), mailbox fetch, matching, real sample emails.
+- **Next:** `InboundEmail` entity and migration (plan mode first), once the questions in BACKLOG are answered or
+  independently of them.
+- **Branch:** `feature/email-parsing` (backend), uncommitted.
+
+---
+
+### 2026-10-08 — Plan update: deployment blocked, email parsing next (D34)
+- **State:** M0, step A (applications, drivers) and step B (driver login) are merged into `dev` in both repos.
+  Local flow verified end to end: website-shaped application → admin approval → welcome email → email
+  confirmation → driver login → forced password change → portal.
+- **Blocked:** Railway deployment and connecting the live website (B22, B24): no access to the client's Railway
+  account yet.
+- **Next:** payment email parsing, in a new chat. Start with requirements and the list for Saad (Gmail access,
+  sample emails, sender addresses, LLM: B4-B8); build the tables and the parser against saved sample emails.
+  Sample email shapes for reference: `gonzocar/tests/test_gmail_parser_addresses.py` (read-only, never copy code).
+- **Deferred:** security hardening (B25).
+- **Branch:** start `feature/email-parsing` from `dev` in both repos as needed.
+
+---
+
 ### 2026-10-08 — Step B frontend: driver pages; admin app admin-only
 - **Done (frontend):** `/driver/verify-email` (confirm button, not on page load, so email scanners cannot use up
   the token), `/driver/login`, forced `/driver/change-password`, placeholder `/driver` portal; login page shared
