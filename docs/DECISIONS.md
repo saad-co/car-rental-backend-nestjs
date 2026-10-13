@@ -447,3 +447,25 @@ payment, it would be missed. Look-alikes (`mail.chime.com`, `evilchime.com`) are
   already the bank's notice. What is given up for now: a net for cancelled/failed Zelle transfers and for forged
   emails that would pass DKIM.
 **Why:** the two-stage state was never moved forward (no Plaid yet) and confused the team; Saad asked for the simple model.
+
+### D50 — 2026-10-13 — Quo chat: conversation by phone, local copy of messages, files in our own bucket (changes spec 4 `SmsMessage`)
+First Quo feature (chat 03): a chat on the application and driver pages to read and send texts, with the files a
+contact texts in shown in a separate Files tab. Chosen by Abulkalam on 2026-10-13; simplest option first.
+- **A conversation is a contact phone (E.164) on our one Quo number**, not a `driverId`. An applicant is not a driver
+  yet, and the thread must survive approval. Application pages convert the raw phone with `toUsE164()`; driver pages
+  use `drivers.phone`. Routes are scoped by application or driver id, so an admin cannot text a free-typed number.
+- **Local copy, synced from Quo:** `sms_messages` and `sms_attachments`, filled by our own sends, the Quo webhook
+  (`message.received/delivered/failed/undelivered`) and a catch-up sync when a chat opens (so texts sent from the Quo
+  app appear too). Every Quo message id is UNIQUE, so a repeated webhook or re-sync inserts nothing twice; status only
+  moves forward because delivery order is not guaranteed.
+- **Quo facts used:** sending exists only on API v1 (`POST /v1/messages`, text only, no MMS out); history is
+  `GET /v1/messages`; webhooks are signed HMAC-SHA256 over `webhook-id.webhook-timestamp.rawBody` (secret `whsec_…`),
+  so NestJS needs `rawBody: true`.
+- **`SMS_MODE` (`off | dry_run | live`) is an environment variable until the Settings table (M7).** It defaults to
+  `dry_run`: the message is saved and shown as "Dry run: not sent", never sent. `off` refuses the send.
+- **MMS files are copied into our own S3-compatible bucket** (MinIO locally, Railway Storage Bucket on staging; B45)
+  and opened through short-lived signed links. Whether Quo's media links expire is unknown; B57.
+- **Deferred:** STOP/opt-out handling (to the reminders milestone), the "more info" status, decision texts, upload
+  link (B47), reminders (M6).
+**Why:** Abulkalam is short on time and wants send/receive plus a files view first. Quo has no embeddable inbox
+(B46), so we build the chat ourselves.
