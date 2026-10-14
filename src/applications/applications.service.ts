@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  HttpException,
   Injectable,
   Logger,
   NotFoundException,
@@ -10,14 +11,15 @@ import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import { isEmail } from "class-validator";
 import { DataSource, EntityManager, Repository } from "typeorm";
-import { createOneTimeToken } from "../auth/one-time-token.js";
 import { isUniqueViolation } from "../database/postgres-errors.js";
-import { driverWelcomeEmail } from "../drivers/driver-welcome.email.js";
+import { driverWelcomeText } from "../drivers/driver-welcome.text.js";
 import { Driver } from "../drivers/driver.entity.js";
 import { toUsE164 } from "../drivers/us-phone.js";
-import { MailService } from "../mail/mail.service.js";
+import { SmsContactKind } from "../sms/sms-contact.js";
+import { SmsService } from "../sms/sms.service.js";
 import { PasswordService } from "../users/password.service.js";
 import { Role, User } from "../users/user.entity.js";
+import { ApplicationAlertService } from "./application-alert.service.js";
 import { Application, ApplicationStatus } from "./application.entity.js";
 import {
   ApplicationDetailDto,
@@ -35,9 +37,6 @@ export interface ReceiveResult {
 /** A submission from the website: a flat JSON object whose values are mostly strings. */
 type Submission = Record<string, unknown>;
 
-/** How long a new driver's email verification link works. */
-const VERIFY_LINK_VALID_HOURS = 48;
-
 /**
  * Driver applications: intake from the website, the admin list and detail views, and review
  * (approve, reject, on hold).
@@ -50,7 +49,7 @@ const VERIFY_LINK_VALID_HOURS = 48;
 @Injectable()
 export class ApplicationsService {
   private readonly logger = new Logger(ApplicationsService.name);
-  /** Base address of the web app, for links in emails. */
+  /** Base address of the web app, for the login link in the text. */
   private readonly webAppUrl: string;
 
   constructor(
@@ -59,7 +58,8 @@ export class ApplicationsService {
     /** The database connection, used to run several writes as one transaction. */
     private readonly dataSource: DataSource,
     private readonly passwords: PasswordService,
-    private readonly mail: MailService,
+    private readonly sms: SmsService,
+    private readonly alerts: ApplicationAlertService,
     config: ConfigService,
   ) {
     this.webAppUrl = config.getOrThrow<string>("WEB_APP_URL");
@@ -143,10 +143,11 @@ export class ApplicationsService {
     });
 
     try {
-      return {
-        application: await this.applications.save(application),
-        created: true,
-      };
+      const saved = await this.applications.save(application);
+      // Staff are told by text (D53). Not waited for and never throws: the website's submission must succeed
+      // even if Quo is down. Only for a new application, never for a repeat of the same request_id.
+      this.alerts.notifyInBackground(saved);
+      return { application: saved, created: true };
     } catch (error) {
       if (!isUniqueViolation(error)) throw error;
       // `request_id` is the only unique column set on insert, so this is a repeat.
@@ -194,14 +195,17 @@ export class ApplicationsService {
 
   /**
    * Approves an application, in one transaction:
-   * 1. creates the driver's login (`users`, role `driver`) with a generated password, not yet
-   *    verified and required to change the password (D26);
+   * 1. creates the driver's login (`users`, role `driver`) with a generated password, required to
+   *    change it at first login (D26). The email counts as confirmed from the start: the driver
+   *    gets the login by text, which proves the phone, so there is no confirmation link (D52);
    * 2. creates the Driver, linked to that login;
    * 3. marks the application approved;
-   * 4. emails the driver their password and verification link.
+   * 4. texts the driver their email and temporary password, through the same chat as every other
+   *    text (D52): sent when SMS_MODE is `live`, saved as "Dry run: not sent" when `dry_run`
+   *    (the admin can read it in the chat and pass it on), refused when `off`.
    *
-   * The email is sent last, inside the transaction: if it fails, everything is rolled back and
-   * the admin can simply try again. (The reverse, email sent but the commit failing, is very
+   * The text is sent last, inside the transaction: if it fails, everything is rolled back and
+   * the admin can simply try again. (The reverse, text sent but the commit failing, is very
    * unlikely; the driver would hold a password for an account that does not exist, and
    * approving again sends a new one.)
    *
@@ -210,16 +214,13 @@ export class ApplicationsService {
    * @throws ConflictException if it is already approved, if a driver or login already has
    *   this email, or a driver has this phone.
    * @throws BadRequestException if the phone is not a valid US number.
-   * @throws ServiceUnavailableException if the welcome email could not be sent (nothing saved).
+   * @throws ServiceUnavailableException if the login text could not be sent (nothing saved).
    */
   async approve(id: string, adminId: string): Promise<ApplicationDetailDto> {
     // Prepared before the transaction: hashing is deliberately slow, and the row lock taken
     // inside should be held as briefly as possible.
     const temporaryPassword = this.passwords.generate();
     const passwordHash = await this.passwords.hash(temporaryPassword);
-    const verification = createOneTimeToken(
-      VERIFY_LINK_VALID_HOURS * 60 * 60 * 1000,
-    );
 
     try {
       const approved = await this.dataSource.transaction(async (manager) => {
@@ -261,8 +262,7 @@ export class ApplicationsService {
             passwordHash,
             role: Role.driver,
             mustChangePassword: true,
-            emailVerificationTokenHash: verification.tokenHash,
-            emailVerificationExpiresAt: verification.expiresAt,
+            emailVerifiedAt: new Date(),
           }),
         );
 
@@ -282,11 +282,7 @@ export class ApplicationsService {
         application.reviewedAt = new Date();
         const saved = await manager.save(application);
 
-        await this.sendWelcomeEmail(
-          application,
-          temporaryPassword,
-          verification.token,
-        );
+        await this.sendLoginText(application, temporaryPassword, adminId);
         return saved;
       });
       return this.toDetail(approved);
@@ -301,32 +297,37 @@ export class ApplicationsService {
   }
 
   /**
-   * Sends the approved driver their login details. Called inside the approval transaction.
-   * @throws ServiceUnavailableException if the email could not be sent; the cause is logged.
+   * Texts the approved driver their login details (D52). Called inside the approval transaction, through
+   * `SmsService.send`, so the text follows SMS_MODE, shows in the application's chat, and a failure comes back
+   * in plain words.
+   * @throws ServiceUnavailableException if the text could not be sent or saved; the cause is logged.
    */
-  private async sendWelcomeEmail(
+  private async sendLoginText(
     application: Application,
     temporaryPassword: string,
-    verificationToken: string,
+    adminId: string,
   ): Promise<void> {
     try {
-      await this.mail.send(
-        driverWelcomeEmail({
+      await this.sms.send(
+        SmsContactKind.applications,
+        application.id,
+        driverWelcomeText({
           firstName: application.firstName,
           email: application.email,
           temporaryPassword,
-          verifyUrl: `${this.webAppUrl}/driver/verify-email?token=${verificationToken}`,
           loginUrl: `${this.webAppUrl}/driver/login`,
-          validForHours: VERIFY_LINK_VALID_HOURS,
         }),
+        adminId,
       );
     } catch (error) {
       this.logger.error(
-        `Welcome email to ${application.email} failed; approval rolled back.`,
+        `Login text for application ${application.id} failed; approval rolled back.`,
         error instanceof Error ? error.stack : String(error),
       );
+      const reason =
+        error instanceof HttpException ? error.message : "Please try again.";
       throw new ServiceUnavailableException(
-        "The welcome email could not be sent, so nothing was approved. Please try again.",
+        `The login text could not be sent, so nothing was approved. ${reason}`,
       );
     }
   }
@@ -406,6 +407,8 @@ export class ApplicationsService {
       reviewedById: application.reviewedById,
       reviewedAt: application.reviewedAt,
       driverId: application.driverId,
+      alertedAt: application.alertedAt,
+      alertError: application.alertError,
     };
   }
 
@@ -421,6 +424,7 @@ export class ApplicationsService {
       city: application.city,
       submittedAt: application.submittedAt,
       receivedAt: application.createdAt,
+      alertError: application.alertError,
     };
   }
 

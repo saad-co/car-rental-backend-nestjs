@@ -22,6 +22,8 @@ export class ApplicationListItemDto {
   submittedAt: Date | null;
   /** When our API received it. */
   receivedAt: Date;
+  /** Why the alert text to staff about this application could not be sent; null if it did not fail. */
+  alertError: string | null;
 }
 
 /** One page of applications, newest first. */
@@ -49,4 +51,6 @@ export class ApplicationDetailDto extends ApplicationListItemDto {
   reviewedAt: Date | null;
   /** The driver created on approval. Null unless approved. */
   driverId: string | null;
+  /** When the alert text to staff was really sent; null if it was not (off, dry run, or failed). */
+  alertedAt: Date | null;
 }
