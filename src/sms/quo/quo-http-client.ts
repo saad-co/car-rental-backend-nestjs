@@ -7,9 +7,10 @@ import {
   type QuoMessagePage,
   type QuoMessageStatus,
 } from "./quo-client.js";
+import { field, str } from "./quo-json.js";
 
 const QUO_BASE_URL = "https://api.quo.com";
-const STATUSES: readonly string[] = [
+export const QUO_STATUSES: readonly string[] = [
   "queued",
   "sent",
   "delivered",
@@ -182,7 +183,7 @@ function parseMessage(raw: unknown): QuoMessage {
   if (direction !== "incoming" && direction !== "outgoing")
     throw new Error(`Quo message has an unknown direction: ${direction}`);
   const status = str(raw, "status");
-  if (!STATUSES.includes(status))
+  if (!QUO_STATUSES.includes(status))
     throw new Error(`Quo message has an unknown status: ${status}`);
   const to = field(raw, "to");
   if (!Array.isArray(to) || !to.every((n) => typeof n === "string"))
@@ -201,28 +202,11 @@ function parseMessage(raw: unknown): QuoMessage {
     status: status as QuoMessageStatus,
     createdAt,
     media: Array.isArray(media) ? media.map(parseMedia) : [],
+    errorCode: null,
   };
 }
 
-function parseMedia(raw: unknown): QuoMedia {
+export function parseMedia(raw: unknown): QuoMedia {
   const type = field(raw, "type", true);
   return { url: str(raw, "url"), type: typeof type === "string" ? type : null };
-}
-
-/** `value[key]`; throws when `value` is not an object, or the key is missing (unless `optional`). */
-function field(value: unknown, key: string, optional = false): unknown {
-  if (value === null || typeof value !== "object")
-    throw new Error(`Quo answer is not an object (looking for '${key}').`);
-  const found = (value as Record<string, unknown>)[key];
-  if (found === undefined && !optional)
-    throw new Error(`Quo answer is missing '${key}'.`);
-  return found;
-}
-
-/** A required non-empty string field. */
-function str(value: unknown, key: string): string {
-  const found = field(value, key);
-  if (typeof found !== "string" || found === "")
-    throw new Error(`Quo field '${key}' is not a non-empty string.`);
-  return found;
 }

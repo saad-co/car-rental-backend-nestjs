@@ -20,6 +20,8 @@ export interface QuoMessage {
   /** When Quo created it. */
   createdAt: Date;
   media: QuoMedia[];
+  /** Quo's reason when the text failed or was not delivered (webhooks only). Null otherwise. */
+  errorCode: string | null;
 }
 
 /** One page of a conversation's history, newest text first. */
