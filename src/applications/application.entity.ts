@@ -123,6 +123,17 @@ export class Application {
   reviewedAt: Date | null;
 
   /**
+   * When the "new application" alert text was really sent to staff (D53). Null if it was not sent (switched
+   * off, a dry run, or it failed).
+   */
+  @Column({ name: "alerted_at", type: "timestamptz", nullable: true })
+  alertedAt: Date | null;
+
+  /** Why the alert text could not be sent, in plain words (Quo's daily limit, no credits...). Null if it did not fail. */
+  @Column({ name: "alert_error", type: "text", nullable: true })
+  alertError: string | null;
+
+  /**
    * The driver created by approving this application. Set only when approved (enforced by the
    * `applications_approved_has_driver` CHECK above).
    */
