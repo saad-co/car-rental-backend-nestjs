@@ -15,6 +15,7 @@ import type { AuthenticatedUser } from "../auth/jwt-auth.guard.js";
 import { Public } from "../auth/public.decorator.js";
 import { ApplicationStatus } from "./application.entity.js";
 import { ApplicationsService } from "./applications.service.js";
+import { ApplicationDocumentCopier } from "./documents/application-document-copier.js";
 import {
   ApplicationDetailDto,
   ApplicationListDto,
@@ -28,7 +29,10 @@ import { ListApplicationsQueryDto } from "./dto/list-applications-query.dto.js";
  */
 @Controller("applications")
 export class ApplicationsController {
-  constructor(private readonly applications: ApplicationsService) {}
+  constructor(
+    private readonly applications: ApplicationsService,
+    private readonly documents: ApplicationDocumentCopier,
+  ) {}
 
   /**
    * `POST /applications`: receives a driver application from the gonzocar.com form.
@@ -46,7 +50,9 @@ export class ApplicationsController {
     schema: { type: "object", additionalProperties: true },
   })
   async receive(@Body() body: unknown): Promise<ApplicationReceivedDto> {
-    const { application } = await this.applications.receive(body);
+    const { application, created } = await this.applications.receive(body);
+    // The applicant's documents are copied into our storage right away, without making the website wait (D54).
+    if (created) this.documents.runInBackground();
     return { status: "received", application_id: application.id };
   }
 

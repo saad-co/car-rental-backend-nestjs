@@ -3,7 +3,11 @@ import { ConfigService } from "@nestjs/config";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { AttachmentDownloader } from "./attachments/attachment-downloader.js";
 import { QuoHttpClient } from "./quo/quo-http-client.js";
-import { S3FileStorage } from "./storage/s3-file-storage.js";
+import type { FileStorage } from "./storage/file-storage.js";
+import {
+  FILE_STORAGE,
+  FileStorageModule,
+} from "./storage/file-storage.module.js";
 import { QuoWebhookController } from "./quo-webhook.controller.js";
 import { SmsAttachment } from "./sms-attachment.entity.js";
 import { SmsMessage } from "./sms-message.entity.js";
@@ -18,15 +22,21 @@ import { SmsController } from "./sms.controller.js";
  * dry-run, and the chat just cannot sync history.
  */
 @Module({
-  imports: [TypeOrmModule.forFeature([SmsMessage, SmsAttachment])],
+  imports: [
+    TypeOrmModule.forFeature([SmsMessage, SmsAttachment]),
+    FileStorageModule,
+  ],
   controllers: [SmsController, QuoWebhookController],
   providers: [
     SmsService,
     AttachmentDownloader,
     {
       provide: SMS_DEPS,
-      inject: [ConfigService],
-      useFactory: (config: ConfigService): SmsDeps => {
+      inject: [ConfigService, FILE_STORAGE],
+      useFactory: (
+        config: ConfigService,
+        fileStorage: FileStorage | null,
+      ): SmsDeps => {
         const apiKey = config.get<string>("QUO_API_KEY");
         const phoneNumberId = config.get<string>("QUO_PHONE_NUMBER_ID");
         return {
@@ -37,20 +47,7 @@ import { SmsController } from "./sms.controller.js";
               : null,
           phoneNumberId: phoneNumberId || null,
           quoApiKey: apiKey || null,
-          // No bucket set: files stay "pending" in the chat (S3_* are validated together in env.validation.ts).
-          storage: config.get<string>("S3_BUCKET")
-            ? new S3FileStorage({
-                endpoint: config.getOrThrow<string>("S3_ENDPOINT"),
-                region: config.getOrThrow<string>("S3_REGION"),
-                bucket: config.getOrThrow<string>("S3_BUCKET"),
-                accessKeyId: config.getOrThrow<string>("S3_ACCESS_KEY_ID"),
-                secretAccessKey: config.getOrThrow<string>(
-                  "S3_SECRET_ACCESS_KEY",
-                ),
-                forcePathStyle:
-                  config.get<string>("S3_FORCE_PATH_STYLE") === "true",
-              })
-            : null,
+          storage: fileStorage,
         };
       },
     },
