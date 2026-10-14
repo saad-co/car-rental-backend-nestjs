@@ -4,6 +4,42 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-14 — Text alert to staff for every new application (D53)
+- **Done (backend):** `APPLICATION_ALERT_PHONE` (optional, validated US number; empty = no alerts);
+  `ApplicationAlertService` (name + link, started after the application is saved, never waited for, never throws);
+  `SmsService.sendAlert` and a shared private `deliver` (same mode / number / Quo rules as `send`); migration
+  `AddApplicationAlert` (`alerted_at`, `alert_error` on `applications`, nullable); `alertError` in the list and detail
+  API, `alertedAt` in the detail.
+- **Done (frontend):** a warning on the application page ("The text alert to staff … was not sent: <reason>") and an
+  "Alert not sent" marker in the list; client regenerated.
+- **Verified:** 102 unit + 54 e2e tests (6 new: dry_run saves name + link only, live sends once and records when, a
+  repeat sends nothing, no phone = nothing, a Quo daily-limit refusal leaves the application stored with the reason on
+  it, off). NOT yet tried on staging.
+- **NEXT:** merge, deploy (the migration runs on deploy), then set `APPLICATION_ALERT_PHONE=+12243282246` on the
+  backend in Railway. Staging is `live`: from then on every new application there texts that number (including test
+  and mirrored real ones). Check that the text arrives as a regular SMS (the number is a Quo line, see D53).
+- **Branch:** `feat/sms-driver-invite` (same branch as the driver-invite work below, separate commits).
+
+---
+
+### 2026-10-14 — Driver login by text instead of email (D52, B41, B62)
+- **Why:** staging could not send email (Railway blocks outbound SMTP on non-Pro plans), so no approval could complete;
+  the client mostly uses SMS and Quo is connected.
+- **Done (backend):** `ApplicationsService.approve` creates the login with `emailVerifiedAt` set (no token, no
+  confirmation link) and texts the driver their login link, email and temporary password through `SmsService.send`
+  (same chat, follows `SMS_MODE`; `live` sends, `dry_run` saves "not sent" so the admin can read it, `off` refuses; any
+  failure rolls the approval back with a plain message). New `driver-welcome.text.ts`; `driver-welcome.email.ts`
+  removed; `ApplicationsModule` imports `SmsModule` instead of `MailModule`.
+- **Done (frontend):** the Approve dialog says a text with the login will be sent.
+- **Verified:** 102 unit + 48 e2e tests (4 new: dry_run approves and the password in the saved text really opens the
+  account; live sends to the application's phone; off creates nothing; a Quo refusal rolls everything back with the
+  plain reason). NOT yet tried on staging.
+- **NEXT:** merge both PRs, deploy backend then frontend, approve ONLY the "Quo Test" application (US phone
+  305 721 0909, owner agreed) in `live`, check the text arrives and the login works; remove dead code (B41 list).
+- **Branches:** backend and frontend `feat/sms-driver-invite`.
+
+---
+
 ### 2026-10-14 — Quo chat on staging in `dry_run` (rollout steps 1-6 done; going live waits for a US test)
 - **Done:** PRs merged into `dev` (backend 5, frontend 6); Railway Storage Bucket added (variables are references to it,
   `S3_FORCE_PATH_STYLE=false`); `QUO_API_KEY`, `QUO_PHONE_NUMBER_ID=PNlq6NzLQ3`, `SMS_MODE=dry_run` set; both services

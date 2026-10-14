@@ -482,3 +482,35 @@ contact texts in shown in a separate Files tab. Chosen by Abulkalam on 2026-10-1
   has replied); rent reminders (M6) may move to Payments and Collections (+1 312 300 2032), which then needs the Quo
   number stored per message.
 **Why:** one thread per person on the number applicants already know; no new number or registration.
+
+### D52 — 2026-10-14 — Driver login is sent by text, not email (changes D26 and D33; closes B41 for approval)
+- When an admin approves an application, the driver gets one text from the business number (+1 312 736 2939) with the
+  login link, their email and a temporary password. It is sent through the same `SmsService.send` as every other text,
+  so it shows in the application's chat (and later the driver's), follows `SMS_MODE`, and a failure comes back in plain
+  words. Wording: `src/drivers/driver-welcome.text.ts`.
+- **No email, no confirmation link.** The user is created with `emailVerifiedAt` set: receiving the text is the proof
+  that the phone is theirs (Abulkalam, with the client: they mostly use SMS; Saad had agreed to drop confirmation, B41).
+  They still must choose their own password at first login (`mustChangePassword`, D33).
+- **By mode:** `live` sends; `dry_run` approves and saves the text as "Dry run: not sent" so the admin can read the
+  credentials in the chat and pass them on; `off` refuses the approval. If the text fails, the whole approval is rolled
+  back, as the email did (D26).
+- Why not email: Railway blocks outbound SMTP on non-Pro plans, so no approval could complete on staging (B62).
+- **Known trade-offs:** the temporary password sits in our `sms_messages` and in Quo's inbox, readable by anyone with
+  access to either; it must be changed at first login. A one-time "set your password" link would avoid putting a
+  password in a text (later, if wanted). `MailService` and `MAIL_*` settings are now unused; `POST /auth/verify-email`,
+  the unverified-login check and the frontend `/driver/verify-email` page are dead code, to be removed later.
+**Why:** simplest thing that works on staging and matches how the client communicates.
+
+### D53 — 2026-10-14 — Text alert to staff for every new application (Abulkalam)
+- When the website submits a NEW application (a repeat of the same `request_id` does not count), the system texts one
+  staff phone, `APPLICATION_ALERT_PHONE` (+1 224 328 2246): the applicant's name and a link to
+  `<WEB_APP_URL>/admin/applications/<id>`, nothing else (an SMS is not a safe place for more personal data).
+- **Same rules as every text:** `SMS_MODE` decides (`live` sends, `dry_run` only saves it, `off` skips) and every attempt
+  is a row in `sms_messages` (no `sent_by`, since the system sent it). `SmsService.sendAlert` never throws.
+- **It never gets in the way of the submission:** the alert starts after the application is saved and is not waited
+  for, so the website still gets its success answer if Quo is down (B22).
+- **No custom limit** (Abulkalam). If Quo refuses (daily limit, credits, A2P), the plain reason is written on the
+  application (`alert_error`; `alerted_at` when really sent) and shown on its page and as "Alert not sent" in the list.
+- One number for now; a list and a Settings-page switch can come later (M7). The number is a Quo line ("Primary");
+  whether it shows up on a person's phone depends on how that line is set up in Quo (to check on staging).
+**Why:** staff must notice new applications without watching the admin; Quo is connected and email is blocked on staging (B62).
