@@ -52,3 +52,22 @@ export function describeQuoFailure(error: unknown): string {
     return "Quo answered in a form we could not read. Details are in the server log.";
   return "Something went wrong. Details are in the server log.";
 }
+
+/** The sentence for a number that cannot get texts; callers may add a hint on where to fix it. */
+export function invalidUsNumberMessage(phone: string): string {
+  return `${phone} is not a valid US phone number, so no text can be sent to it.`;
+}
+
+/**
+ * Failures saved before the plain-language messages (2026-10-14) hold Quo's raw words, for example
+ * "Quo refused POST /v1/messages (400): At least one of the phone numbers in the `to` array is invalid". This reads
+ * such a stored text and returns the plain sentence; anything else is returned unchanged.
+ */
+export function friendlyStoredError(error: string | null): string | null {
+  if (error === null) return null;
+  const legacy = /^Quo refused \w+ \S+ \((\d{3})\): ([\s\S]*)$/.exec(error);
+  if (!legacy) return error;
+  return describeQuoFailure(
+    new QuoApiError(Number(legacy[1]), error, legacy[2]),
+  );
+}

@@ -38,6 +38,8 @@ export class SmsMessageListDto {
   nextCursor: string | null;
   /** The contact's number the chat is with (E.164). */
   contactPhone: string;
+  /** Why no text can be sent to this number (for example it cannot exist in the US); null when it can. */
+  contactPhoneProblem: string | null;
 }
 
 /** One file in the Files tab. */

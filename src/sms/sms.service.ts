@@ -25,6 +25,8 @@ import type {
 import type { QuoClient, QuoMessage } from "./quo/quo-client.js";
 import {
   describeQuoFailure,
+  friendlyStoredError,
+  invalidUsNumberMessage,
   isTextableUsNumber,
 } from "./quo/quo-failure-message.js";
 import type { QuoMessageEvent } from "./quo/quo-webhook-event.js";
@@ -209,7 +211,7 @@ export class SmsService {
     // Said before asking Quo, and nothing is saved: there is no text to show for a number that cannot get one.
     if (!isTextableUsNumber(contactPhone))
       throw new BadRequestException(
-        `${contactPhone} is not a valid US phone number, so no text can be sent to it. ${numberHint}`,
+        `${invalidUsNumberMessage(contactPhone)} ${numberHint}`,
       );
 
     const messages = this.dataSource.getRepository(SmsMessage);
@@ -304,6 +306,10 @@ export class SmsService {
           ? `${last.occurredAt.toISOString()}_${last.id}`
           : null,
       contactPhone,
+      // Said up front, so the admin never types a text that cannot go (a number registered wrongly).
+      contactPhoneProblem: isTextableUsNumber(contactPhone)
+        ? null
+        : `${invalidUsNumberMessage(contactPhone)} Check the number on the ${kind === SmsContactKind.drivers ? "driver" : "application"}.`,
     };
   }
 
@@ -558,7 +564,8 @@ export class SmsService {
       body: row.body,
       mode: row.mode,
       status: row.status,
-      error: row.error,
+      // Failures saved with Quo's raw words (before the plain-language messages) are shown in plain words too.
+      error: friendlyStoredError(row.error),
       sentByEmail: row.sentBy?.email ?? null,
       occurredAt: row.occurredAt,
       attachments: await Promise.all(
