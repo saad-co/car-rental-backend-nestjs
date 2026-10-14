@@ -113,6 +113,9 @@ Balance = sum(credits) − sum(debits). Never stored.
 **SmsMessage** — `driverId`, `direction` (`outbound` | `inbound`), `body`, `templateKey`,
 `mode` (`dry_run` | `live`), `status` (`composed` | `sent` | `delivered` | `failed` | `received`),
 `quoMessageId`, `error`, `reminderTier`, `createdAt`.
+*As built for the chat (D50, D51), keyed by phone, not by driver:* `sms_messages` has `contactPhone` (E.164) instead of
+`driverId`, `sentById`, `occurredAt`, and statuses `composed | queued | sent | delivered | undelivered | failed | received`;
+`templateKey` and `reminderTier` come with the reminders (M6). A separate `sms_attachments` table holds the files.
 
 **MessageTemplate** — `key`, `body` with placeholders `{firstName}`, `{balance}`, `{daysLate}`, `{rate}`.
 
