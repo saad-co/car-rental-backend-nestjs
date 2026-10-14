@@ -192,6 +192,28 @@ class EnvironmentVariables {
   APPLICATION_ALERT_PHONE?: string;
 
   /**
+   * Full address of the website's read-only function that hands out the applicants' uploaded documents (D54), e.g.
+   * `https://<project>.supabase.co/functions/v1/get-driver-document`. Empty or unset: documents are not copied.
+   */
+  @ValidateIf(
+    (env: EnvironmentVariables) =>
+      env.DOCUMENTS_SOURCE_URL !== undefined && env.DOCUMENTS_SOURCE_URL !== "",
+  )
+  @IsUrl({ require_tld: true, require_protocol: true, protocols: ["https"] })
+  DOCUMENTS_SOURCE_URL?: string;
+
+  /** The shared secret that function checks (its `DOCUMENTS_READ_TOKEN`). Required when DOCUMENTS_SOURCE_URL is set. */
+  @ValidateIf(
+    (env: EnvironmentVariables) =>
+      env.DOCUMENTS_SOURCE_URL !== undefined && env.DOCUMENTS_SOURCE_URL !== "",
+  )
+  @IsString()
+  @MinLength(16, {
+    message: "DOCUMENTS_SOURCE_TOKEN must be at least 16 characters",
+  })
+  DOCUMENTS_SOURCE_TOKEN?: string;
+
+  /**
    * Where files texted in by drivers are copied (S3-compatible bucket: MinIO locally, a Railway Storage
    * Bucket on staging). Optional: with no bucket, files stay "pending" in the chat. Once S3_BUCKET is set,
    * the other S3_* settings are required.

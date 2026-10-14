@@ -4,6 +4,29 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-14 — Applicants' documents copied from the website into our storage (D54, B17, B45)
+- **Why:** the licence, rating and earnings uploads sit in the website's private Supabase bucket; the admin only saw
+  "Uploaded", and the website can delete old files (its archive page).
+- **Done (backend):** table `application_documents` (migration `CreateApplicationDocuments`); `DocumentSource` interface
+  + `SupabaseDocumentSource` (asks the website's read-only function for a 60-second signed link, then downloads it, 25 MB
+  cap); `ApplicationDocumentCopier` (every minute and right after a new application; records missing rows first = backfill;
+  5 attempts; a refused token stops the run without using attempts); `GET /applications/:id/documents` (signed links, 10
+  minutes); shared `FileStorageModule`; settings `DOCUMENTS_SOURCE_URL` / `DOCUMENTS_SOURCE_TOKEN` (optional).
+- **Done on the website (Lovable, by Abulkalam):** edge function `get-driver-document` at
+  `https://htaaxbghiuvgnmkwkdlh.supabase.co/functions/v1/get-driver-document`, secret `DOCUMENTS_READ_TOKEN`
+  (read-only; 401 wrong token, 404 no file, 400 bad path). Only the wrong-token case was tested by Lovable.
+- **Done (frontend):** the Documents tab shows the pictures (or "Copying…", "not set up", or the failure reason).
+- **Verified:** 108 unit + 62 e2e tests (new: the source adapter, the copier incl. backfill / gone file / refused token /
+  retries, the list route); the Documents tab in the browser with a stored, a pending and a failed document (local).
+  NOT yet tried against the real function or real files.
+- **NEXT:** merge and deploy (the migration runs); in Railway set `DOCUMENTS_SOURCE_URL` (the function URL above) and
+  `DOCUMENTS_SOURCE_TOKEN` (same value as `DOCUMENTS_READ_TOKEN`, typed by Abulkalam); the next minute the existing
+  applications are backfilled; open an application's Documents tab and check. Ask the client NOT to use the website's
+  "Delete archived files" until the copies are verified.
+- **Branch:** `feat/application-documents` (both repos).
+
+---
+
 ### 2026-10-14 — Text alert to staff for every new application (D53)
 - **Done (backend):** `APPLICATION_ALERT_PHONE` (optional, validated US number; empty = no alerts);
   `ApplicationAlertService` (name + link, started after the application is saved, never waited for, never throws);

@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { Driver } from "../drivers/driver.entity.js";
 import { SmsModule } from "../sms/sms.module.js";
@@ -7,6 +8,19 @@ import { Application } from "./application.entity.js";
 import { ApplicationAlertService } from "./application-alert.service.js";
 import { ApplicationsController } from "./applications.controller.js";
 import { ApplicationsService } from "./applications.service.js";
+import {
+  ApplicationDocumentCopier,
+  DOCUMENT_COPIER_DEPS,
+  type DocumentCopierDeps,
+} from "./documents/application-document-copier.js";
+import { ApplicationDocument } from "./documents/application-document.entity.js";
+import { ApplicationDocumentsController } from "./documents/application-documents.controller.js";
+import { SupabaseDocumentSource } from "./documents/supabase-document-source.js";
+import type { FileStorage } from "../sms/storage/file-storage.js";
+import {
+  FILE_STORAGE,
+  FileStorageModule,
+} from "../sms/storage/file-storage.module.js";
 
 /**
  * Driver applications: intake from the website and admin review.
@@ -19,11 +33,37 @@ import { ApplicationsService } from "./applications.service.js";
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Application, Driver]),
+    TypeOrmModule.forFeature([Application, Driver, ApplicationDocument]),
     UsersModule,
     SmsModule,
+    FileStorageModule,
   ],
-  controllers: [ApplicationsController],
-  providers: [ApplicationsService, ApplicationAlertService],
+  controllers: [ApplicationsController, ApplicationDocumentsController],
+  providers: [
+    ApplicationsService,
+    ApplicationAlertService,
+    ApplicationDocumentCopier,
+    {
+      // The website's read-only document function (D54). Without DOCUMENTS_SOURCE_URL the source is null:
+      // documents are listed as pending and nothing is copied.
+      provide: DOCUMENT_COPIER_DEPS,
+      inject: [ConfigService, FILE_STORAGE],
+      useFactory: (
+        config: ConfigService,
+        storage: FileStorage | null,
+      ): DocumentCopierDeps => {
+        const functionUrl = config.get<string>("DOCUMENTS_SOURCE_URL");
+        return {
+          source: functionUrl
+            ? new SupabaseDocumentSource({
+                functionUrl,
+                token: config.getOrThrow<string>("DOCUMENTS_SOURCE_TOKEN"),
+              })
+            : null,
+          storage,
+        };
+      },
+    },
+  ],
 })
 export class ApplicationsModule {}

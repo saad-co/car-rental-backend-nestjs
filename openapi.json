@@ -351,6 +351,36 @@
         ]
       }
     },
+    "/applications/{id}/documents": {
+      "get": {
+        "operationId": "ApplicationDocumentsController_list",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationDocumentListDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "ApplicationDocuments"
+        ]
+      }
+    },
     "/sms/status": {
       "get": {
         "operationId": "SmsController_status",
@@ -1239,6 +1269,84 @@
           "reviewedAt",
           "driverId",
           "alertedAt"
+        ]
+      },
+      "ApplicationDocumentDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "description": "Which upload on the form: licence, rating screenshot or earnings screenshot.",
+            "enum": [
+              "license",
+              "rating",
+              "earnings"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "description": "`stored`: our copy can be opened; `pending`: still being copied; `failed`: it cannot be copied (see `error`).",
+            "enum": [
+              "pending",
+              "stored",
+              "failed"
+            ]
+          },
+          "contentType": {
+            "type": "string",
+            "nullable": true,
+            "description": "MIME type, e.g. `image/png`; null if unknown."
+          },
+          "sizeBytes": {
+            "type": "number",
+            "nullable": true
+          },
+          "url": {
+            "type": "string",
+            "nullable": true,
+            "description": "Short-lived link (about 10 minutes) to open our copy. Null unless `stored`."
+          },
+          "error": {
+            "type": "string",
+            "nullable": true,
+            "description": "Why it could not be copied, in plain words. Null if it did not fail."
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "status",
+          "contentType",
+          "sizeBytes",
+          "url",
+          "error"
+        ]
+      },
+      "ApplicationDocumentListDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApplicationDocumentDto"
+            }
+          },
+          "sourceConnected": {
+            "type": "boolean",
+            "description": "Whether the website's document function is connected (`DOCUMENTS_SOURCE_*`); without it nothing can be copied."
+          },
+          "storageConnected": {
+            "type": "boolean",
+            "description": "Whether our file bucket is connected (`S3_*`); without it nothing can be stored."
+          }
+        },
+        "required": [
+          "items",
+          "sourceConnected",
+          "storageConnected"
         ]
       },
       "SmsStatusDto": {

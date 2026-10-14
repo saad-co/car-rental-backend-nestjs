@@ -514,3 +514,23 @@ contact texts in shown in a separate Files tab. Chosen by Abulkalam on 2026-10-1
 - One number for now; a list and a Settings-page switch can come later (M7). The number is a Quo line ("Primary");
   whether it shows up on a person's phone depends on how that line is set up in Quo (to check on staging).
 **Why:** staff must notice new applications without watching the admin; Quo is connected and email is blocked on staging (B62).
+
+### D54 — 2026-10-14 — Applicants' uploaded documents are copied from the website into our own storage (settles B17, B45)
+- The gonzocar.com form (Lovable Cloud, Supabase) keeps licence, rating and earnings uploads in a **private** bucket
+  `driver-documents`; the application only stores their paths (`license_storage_path` ...). The website also has a
+  "Driver document archive" page whose function can list, zip and **delete** old files "to free space", so the website's
+  copy may disappear.
+- **We copy each file into our own private bucket** (`applications/<applicationId>/<kind>-<id>.<ext>`) and record it in
+  `application_documents` (one row per application and kind: pending / stored / failed, plain-language reason, 5 attempts).
+  The copier (`ApplicationDocumentCopier`) runs every minute and right after a new application, and first records a
+  row for every path that has none yet, so applications that arrived earlier are **backfilled automatically**.
+- **How we read the website's bucket:** not with the archive token (it can delete) and not with a service key. The
+  website got one small **read-only edge function** `get-driver-document` (Lovable, 2026-10-14): `POST {path}` with the
+  header `x-documents-token` (its secret `DOCUMENTS_READ_TOKEN`), answers a 60-second signed link; it never lists, moves
+  or deletes. Our settings: `DOCUMENTS_SOURCE_URL`, `DOCUMENTS_SOURCE_TOKEN` (same value as that secret). Without them
+  documents stay "pending" and the page says the connection is not set up. A refused token stops the run without using
+  attempts, so it recovers by itself once fixed.
+- The admin Documents tab shows our copies (pictures, links valid about 10 minutes, "Copying…", or the reason a copy
+  failed). Nothing is ever written to or deleted from the website's storage by us.
+- The shared file bucket is now one provider (`FileStorageModule`, `FILE_STORAGE`), used by the chat files and these documents.
+**Why:** the files are driver licences the admin must be able to see, and the website may clear its storage; we need our own copy.
