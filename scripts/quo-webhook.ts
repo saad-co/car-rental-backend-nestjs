@@ -5,6 +5,8 @@
  *
  *   npm run quo:webhook -- list
  *   npm run quo:webhook -- create https://<our backend>/webhooks/quo
+ *   npm run quo:webhook -- test <webhook id>         (Quo sends a sample event to our URL; no real text)
+ *   npm run quo:webhook -- deliveries <webhook id>   (did our API accept it? success / failed)
  *   npm run quo:webhook -- delete <webhook id>
  *
  * Why a script and not the dashboard: a webhook made through the API with `Quo-Api-Version: 2026-03-30` is
@@ -82,6 +84,41 @@ if (command === "list") {
     "\nSigning secret (shown ONCE; put it in QUO_WEBHOOK_SECRET on the backend):",
   );
   console.log(hook.key);
+} else if (command === "test") {
+  if (!argument)
+    throw new Error("Usage: npm run quo:webhook -- test <webhook id>");
+  // Quo sends a sample `message.received` to our URL, signed with the real secret. The sample sender is nobody's
+  // phone, so our API answers 200 "skipped": that proves the signature and the payload format, with no real text.
+  const answer = await call(
+    "POST",
+    `/webhooks/${encodeURIComponent(argument)}/events/test`,
+    { eventType: "message.received" },
+  );
+  console.log(
+    "Test event dispatched (asynchronously). Check the result in a few seconds with:",
+  );
+  console.log(`  npm run quo:webhook -- deliveries ${argument}`);
+  console.log(JSON.stringify(answer, null, 2).slice(0, 800));
+} else if (command === "deliveries") {
+  if (!argument)
+    throw new Error("Usage: npm run quo:webhook -- deliveries <webhook id>");
+  const answer = await call(
+    "GET",
+    `/webhooks/${encodeURIComponent(argument)}/events?limit=10`,
+  );
+  const deliveries = (answer?.data ?? []) as {
+    id: string;
+    eventType: string;
+    status: string;
+    nextAttemptAt: string | null;
+    createdAt: string;
+  }[];
+  console.log(`${deliveries.length} recent delivery(ies), newest first:\n`);
+  for (const d of deliveries) {
+    console.log(
+      `${d.createdAt}  ${d.status.toUpperCase().padEnd(8)} ${d.eventType}${d.nextAttemptAt ? `  (retry at ${d.nextAttemptAt})` : ""}`,
+    );
+  }
 } else if (command === "delete") {
   if (!argument)
     throw new Error("Usage: npm run quo:webhook -- delete <webhook id>");
@@ -89,6 +126,6 @@ if (command === "list") {
   console.log(`Deleted webhook ${argument}.`);
 } else {
   throw new Error(
-    "Usage: npm run quo:webhook -- list | create <https url> | delete <id>",
+    "Usage: npm run quo:webhook -- list | create <https url> | test <id> | deliveries <id> | delete <id>",
   );
 }
