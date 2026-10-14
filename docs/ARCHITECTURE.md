@@ -2,8 +2,9 @@
 
 > **Status 2026-10-13: partly built.** Built: API scaffold, Postgres + TypeORM, admin auth, OpenAPI export; driver
 > applications and drivers (with logins); payment email intake (IMAP, DKIM, AI extraction), payments, payment aliases
-> and automatic matching, admin Payments / Email log / Drivers pages; staging on Railway (D43). Not built: ledger,
-> billing, Plaid, Quo SMS, settings. The rest describes the target design.
+> and automatic matching, admin Payments / Email log / Drivers pages; staging on Railway (D43); the Quo chat (send,
+> receive, files) on the application and driver pages, tested locally, not yet live on staging (D50, D51). Not built:
+> ledger, billing, Plaid, SMS reminders and opt-out, settings. The rest describes the target design.
 > As components are built, update this file to match the code. Where they differ, the code wins.
 
 ## Components
@@ -22,7 +23,8 @@ through a client generated from the API's OpenAPI document.
 | Gmail (IMAP) | Zelle, Cash App, Venmo, Stripe and Chime notification emails in `gonzobilling@gmail.com` (D38) | API polls every 3 minutes |
 | Plaid | Zelle deposits in the Chase business account | Webhook + scheduled sync |
 | LLM | Extracting payment data from emails; matching payments to drivers | API calls |
-| Quo (formerly OpenPhone) | Outbound SMS reminders; inbound replies and delivery status | API calls + webhooks |
+| Quo (formerly OpenPhone) | Chat with applicants and drivers on the general line (built); later reminders. Sends on API v1 (text only); history read on v1; inbound texts, files and delivery status by signed webhook | API calls + webhooks |
+| S3-compatible bucket | Copies of files texted in by contacts (MinIO locally via docker-compose, Railway Storage Bucket on staging); opened only through 10-minute signed links | API writes, admin browser reads via signed link |
 
 ## Payment data flow
 ```
@@ -43,6 +45,7 @@ Full rules: `PHASE1_SPEC.md` sections 5–8.
 | `src/payments/` | `payments` table, admin list, manual assign |
 | `src/aliases/` | `payment_aliases` table, normalisation |
 | `src/matching/` | `MatchingService`, `AliasIndex`, AI driver matcher |
+| `src/sms/` | Quo chat (D50, D51): `sms_messages` / `sms_attachments`, `SmsService` (send by `SMS_MODE`, list, history sync, webhook apply), admin routes `/sms/...`, `POST /webhooks/quo` (signature-checked). Subfolders: `quo/` (client behind an interface, signature check, event parser), `storage/` (S3-compatible bucket behind an interface), `attachments/` (copies texted-in files into the bucket) |
 
 `scripts/` holds developer tools (not part of the API): IMAP peek, extraction evaluation, old-database report and imports.
 

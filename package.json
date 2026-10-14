@@ -34,6 +34,10 @@
     "samples:show": "tsx --env-file-if-exists=.env scripts/samples-show.ts",
     "extract:eval": "tsx --env-file-if-exists=.env scripts/extract-eval.ts",
     "llm:probe": "tsx --env-file-if-exists=.env scripts/llm-probe.ts",
+    "quo:numbers": "tsx --env-file-if-exists=.env scripts/quo-numbers.ts",
+    "quo:simulate": "tsx --env-file-if-exists=.env scripts/quo-simulate.ts",
+    "quo:webhook": "tsx --env-file-if-exists=.env scripts/quo-webhook.ts",
+    "storage:init": "tsx --env-file-if-exists=.env scripts/storage-init.ts",
     "legacy:report": "tsx --env-file-if-exists=.env scripts/legacy-report.ts",
     "legacy:import-drivers": "tsx --env-file-if-exists=.env scripts/legacy-import-drivers.ts",
     "legacy:import-aliases": "tsx --env-file-if-exists=.env scripts/legacy-import-aliases.ts",
@@ -41,6 +45,8 @@
     "openapi:export": "nest build && node --env-file-if-exists=.env dist/openapi/export-openapi.js"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1151.0",
+    "@aws-sdk/s3-request-presigner": "^3.1151.0",
     "@google/genai": "^2.28.0",
     "@nestjs/common": "^12.0.1",
     "@nestjs/config": "^12.0.1",

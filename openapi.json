@@ -655,6 +655,250 @@
           "Payments"
         ]
       }
+    },
+    "/sms/status": {
+      "get": {
+        "operationId": "SmsController_status",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SmsStatusDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`GET /sms/status`: SMS mode and what is connected.",
+        "tags": [
+          "Sms"
+        ]
+      }
+    },
+    "/sms/{kind}/{id}/messages": {
+      "get": {
+        "operationId": "SmsController_list",
+        "parameters": [
+          {
+            "name": "kind",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "description": "Texts per page (1 to 100), newest first.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 30,
+              "type": "number"
+            }
+          },
+          {
+            "name": "before",
+            "required": false,
+            "in": "query",
+            "description": "The `nextCursor` of the previous page, to get the texts before it. Omit for the newest.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SmsMessageListDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`GET /sms/:kind/:id/messages`: one page of the chat, newest first.",
+        "tags": [
+          "Sms"
+        ]
+      },
+      "post": {
+        "operationId": "SmsController_send",
+        "parameters": [
+          {
+            "name": "kind",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendSmsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SmsMessageDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`POST /sms/:kind/:id/messages`: sends a text, according to SMS_MODE.\n`409` texting is off, `502` Quo refused (the failure is saved and shown in the chat),\n`400` the application's phone is not a US number, `404` unknown record.",
+        "tags": [
+          "Sms"
+        ]
+      }
+    },
+    "/sms/{kind}/{id}/sync": {
+      "post": {
+        "operationId": "SmsController_sync",
+        "parameters": [
+          {
+            "name": "kind",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SmsSyncResultDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`POST /sms/:kind/:id/sync`: pulls this contact's history from Quo (texts sent from the Quo app too).",
+        "tags": [
+          "Sms"
+        ]
+      }
+    },
+    "/sms/{kind}/{id}/files": {
+      "get": {
+        "operationId": "SmsController_files",
+        "parameters": [
+          {
+            "name": "kind",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "description": "Page number, starting at 1.",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "description": "Items per page (1 to 100).",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SmsFileListDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`GET /sms/:kind/:id/files`: the files in this contact's conversation, newest first.",
+        "tags": [
+          "Sms"
+        ]
+      }
+    },
+    "/webhooks/quo": {
+      "post": {
+        "operationId": "QuoWebhookController_receive",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "QuoWebhook"
+        ]
+      }
     }
   },
   "info": {
@@ -1421,6 +1665,277 @@
           "payment",
           "aliasSaved",
           "aliasOwnedBy"
+        ]
+      },
+      "SmsStatusDto": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "description": "`off`: sending refused. `dry_run`: texts are saved, not sent. `live`: really sent.",
+            "enum": [
+              "off",
+              "dry_run",
+              "live"
+            ]
+          },
+          "quoConfigured": {
+            "type": "boolean",
+            "description": "Whether the Quo API key and number are set, which syncing the history needs."
+          },
+          "filesConfigured": {
+            "type": "boolean",
+            "description": "Whether the file bucket is set; without it files stay pending."
+          }
+        },
+        "required": [
+          "mode",
+          "quoConfigured",
+          "filesConfigured"
+        ]
+      },
+      "SmsAttachmentDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "contentType": {
+            "type": "string",
+            "nullable": true,
+            "description": "MIME type, e.g. `image/jpeg`; null if unknown."
+          },
+          "sizeBytes": {
+            "type": "number",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "description": "`stored` files can be opened; `pending` ones are still being copied; `failed` ones never will be.",
+            "enum": [
+              "pending",
+              "stored",
+              "failed"
+            ]
+          },
+          "url": {
+            "type": "string",
+            "nullable": true,
+            "description": "Short-lived link to open the file (about 10 minutes). Null unless `stored`."
+          }
+        },
+        "required": [
+          "id",
+          "contentType",
+          "sizeBytes",
+          "status",
+          "url"
+        ]
+      },
+      "SmsMessageDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "direction": {
+            "enum": [
+              "inbound",
+              "outbound"
+            ],
+            "type": "string"
+          },
+          "body": {
+            "type": "string",
+            "description": "The words; empty for a text that is only a file."
+          },
+          "mode": {
+            "nullable": true,
+            "description": "Null for inbound texts. `dry_run` texts were never sent.",
+            "enum": [
+              "dry_run",
+              "live"
+            ],
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "composed",
+              "queued",
+              "sent",
+              "delivered",
+              "undelivered",
+              "failed",
+              "received"
+            ],
+            "type": "string"
+          },
+          "error": {
+            "type": "string",
+            "nullable": true,
+            "description": "Why it failed, when it did."
+          },
+          "sentByEmail": {
+            "type": "string",
+            "nullable": true,
+            "description": "The admin who sent it from this app; null for inbound texts and texts sent from the Quo app."
+          },
+          "occurredAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "When it happened (Quo's time)."
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SmsAttachmentDto"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "direction",
+          "body",
+          "mode",
+          "status",
+          "error",
+          "sentByEmail",
+          "occurredAt",
+          "attachments"
+        ]
+      },
+      "SmsMessageListDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SmsMessageDto"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true,
+            "description": "Pass as `before` to get the next, older page. Null when there is nothing older."
+          },
+          "contactPhone": {
+            "type": "string",
+            "description": "The contact's number the chat is with (E.164)."
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor",
+          "contactPhone"
+        ]
+      },
+      "SendSmsDto": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "The words to send, 1 to 1600 characters (Quo's limit). Plain text only: Quo's API cannot send files.",
+            "minLength": 1,
+            "maxLength": 1600
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "SmsSyncResultDto": {
+        "type": "object",
+        "properties": {
+          "fetched": {
+            "type": "number",
+            "description": "Texts Quo returned."
+          },
+          "added": {
+            "type": "number",
+            "description": "Of those, how many were new to us."
+          }
+        },
+        "required": [
+          "fetched",
+          "added"
+        ]
+      },
+      "SmsFileDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "contentType": {
+            "type": "string",
+            "nullable": true,
+            "description": "MIME type, e.g. `image/jpeg`; null if unknown."
+          },
+          "sizeBytes": {
+            "type": "number",
+            "nullable": true
+          },
+          "status": {
+            "description": "`stored` files can be opened; `pending` ones are still being copied; `failed` ones never will be.",
+            "enum": [
+              "pending",
+              "stored",
+              "failed"
+            ],
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "nullable": true,
+            "description": "Short-lived link to open the file (about 10 minutes). Null unless `stored`."
+          },
+          "direction": {
+            "type": "string",
+            "description": "Who sent it: `inbound` = the contact texted it to us.",
+            "enum": [
+              "inbound",
+              "outbound"
+            ]
+          },
+          "occurredAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "contentType",
+          "sizeBytes",
+          "status",
+          "url",
+          "direction",
+          "occurredAt"
+        ]
+      },
+      "SmsFileListDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SmsFileDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          },
+          "page": {
+            "type": "number"
+          },
+          "limit": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit"
         ]
       }
     }

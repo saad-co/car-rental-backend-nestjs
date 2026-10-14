@@ -10,7 +10,8 @@ import { buildOpenApiDocument } from "./openapi/openapi.js";
  * validation and starts listening.
  */
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // rawBody keeps the exact request bytes next to the parsed body: Quo signs the raw bytes (D50).
+  const app = await NestFactory.create(AppModule, { rawBody: true });
   const config = app.get(ConfigService);
 
   // CORS: browsers block a page on one address (e.g. localhost:5173) from calling an API

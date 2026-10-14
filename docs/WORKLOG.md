@@ -4,6 +4,52 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-14 — Quo chat: send, receive, files, on the application and driver pages (D50, D51; B46)
+- **Done (backend):** `sms_messages` + `sms_attachments` (migration `CreateSms`, CHECKs and UNIQUE keys in the database);
+  `src/sms/`: `QuoClient` interface + HTTP adapter (v1 send and history), webhook signature check
+  (`verify-quo-signature.ts`) and event parser, `SmsService` (send by `SMS_MODE` off / dry_run / live, list, history sync,
+  webhook apply: idempotent on the Quo id, status only moves forward, only known contacts stored), `SmsController`
+  (`/sms/status`, `/sms/:kind/:id/messages|sync|files`), `POST /webhooks/quo` (public, signature-checked, `rawBody: true`),
+  `AttachmentDownloader` (copies MMS files into the bucket, minute cron + right after a webhook/sync, 25 MB cap,
+  5 attempts), `S3FileStorage` (MinIO locally, Railway Storage Bucket on staging), env `SMS_MODE`, `QUO_*`, `S3_*`.
+  Scripts: `quo:numbers`, `quo:simulate`, `storage:init`. MinIO in `docker-compose.yml` (Chainguard image: Docker Hub
+  no longer has MinIO).
+- **Done (frontend):** `src/api/sms.queries.ts`, `components/sms/` (`ConversationCard` with Messages and Files tabs,
+  polls every 10 s), placed in the side column of `ApplicationDetail` and `DriverDetail`.
+- **Verified:** 88 unit + 43 e2e tests (new: 12 + 7); real HTTP: signed webhook stored, forged 401, stranger skipped;
+  real MinIO: a public PNG copied and shown through a signed link; dead links recorded as failed with the reason;
+  browser walkthrough of the application page (dry-run send, incoming text appears by itself, Files tab, no console
+  errors); the sync read the real Quo account (read-only) with 200. NOT tested: the driver page in the browser (it would
+  pull a real driver's texts), a live send, a real webhook from Quo.
+- **Found / fixed:** an empty `S3_BUCKET=` line made the app refuse to start (fixed in `env.validation.ts`).
+- **Not done / open:** live send and webhook on staging (B59: client's OK for the webhook; credits and A2P still to
+  confirm; staging bucket and variables, then deploy, create the webhook, one real text and MMS, then `live`);
+  STOP/opt-out (B58); "more info" status, decision texts, upload link (B47); media-link expiry (B57); the Settings
+  table replaces `SMS_MODE` (M7); chat on other Quo numbers (D51).
+- **NEXT, exact steps (staging rollout; Saad said "bring it live" on 2026-10-14; a short chat "03 - Quo chat (staging rollout)"):**
+  1. Review, commit and push both repos; PRs into `dev` (Abulkalam opens, Saad merges), or deploy from the branch if Saad
+     prefers (`railway up` uploads the working folder).
+  2. Railway dashboard (typed by Abulkalam, never in chat), project `car-rental-staging`: add a **Storage Bucket**;
+     on the `backend` service set `S3_BUCKET`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` (variable
+     references to the bucket's own values), `S3_REGION=auto`, `S3_FORCE_PATH_STYLE=false` (if the first file link
+     fails, try `true`), `QUO_API_KEY`, `QUO_PHONE_NUMBER_ID=PNlq6NzLQ3`, **`SMS_MODE=dry_run`**. Apply.
+  3. `railway up --service backend`, then `--service frontend` (D43). The pre-deploy command runs `CreateSms`.
+  4. Open any application as admin: the card must show the "Dry run" badge and load. Logs: no errors.
+  5. Create the webhook from your terminal, with the staging URL (needs Saad's OK, changes the client's Quo):
+     `npm run quo:webhook -- create https://backend-production-1f569.up.railway.app/webhooks/quo`. It prints the
+     secret once: set `QUO_WEBHOOK_SECRET` in Railway, Apply. Do NOT use the dashboard's webhook page (other signature format).
+  6. Make a test application with YOUR OWN phone (the website form as on 2026-10-11, then reject it in the old system).
+     Text the general line from your phone: it must appear in that application's chat within seconds; send a photo:
+     it must appear in Files.
+  7. Only then go live: `SMS_MODE=live` in Railway, Apply. Send ONE text from the test application's chat to your own
+     phone; reply from the phone; confirm. Never click Send on a real applicant or driver before Saad agrees.
+  8. Tell Saad; remove the test application; later dev to main (Saad).
+- **Local test data to remove:** application with `request_id = 'quo-sim-test'` and its texts
+  (`DELETE FROM applications WHERE request_id='quo-sim-test'; DELETE FROM sms_messages WHERE contact_phone='+13125550188';`).
+- **Branches:** backend and frontend `feature/quo-chat` (both merged with `dev` on 2026-10-14; nothing pushed after that).
+
+---
+
 ### 2026-10-13 — Matching, aliases, one-stage payments, Payments / Email log / Drivers pages (D48, D49)
 - **Done (backend):** `payment_aliases` (UNIQUE type+value; types = payment methods + email/phone) and
   `npm run legacy:import-aliases` (dry run, `--apply --target=<db>`, skips damaged old aliases); match columns on

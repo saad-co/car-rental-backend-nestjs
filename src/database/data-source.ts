@@ -5,6 +5,8 @@ import { Application } from "../applications/application.entity.js";
 import { Driver } from "../drivers/driver.entity.js";
 import { InboundEmail } from "../email-intake/inbound-email.entity.js";
 import { Payment } from "../payments/payment.entity.js";
+import { SmsAttachment } from "../sms/sms-attachment.entity.js";
+import { SmsMessage } from "../sms/sms-message.entity.js";
 import { User } from "../users/user.entity.js";
 import { buildBaseOptions } from "./typeorm-options.js";
 
@@ -18,7 +20,16 @@ if (!databaseUrl) {
 
 export default new DataSource({
   ...buildBaseOptions(databaseUrl),
-  entities: [User, Driver, Application, InboundEmail, Payment, PaymentAlias],
+  entities: [
+    User,
+    Driver,
+    Application,
+    InboundEmail,
+    Payment,
+    PaymentAlias,
+    SmsMessage,
+    SmsAttachment,
+  ],
   // `.ts` when run from the sources (tsx, local), `.js` when run compiled (production). Never
   // both: the build also writes `.d.ts` type files next to each migration, which are not migrations.
   migrations: [
