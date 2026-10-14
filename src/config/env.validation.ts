@@ -4,7 +4,6 @@ import {
   IsIn,
   IsInt,
   IsNotEmpty,
-  IsOptional,
   IsString,
   IsUrl,
   Matches,
@@ -182,9 +181,8 @@ class EnvironmentVariables {
    * Bucket on staging). Optional: with no bucket, files stay "pending" in the chat. Once S3_BUCKET is set,
    * the other S3_* settings are required.
    */
-  @IsOptional()
+  @ValidateIf(s3Configured) // an empty `S3_BUCKET=` line (as in .env.example) counts as "not set"
   @IsString()
-  @IsNotEmpty()
   S3_BUCKET?: string;
 
   /** Address of the S3 API, e.g. `http://localhost:9000` (MinIO) or `https://storage.railway.app`. */
