@@ -7,7 +7,7 @@ import {
   type QuoMessagePage,
   type QuoMessageStatus,
 } from "./quo-client.js";
-import { field, str } from "./quo-json.js";
+import { field, optionalStr, str } from "./quo-json.js";
 
 const QUO_BASE_URL = "https://api.quo.com";
 export const QUO_STATUSES: readonly string[] = [
@@ -198,7 +198,8 @@ function parseMessage(raw: unknown): QuoMessage {
     from: str(raw, "from"),
     to: to as string[],
     // A text with only a photo has no words: Quo may send null or leave it out.
-    text: typeof field(raw, "text", true) === "string" ? str(raw, "text") : "",
+    // A text with only a photo has no words: Quo sends "" (or null, or leaves it out).
+    text: optionalStr(raw, "text") ?? "",
     status: status as QuoMessageStatus,
     createdAt,
     media: Array.isArray(media) ? media.map(parseMedia) : [],

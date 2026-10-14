@@ -4,6 +4,25 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-14 — Quo chat on staging in `dry_run` (rollout steps 1-6 done; going live waits for a US test)
+- **Done:** PRs merged into `dev` (backend 5, frontend 6); Railway Storage Bucket added (variables are references to it,
+  `S3_FORCE_PATH_STYLE=false`); `QUO_API_KEY`, `QUO_PHONE_NUMBER_ID=PNlq6NzLQ3`, `SMS_MODE=dry_run` set; both services
+  deployed (migration `CreateSms` ran); webhook **43940** created with `npm run quo:webhook` (general line only, four
+  message events) and `QUO_WEBHOOK_SECRET` set; the staging Texts card shows the Dry run badge and a dry-run send was saved.
+- **Verified on staging:** a Quo test event and real events from the general line were accepted (deliveries SUCCESS) and
+  skipped correctly in the log ("not an application or a driver", "other Quo number"): real signature, parsing and the
+  D51 filters work. NOT yet verified on staging: a stored incoming text and a file in the bucket (needs a US-number
+  contact), a live send.
+- **Found:** a non-US phone cannot be tested: applications and drivers are US-only (`toUsE164`, drivers CHECK), so its
+  texts are skipped (B61). A 10-digit non-US number typed on an application would be read as a US number: the test
+  application "Quo Test" was therefore **deleted from staging** (with its text) before going live.
+- **NEXT:** Saad or the client submits an application with a US phone they own and texts the general line (must appear
+  in that chat; a photo must appear in Files and open); then `SMS_MODE=live` in Railway and ONE send to that same phone
+  from that chat. Never click Send on a real applicant or driver before Saad agrees. Then remove the test application.
+- **Not committed:** `scripts/quo-webhook.ts` gained `test <id>` and `deliveries <id>` (local `dev`, needs a small branch).
+
+---
+
 ### 2026-10-14 — Quo chat: send, receive, files, on the application and driver pages (D50, D51; B46)
 - **Done (backend):** `sms_messages` + `sms_attachments` (migration `CreateSms`, CHECKs and UNIQUE keys in the database);
   `src/sms/`: `QuoClient` interface + HTTP adapter (v1 send and history), webhook signature check

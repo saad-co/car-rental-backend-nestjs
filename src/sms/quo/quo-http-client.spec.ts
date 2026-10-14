@@ -81,6 +81,27 @@ describe("QuoHttpClient", () => {
     ]);
   });
 
+  it("reads a photo-only text, whose words are empty or missing", async () => {
+    const photo = {
+      ...message,
+      direction: "incoming",
+      media: [{ url: "https://x/y.jpg", type: "image/jpeg" }],
+    };
+    const { fetchImpl } = fakeFetch(200, {
+      data: [
+        { ...photo, id: "AC1", text: "" },
+        { ...photo, id: "AC2", text: null },
+        { ...photo, id: "AC3", text: undefined },
+      ],
+      nextPageToken: null,
+    });
+
+    const page = await client(fetchImpl).listConversation("+13125550111");
+
+    expect(page.messages.map((m) => m.text)).toEqual(["", "", ""]);
+    expect(page.messages.every((m) => m.media.length === 1)).toBe(true);
+  });
+
   it("turns an error answer into a QuoApiError carrying Quo's reason", async () => {
     const { fetchImpl } = fakeFetch(402, { message: "Subscription expired" });
 
