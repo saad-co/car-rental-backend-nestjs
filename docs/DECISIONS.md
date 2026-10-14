@@ -469,3 +469,16 @@ contact texts in shown in a separate Files tab. Chosen by Abulkalam on 2026-10-1
   link (B47), reminders (M6).
 **Why:** Abulkalam is short on time and wants send/receive plus a files view first. Quo has no embeddable inbox
 (B46), so we build the chat ourselves.
+
+### D51 — 2026-10-14 — Quo chat uses the general line +1 312 736 2939; only known contacts are stored (extends D50)
+- The workspace has 9 Quo numbers. The client (2026-10-14) uses **+1 312 736 2939** (`PNlq6NzLQ3`, "Sales / Customer Service"),
+  the line advertised on the website and Google, and plans an AI agent on it for new inquiries and phone applications.
+  The chat starts on this one line (suggested by Claude, accepted by Abulkalam). `QUO_PHONE_NUMBER_ID` stays a setting.
+- **Only known contacts are stored.** The line is public (customers, spam). The webhook stores a text only when the
+  sender's phone matches an application or a driver; anything else is logged and skipped. Opening a chat syncs the
+  contact's earlier history from Quo, so a person who applies later loses nothing. The webhook is created for this one
+  number only (`resourceIds`), so the other eight lines never reach us.
+- **Open for later:** the AI agent and staff may reply in the same thread (the agent should stay quiet once a human
+  has replied); rent reminders (M6) may move to Payments and Collections (+1 312 300 2032), which then needs the Quo
+  number stored per message.
+**Why:** one thread per person on the number applicants already know; no new number or registration.
