@@ -169,6 +169,27 @@ describe("SmsService (test database)", () => {
       });
     });
 
+    it("refuses a number no US carrier can have, before calling Quo, and stores nothing", async () => {
+      // 10 digits typed without a country code can look like "+1 123..." (an area code cannot start with 1).
+      await db.query(
+        `UPDATE applications SET phone = '1235550123' WHERE id = '${applicationId}'`,
+      );
+
+      for (const mode of ["dry_run", "live"] as const) {
+        await expect(
+          service({ mode }).send(
+            SmsContactKind.applications,
+            applicationId,
+            "Hi",
+            adminId,
+          ),
+        ).rejects.toThrow("not a valid US phone number");
+      }
+
+      expect(quo.sent).toEqual([]);
+      expect(await rows()).toEqual([]);
+    });
+
     it("off refuses and stores nothing", async () => {
       await expect(
         service({ mode: "off" }).send(
@@ -208,7 +229,8 @@ describe("SmsService (test database)", () => {
 
       const [failed] = await rows();
       expect(failed).toMatchObject({ status: "failed", quoMessageId: null });
-      expect(failed.error).toContain("Subscription expired");
+      expect(failed.error).toContain("no credits");
+      expect(failed.error).not.toContain("Subscription expired"); // Quo's words stay in the log
     });
   });
 

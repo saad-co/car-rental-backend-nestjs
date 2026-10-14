@@ -21,11 +21,11 @@ import type {
   SmsStatusDto,
   SmsSyncResultDto,
 } from "./dto/sms.dto.js";
+import type { QuoClient, QuoMessage } from "./quo/quo-client.js";
 import {
-  QuoApiError,
-  type QuoClient,
-  type QuoMessage,
-} from "./quo/quo-client.js";
+  describeQuoFailure,
+  isTextableUsNumber,
+} from "./quo/quo-failure-message.js";
 import type { QuoMessageEvent } from "./quo/quo-webhook-event.js";
 import { SmsAttachment, SmsAttachmentStatus } from "./sms-attachment.entity.js";
 import { SmsContactKind } from "./sms-contact.js";
@@ -152,6 +152,11 @@ export class SmsService {
     const { mode, quo } = this.deps;
     if (mode === "off")
       throw new ConflictException("Texting is switched off (SMS_MODE=off).");
+    // Said before asking Quo, and nothing is saved: there is no text to show for a number that cannot get one.
+    if (!isTextableUsNumber(contactPhone))
+      throw new BadRequestException(
+        `${contactPhone} is not a valid US phone number, so no text can be sent to it. Check the number on the ${kind === SmsContactKind.drivers ? "driver" : "application"}.`,
+      );
 
     const messages = this.dataSource.getRepository(SmsMessage);
 
@@ -181,8 +186,12 @@ export class SmsService {
     try {
       sent = await quo.sendText(contactPhone, text);
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Sending a text to ${contactPhone} failed: ${reason}`);
+      // The admin gets one plain sentence; the technical detail (Quo's own words) stays in the log.
+      const technical = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `Sending a text to ${contactPhone} failed: ${technical}`,
+      );
+      const friendly = describeQuoFailure(error);
       await messages.save(
         messages.create({
           quoMessageId: null,
@@ -191,16 +200,12 @@ export class SmsService {
           body: text,
           mode: SmsMode.live,
           status: SmsStatus.failed,
-          error: reason,
+          error: friendly,
           sentById: adminId,
           occurredAt: this.now(),
         }),
       );
-      throw new BadGatewayException(
-        error instanceof QuoApiError
-          ? `Quo refused the text: ${reason}`
-          : `The text could not be sent: ${reason}`,
-      );
+      throw new BadGatewayException(friendly);
     }
 
     const stored = await this.storeQuoMessage(sent, contactPhone, adminId);
@@ -333,9 +338,12 @@ export class SmsService {
           pageToken,
         });
       } catch (error) {
-        const reason = error instanceof Error ? error.message : String(error);
-        this.logger.error(`Syncing ${contactPhone} from Quo failed: ${reason}`);
-        throw new BadGatewayException(`Could not read Quo: ${reason}`);
+        const technical =
+          error instanceof Error ? error.message : String(error);
+        this.logger.error(
+          `Syncing ${contactPhone} from Quo failed: ${technical}`,
+        );
+        throw new BadGatewayException(describeQuoFailure(error));
       }
       for (const message of page.messages) {
         fetched++;
