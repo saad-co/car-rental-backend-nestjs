@@ -2,6 +2,7 @@ import {
   BadGatewayException,
   BadRequestException,
   ConflictException,
+  HttpException,
   Inject,
   Injectable,
   Logger,
@@ -37,6 +38,14 @@ import {
   SmsStatus,
 } from "./sms-message.entity.js";
 import { FILE_LINK_SECONDS, type FileStorage } from "./storage/file-storage.js";
+
+/** What `sendAlert` did: really sent, or not (and why, when it matters). */
+export interface AlertResult {
+  /** True only when the text was really sent through Quo (not a dry run). */
+  sent: boolean;
+  /** Plain reason it was not sent because of a problem; null for a dry run or a success. */
+  reason: string | null;
+}
 
 /** Injection token for `SmsDeps`. */
 export const SMS_DEPS = Symbol("SMS_DEPS");
@@ -149,19 +158,64 @@ export class SmsService {
     adminId: string,
   ): Promise<SmsMessageDto> {
     const contactPhone = await this.resolveContact(kind, id);
+    const message = await this.deliver(
+      contactPhone,
+      text,
+      adminId,
+      `Check the number on the ${kind === SmsContactKind.drivers ? "driver" : "application"}.`,
+    );
+    return this.toMessageDto(await this.loadWithRelations(message.id));
+  }
+
+  /**
+   * Texts a STAFF phone (for example "a new application arrived", D53). Same rules as `send`: `off` skips,
+   * `dry_run` only saves the text, `live` sends it, and every attempt, failures included, is recorded in
+   * `sms_messages`. It never throws: the caller (the website's submission) must not fail because an alert could
+   * not be sent. `reason` is a plain sentence when the text was not sent for a reason an admin should see.
+   */
+  async sendAlert(toPhone: string, text: string): Promise<AlertResult> {
+    try {
+      const message = await this.deliver(
+        toPhone,
+        text,
+        null,
+        "Check APPLICATION_ALERT_PHONE.",
+      );
+      return { sent: message.mode === SmsMode.live, reason: null };
+    } catch (error) {
+      return {
+        sent: false,
+        reason:
+          error instanceof HttpException
+            ? error.message
+            : describeQuoFailure(error),
+      };
+    }
+  }
+
+  /**
+   * The one place a text goes out (or is saved as a dry run): checks the mode and the number, sends through Quo
+   * when live, and saves a row either way. Throws `HttpException`s with plain messages.
+   */
+  private async deliver(
+    contactPhone: string,
+    text: string,
+    sentById: string | null,
+    numberHint: string,
+  ): Promise<SmsMessage> {
     const { mode, quo } = this.deps;
     if (mode === "off")
       throw new ConflictException("Texting is switched off (SMS_MODE=off).");
     // Said before asking Quo, and nothing is saved: there is no text to show for a number that cannot get one.
     if (!isTextableUsNumber(contactPhone))
       throw new BadRequestException(
-        `${contactPhone} is not a valid US phone number, so no text can be sent to it. Check the number on the ${kind === SmsContactKind.drivers ? "driver" : "application"}.`,
+        `${contactPhone} is not a valid US phone number, so no text can be sent to it. ${numberHint}`,
       );
 
     const messages = this.dataSource.getRepository(SmsMessage);
 
     if (mode === "dry_run") {
-      const saved = await messages.save(
+      return messages.save(
         messages.create({
           quoMessageId: null,
           direction: SmsDirection.outbound,
@@ -170,11 +224,10 @@ export class SmsService {
           mode: SmsMode.dry_run,
           status: SmsStatus.composed,
           error: null,
-          sentById: adminId,
+          sentById,
           occurredAt: this.now(),
         }),
       );
-      return this.toMessageDto(await this.loadWithRelations(saved.id));
     }
 
     if (!quo)
@@ -201,15 +254,14 @@ export class SmsService {
           mode: SmsMode.live,
           status: SmsStatus.failed,
           error: friendly,
-          sentById: adminId,
+          sentById,
           occurredAt: this.now(),
         }),
       );
       throw new BadGatewayException(friendly);
     }
 
-    const stored = await this.storeQuoMessage(sent, contactPhone, adminId);
-    return this.toMessageDto(await this.loadWithRelations(stored.id));
+    return this.storeQuoMessage(sent, contactPhone, sentById);
   }
 
   // ----------------------------------------------------------------- reading

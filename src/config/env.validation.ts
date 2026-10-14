@@ -177,6 +177,21 @@ class EnvironmentVariables {
   QUO_WEBHOOK_SECRET?: string;
 
   /**
+   * Staff phone (E.164, US) that gets a text with a link whenever the website submits a new application (D53).
+   * Empty or unset: no alerts. The text follows SMS_MODE like every other text.
+   */
+  @ValidateIf(
+    (env: EnvironmentVariables) =>
+      env.APPLICATION_ALERT_PHONE !== undefined &&
+      env.APPLICATION_ALERT_PHONE !== "",
+  )
+  @Matches(/^\+1[2-9]\d{2}[2-9]\d{6}$/, {
+    message:
+      "APPLICATION_ALERT_PHONE must be a US number like +12243282246 (or empty)",
+  })
+  APPLICATION_ALERT_PHONE?: string;
+
+  /**
    * Where files texted in by drivers are copied (S3-compatible bucket: MinIO locally, a Railway Storage
    * Bucket on staging). Optional: with no bucket, files stay "pending" in the chat. Once S3_BUCKET is set,
    * the other S3_* settings are required.

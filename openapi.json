@@ -351,311 +351,6 @@
         ]
       }
     },
-    "/drivers": {
-      "get": {
-        "operationId": "DriversController_list",
-        "parameters": [
-          {
-            "name": "status",
-            "required": false,
-            "in": "query",
-            "description": "Only drivers with this status. Omit for all.",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "active",
-                "inactive"
-              ]
-            }
-          },
-          {
-            "name": "page",
-            "required": true,
-            "in": "query",
-            "description": "Page number, starting at 1.",
-            "schema": {
-              "minimum": 1,
-              "default": 1,
-              "type": "number"
-            }
-          },
-          {
-            "name": "limit",
-            "required": true,
-            "in": "query",
-            "description": "Items per page (1 to 100).",
-            "schema": {
-              "minimum": 1,
-              "maximum": 100,
-              "default": 20,
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DriverListDto"
-                }
-              }
-            }
-          }
-        },
-        "summary": "`GET /drivers`: one page of drivers, newest first.",
-        "tags": [
-          "Drivers"
-        ]
-      }
-    },
-    "/drivers/{id}": {
-      "get": {
-        "operationId": "DriversController_findOne",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DriverDto"
-                }
-              }
-            }
-          }
-        },
-        "summary": "`GET /drivers/:id`: one driver. `400` for a malformed id, `404` if unknown.",
-        "tags": [
-          "Drivers"
-        ]
-      }
-    },
-    "/inbound-emails": {
-      "get": {
-        "operationId": "InboundEmailsController_list",
-        "parameters": [
-          {
-            "name": "provider",
-            "required": false,
-            "in": "query",
-            "description": "Only emails from this provider. Omit for all.",
-            "schema": {
-              "$ref": "#/components/schemas/InboundEmailProvider"
-            }
-          },
-          {
-            "name": "status",
-            "required": false,
-            "in": "query",
-            "description": "Only emails with this outcome. Omit for all.",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "processed",
-                "rejected_unverified",
-                "extraction_failed",
-                "not_payment",
-                "duplicate_payment"
-              ]
-            }
-          },
-          {
-            "name": "page",
-            "required": true,
-            "in": "query",
-            "description": "Page number, starting at 1.",
-            "schema": {
-              "minimum": 1,
-              "default": 1,
-              "type": "number"
-            }
-          },
-          {
-            "name": "limit",
-            "required": true,
-            "in": "query",
-            "description": "Items per page (1 to 100).",
-            "schema": {
-              "minimum": 1,
-              "maximum": 100,
-              "default": 20,
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InboundEmailListDto"
-                }
-              }
-            }
-          }
-        },
-        "summary": "`GET /inbound-emails`: one page of processed emails with their outcome, newest first.",
-        "tags": [
-          "InboundEmails"
-        ]
-      }
-    },
-    "/payments": {
-      "get": {
-        "operationId": "PaymentsController_list",
-        "parameters": [
-          {
-            "name": "status",
-            "required": false,
-            "in": "query",
-            "description": "Only payments with this status. Omit for all.",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "reported",
-                "confirmed",
-                "unmatched",
-                "rejected",
-                "discrepancy"
-              ]
-            }
-          },
-          {
-            "name": "source",
-            "required": false,
-            "in": "query",
-            "description": "Only payments from this source. Omit for all.",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "email_zelle",
-                "email_cashapp",
-                "email_venmo",
-                "email_stripe",
-                "email_chime",
-                "plaid_zelle",
-                "manual"
-              ]
-            }
-          },
-          {
-            "name": "driverId",
-            "required": false,
-            "in": "query",
-            "description": "Only payments assigned to this driver (the driver page). Omit for all.",
-            "schema": {
-              "format": "uuid",
-              "type": "string"
-            }
-          },
-          {
-            "name": "match",
-            "required": false,
-            "in": "query",
-            "description": "`assigned`: has a driver. `review`: matching looked at it and could not place it (\"Needs review\").\nOmit for all.",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "assigned",
-                "review"
-              ]
-            }
-          },
-          {
-            "name": "page",
-            "required": true,
-            "in": "query",
-            "description": "Page number, starting at 1.",
-            "schema": {
-              "minimum": 1,
-              "default": 1,
-              "type": "number"
-            }
-          },
-          {
-            "name": "limit",
-            "required": true,
-            "in": "query",
-            "description": "Items per page (1 to 100).",
-            "schema": {
-              "minimum": 1,
-              "maximum": 100,
-              "default": 20,
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PaymentListDto"
-                }
-              }
-            }
-          }
-        },
-        "summary": "`GET /payments`: one page of payments, most recent first. `?match=review` lists \"Needs review\".",
-        "tags": [
-          "Payments"
-        ]
-      }
-    },
-    "/payments/{id}/assign": {
-      "post": {
-        "operationId": "PaymentsController_assign",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AssignPaymentDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AssignPaymentResultDto"
-                }
-              }
-            }
-          }
-        },
-        "summary": "`POST /payments/:id/assign`: assigns or re-assigns a payment to a driver and saves the payer's name as\nthat driver's alias (unless another driver already owns it, which the answer reports).\n`404` unknown payment, `400` unknown driver, `409` a rejected or discrepancy payment.",
-        "tags": [
-          "Payments"
-        ]
-      }
-    },
     "/sms/status": {
       "get": {
         "operationId": "SmsController_status",
@@ -899,6 +594,311 @@
           "QuoWebhook"
         ]
       }
+    },
+    "/drivers": {
+      "get": {
+        "operationId": "DriversController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "description": "Page number, starting at 1.",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "description": "Items per page (1 to 100).",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "description": "Only drivers with this status. Omit for all.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "active",
+                "inactive"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverListDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`GET /drivers`: one page of drivers, newest first.",
+        "tags": [
+          "Drivers"
+        ]
+      }
+    },
+    "/drivers/{id}": {
+      "get": {
+        "operationId": "DriversController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`GET /drivers/:id`: one driver. `400` for a malformed id, `404` if unknown.",
+        "tags": [
+          "Drivers"
+        ]
+      }
+    },
+    "/inbound-emails": {
+      "get": {
+        "operationId": "InboundEmailsController_list",
+        "parameters": [
+          {
+            "name": "provider",
+            "required": false,
+            "in": "query",
+            "description": "Only emails from this provider. Omit for all.",
+            "schema": {
+              "$ref": "#/components/schemas/InboundEmailProvider"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "description": "Only emails with this outcome. Omit for all.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "processed",
+                "rejected_unverified",
+                "extraction_failed",
+                "not_payment",
+                "duplicate_payment"
+              ]
+            }
+          },
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "description": "Page number, starting at 1.",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "description": "Items per page (1 to 100).",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InboundEmailListDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`GET /inbound-emails`: one page of processed emails with their outcome, newest first.",
+        "tags": [
+          "InboundEmails"
+        ]
+      }
+    },
+    "/payments": {
+      "get": {
+        "operationId": "PaymentsController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "description": "Page number, starting at 1.",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "description": "Items per page (1 to 100).",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "description": "Only payments with this status. Omit for all.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "reported",
+                "confirmed",
+                "unmatched",
+                "rejected",
+                "discrepancy"
+              ]
+            }
+          },
+          {
+            "name": "source",
+            "required": false,
+            "in": "query",
+            "description": "Only payments from this source. Omit for all.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "email_zelle",
+                "email_cashapp",
+                "email_venmo",
+                "email_stripe",
+                "email_chime",
+                "plaid_zelle",
+                "manual"
+              ]
+            }
+          },
+          {
+            "name": "driverId",
+            "required": false,
+            "in": "query",
+            "description": "Only payments assigned to this driver (the driver page). Omit for all.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "match",
+            "required": false,
+            "in": "query",
+            "description": "`assigned`: has a driver. `review`: matching looked at it and could not place it (\"Needs review\").\nOmit for all.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "assigned",
+                "review"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentListDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`GET /payments`: one page of payments, most recent first. `?match=review` lists \"Needs review\".",
+        "tags": [
+          "Payments"
+        ]
+      }
+    },
+    "/payments/{id}/assign": {
+      "post": {
+        "operationId": "PaymentsController_assign",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignPaymentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssignPaymentResultDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`POST /payments/:id/assign`: assigns or re-assigns a payment to a driver and saves the payer's name as\nthat driver's alias (unless another driver already owns it, which the answer reports).\n`404` unknown payment, `400` unknown driver, `409` a rejected or discrepancy payment.",
+        "tags": [
+          "Payments"
+        ]
+      }
     }
   },
   "info": {
@@ -1075,6 +1075,11 @@
             "format": "date-time",
             "type": "string",
             "description": "When our API received it."
+          },
+          "alertError": {
+            "type": "string",
+            "nullable": true,
+            "description": "Why the alert text to staff about this application could not be sent; null if it did not fail."
           }
         },
         "required": [
@@ -1086,7 +1091,8 @@
           "phone",
           "city",
           "submittedAt",
-          "receivedAt"
+          "receivedAt",
+          "alertError"
         ]
       },
       "ApplicationListDto": {
@@ -1159,6 +1165,11 @@
             "type": "string",
             "description": "When our API received it."
           },
+          "alertError": {
+            "type": "string",
+            "nullable": true,
+            "description": "Why the alert text to staff about this application could not be sent; null if it did not fail."
+          },
           "requestId": {
             "type": "string",
             "description": "The website's id for the submission."
@@ -1199,6 +1210,12 @@
             "type": "string",
             "nullable": true,
             "description": "The driver created on approval. Null unless approved."
+          },
+          "alertedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "When the alert text to staff was really sent; null if it was not (off, dry run, or failed)."
           }
         },
         "required": [
@@ -1211,6 +1228,7 @@
           "city",
           "submittedAt",
           "receivedAt",
+          "alertError",
           "requestId",
           "zip",
           "licenseStoragePath",
@@ -1219,7 +1237,279 @@
           "payload",
           "reviewedById",
           "reviewedAt",
-          "driverId"
+          "driverId",
+          "alertedAt"
+        ]
+      },
+      "SmsStatusDto": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "description": "`off`: sending refused. `dry_run`: texts are saved, not sent. `live`: really sent.",
+            "enum": [
+              "off",
+              "dry_run",
+              "live"
+            ]
+          },
+          "quoConfigured": {
+            "type": "boolean",
+            "description": "Whether the Quo API key and number are set, which syncing the history needs."
+          },
+          "filesConfigured": {
+            "type": "boolean",
+            "description": "Whether the file bucket is set; without it files stay pending."
+          }
+        },
+        "required": [
+          "mode",
+          "quoConfigured",
+          "filesConfigured"
+        ]
+      },
+      "SmsAttachmentDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "contentType": {
+            "type": "string",
+            "nullable": true,
+            "description": "MIME type, e.g. `image/jpeg`; null if unknown."
+          },
+          "sizeBytes": {
+            "type": "number",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "description": "`stored` files can be opened; `pending` ones are still being copied; `failed` ones never will be.",
+            "enum": [
+              "pending",
+              "stored",
+              "failed"
+            ]
+          },
+          "url": {
+            "type": "string",
+            "nullable": true,
+            "description": "Short-lived link to open the file (about 10 minutes). Null unless `stored`."
+          }
+        },
+        "required": [
+          "id",
+          "contentType",
+          "sizeBytes",
+          "status",
+          "url"
+        ]
+      },
+      "SmsMessageDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "direction": {
+            "enum": [
+              "inbound",
+              "outbound"
+            ],
+            "type": "string"
+          },
+          "body": {
+            "type": "string",
+            "description": "The words; empty for a text that is only a file."
+          },
+          "mode": {
+            "nullable": true,
+            "description": "Null for inbound texts. `dry_run` texts were never sent.",
+            "enum": [
+              "dry_run",
+              "live"
+            ],
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "composed",
+              "queued",
+              "sent",
+              "delivered",
+              "undelivered",
+              "failed",
+              "received"
+            ],
+            "type": "string"
+          },
+          "error": {
+            "type": "string",
+            "nullable": true,
+            "description": "Why it failed, when it did."
+          },
+          "sentByEmail": {
+            "type": "string",
+            "nullable": true,
+            "description": "The admin who sent it from this app; null for inbound texts and texts sent from the Quo app."
+          },
+          "occurredAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "When it happened (Quo's time)."
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SmsAttachmentDto"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "direction",
+          "body",
+          "mode",
+          "status",
+          "error",
+          "sentByEmail",
+          "occurredAt",
+          "attachments"
+        ]
+      },
+      "SmsMessageListDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SmsMessageDto"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true,
+            "description": "Pass as `before` to get the next, older page. Null when there is nothing older."
+          },
+          "contactPhone": {
+            "type": "string",
+            "description": "The contact's number the chat is with (E.164)."
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor",
+          "contactPhone"
+        ]
+      },
+      "SendSmsDto": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "The words to send, 1 to 1600 characters (Quo's limit). Plain text only: Quo's API cannot send files.",
+            "minLength": 1,
+            "maxLength": 1600
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "SmsSyncResultDto": {
+        "type": "object",
+        "properties": {
+          "fetched": {
+            "type": "number",
+            "description": "Texts Quo returned."
+          },
+          "added": {
+            "type": "number",
+            "description": "Of those, how many were new to us."
+          }
+        },
+        "required": [
+          "fetched",
+          "added"
+        ]
+      },
+      "SmsFileDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "contentType": {
+            "type": "string",
+            "nullable": true,
+            "description": "MIME type, e.g. `image/jpeg`; null if unknown."
+          },
+          "sizeBytes": {
+            "type": "number",
+            "nullable": true
+          },
+          "status": {
+            "description": "`stored` files can be opened; `pending` ones are still being copied; `failed` ones never will be.",
+            "enum": [
+              "pending",
+              "stored",
+              "failed"
+            ],
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "nullable": true,
+            "description": "Short-lived link to open the file (about 10 minutes). Null unless `stored`."
+          },
+          "direction": {
+            "type": "string",
+            "description": "Who sent it: `inbound` = the contact texted it to us.",
+            "enum": [
+              "inbound",
+              "outbound"
+            ]
+          },
+          "occurredAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "contentType",
+          "sizeBytes",
+          "status",
+          "url",
+          "direction",
+          "occurredAt"
+        ]
+      },
+      "SmsFileListDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SmsFileDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          },
+          "page": {
+            "type": "number"
+          },
+          "limit": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit"
         ]
       },
       "DriverAliasDto": {
@@ -1665,277 +1955,6 @@
           "payment",
           "aliasSaved",
           "aliasOwnedBy"
-        ]
-      },
-      "SmsStatusDto": {
-        "type": "object",
-        "properties": {
-          "mode": {
-            "type": "string",
-            "description": "`off`: sending refused. `dry_run`: texts are saved, not sent. `live`: really sent.",
-            "enum": [
-              "off",
-              "dry_run",
-              "live"
-            ]
-          },
-          "quoConfigured": {
-            "type": "boolean",
-            "description": "Whether the Quo API key and number are set, which syncing the history needs."
-          },
-          "filesConfigured": {
-            "type": "boolean",
-            "description": "Whether the file bucket is set; without it files stay pending."
-          }
-        },
-        "required": [
-          "mode",
-          "quoConfigured",
-          "filesConfigured"
-        ]
-      },
-      "SmsAttachmentDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "contentType": {
-            "type": "string",
-            "nullable": true,
-            "description": "MIME type, e.g. `image/jpeg`; null if unknown."
-          },
-          "sizeBytes": {
-            "type": "number",
-            "nullable": true
-          },
-          "status": {
-            "type": "string",
-            "description": "`stored` files can be opened; `pending` ones are still being copied; `failed` ones never will be.",
-            "enum": [
-              "pending",
-              "stored",
-              "failed"
-            ]
-          },
-          "url": {
-            "type": "string",
-            "nullable": true,
-            "description": "Short-lived link to open the file (about 10 minutes). Null unless `stored`."
-          }
-        },
-        "required": [
-          "id",
-          "contentType",
-          "sizeBytes",
-          "status",
-          "url"
-        ]
-      },
-      "SmsMessageDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "direction": {
-            "enum": [
-              "inbound",
-              "outbound"
-            ],
-            "type": "string"
-          },
-          "body": {
-            "type": "string",
-            "description": "The words; empty for a text that is only a file."
-          },
-          "mode": {
-            "nullable": true,
-            "description": "Null for inbound texts. `dry_run` texts were never sent.",
-            "enum": [
-              "dry_run",
-              "live"
-            ],
-            "type": "string"
-          },
-          "status": {
-            "enum": [
-              "composed",
-              "queued",
-              "sent",
-              "delivered",
-              "undelivered",
-              "failed",
-              "received"
-            ],
-            "type": "string"
-          },
-          "error": {
-            "type": "string",
-            "nullable": true,
-            "description": "Why it failed, when it did."
-          },
-          "sentByEmail": {
-            "type": "string",
-            "nullable": true,
-            "description": "The admin who sent it from this app; null for inbound texts and texts sent from the Quo app."
-          },
-          "occurredAt": {
-            "format": "date-time",
-            "type": "string",
-            "description": "When it happened (Quo's time)."
-          },
-          "attachments": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/SmsAttachmentDto"
-            }
-          }
-        },
-        "required": [
-          "id",
-          "direction",
-          "body",
-          "mode",
-          "status",
-          "error",
-          "sentByEmail",
-          "occurredAt",
-          "attachments"
-        ]
-      },
-      "SmsMessageListDto": {
-        "type": "object",
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/SmsMessageDto"
-            }
-          },
-          "nextCursor": {
-            "type": "string",
-            "nullable": true,
-            "description": "Pass as `before` to get the next, older page. Null when there is nothing older."
-          },
-          "contactPhone": {
-            "type": "string",
-            "description": "The contact's number the chat is with (E.164)."
-          }
-        },
-        "required": [
-          "items",
-          "nextCursor",
-          "contactPhone"
-        ]
-      },
-      "SendSmsDto": {
-        "type": "object",
-        "properties": {
-          "text": {
-            "type": "string",
-            "description": "The words to send, 1 to 1600 characters (Quo's limit). Plain text only: Quo's API cannot send files.",
-            "minLength": 1,
-            "maxLength": 1600
-          }
-        },
-        "required": [
-          "text"
-        ]
-      },
-      "SmsSyncResultDto": {
-        "type": "object",
-        "properties": {
-          "fetched": {
-            "type": "number",
-            "description": "Texts Quo returned."
-          },
-          "added": {
-            "type": "number",
-            "description": "Of those, how many were new to us."
-          }
-        },
-        "required": [
-          "fetched",
-          "added"
-        ]
-      },
-      "SmsFileDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "contentType": {
-            "type": "string",
-            "nullable": true,
-            "description": "MIME type, e.g. `image/jpeg`; null if unknown."
-          },
-          "sizeBytes": {
-            "type": "number",
-            "nullable": true
-          },
-          "status": {
-            "description": "`stored` files can be opened; `pending` ones are still being copied; `failed` ones never will be.",
-            "enum": [
-              "pending",
-              "stored",
-              "failed"
-            ],
-            "type": "string"
-          },
-          "url": {
-            "type": "string",
-            "nullable": true,
-            "description": "Short-lived link to open the file (about 10 minutes). Null unless `stored`."
-          },
-          "direction": {
-            "type": "string",
-            "description": "Who sent it: `inbound` = the contact texted it to us.",
-            "enum": [
-              "inbound",
-              "outbound"
-            ]
-          },
-          "occurredAt": {
-            "format": "date-time",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "contentType",
-          "sizeBytes",
-          "status",
-          "url",
-          "direction",
-          "occurredAt"
-        ]
-      },
-      "SmsFileListDto": {
-        "type": "object",
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/SmsFileDto"
-            }
-          },
-          "total": {
-            "type": "number"
-          },
-          "page": {
-            "type": "number"
-          },
-          "limit": {
-            "type": "number"
-          }
-        },
-        "required": [
-          "items",
-          "total",
-          "page",
-          "limit"
         ]
       }
     }
