@@ -1395,12 +1395,18 @@
           "contactPhone": {
             "type": "string",
             "description": "The contact's number the chat is with (E.164)."
+          },
+          "contactPhoneProblem": {
+            "type": "string",
+            "nullable": true,
+            "description": "Why no text can be sent to this number (for example it cannot exist in the US); null when it can."
           }
         },
         "required": [
           "items",
           "nextCursor",
-          "contactPhone"
+          "contactPhone",
+          "contactPhoneProblem"
         ]
       },
       "SendSmsDto": {

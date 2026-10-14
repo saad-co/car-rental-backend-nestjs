@@ -1,6 +1,7 @@
 import { QuoApiError } from "./quo-client.js";
 import {
   describeQuoFailure,
+  friendlyStoredError,
   isTextableUsNumber,
 } from "./quo-failure-message.js";
 
@@ -69,5 +70,23 @@ describe("isTextableUsNumber", () => {
     expect(isTextableUsNumber("+13121550123")).toBe(false); // exchange starts with 1
     expect(isTextableUsNumber("+0312736293")).toBe(false);
     expect(isTextableUsNumber("+923001234567")).toBe(false);
+  });
+});
+
+describe("friendlyStoredError", () => {
+  it("turns Quo's raw words saved before the plain messages into the plain sentence", () => {
+    const raw =
+      "Quo refused POST /v1/messages (400): At least one of the phone numbers in the `to` array is invalid";
+    const text = friendlyStoredError(raw);
+    expect(text).toContain("not valid for texting");
+    expect(text).not.toContain("POST");
+  });
+
+  it("leaves anything else unchanged", () => {
+    expect(friendlyStoredError(null)).toBeNull();
+    expect(friendlyStoredError("The Quo account has no credits left.")).toBe(
+      "The Quo account has no credits left.",
+    );
+    expect(friendlyStoredError("Quo: 30007")).toBe("Quo: 30007");
   });
 });

@@ -414,6 +414,45 @@ describe("SmsService (test database)", () => {
       expect(third.nextCursor).toBeNull();
     });
 
+    it("says up front when the number cannot get texts, and shows an old raw failure in plain words", async () => {
+      // A number registered wrongly (a foreign number typed as 10 digits starting with 0).
+      await db.query(
+        `UPDATE applications SET phone = '0339002548' WHERE id = '${applicationId}'`,
+      );
+      await db.query(
+        `INSERT INTO sms_messages (direction, contact_phone, body, mode, status, error, occurred_at)
+         VALUES ('outbound', '+10339002548', 'hey', 'live', 'failed', $1, now())`,
+        [
+          "Quo refused POST /v1/messages (400): At least one of the phone numbers in the `to` array is invalid",
+        ],
+      );
+
+      const list = await service().listMessages(
+        SmsContactKind.applications,
+        applicationId,
+        30,
+        undefined,
+      );
+
+      expect(list.contactPhoneProblem).toContain("not a valid US phone number");
+      expect(list.contactPhoneProblem).toContain(
+        "Check the number on the application",
+      );
+      expect(list.items[0].error).toContain("not valid for texting");
+      expect(list.items[0].error).not.toContain("POST");
+    });
+
+    it("reports no problem for a good number", async () => {
+      const list = await service().listMessages(
+        SmsContactKind.applications,
+        applicationId,
+        30,
+        undefined,
+      );
+
+      expect(list.contactPhoneProblem).toBeNull();
+    });
+
     it("lists only this contact's files", async () => {
       await service().storeQuoMessage(
         quoMessage({
