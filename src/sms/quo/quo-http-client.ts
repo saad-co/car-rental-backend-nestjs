@@ -168,6 +168,7 @@ async function quoRequest(args: {
     throw new QuoApiError(
       response.status,
       `Quo refused ${args.method} ${args.path.split("?")[0]} (${response.status}): ${reason}`,
+      reason,
     );
   }
   if (json === undefined)

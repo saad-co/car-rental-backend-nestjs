@@ -64,6 +64,8 @@ export class QuoApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /** Quo's own words for what went wrong (the `message` of its error answer). For logs, not for admins. */
+    readonly reason: string = message,
     options?: ErrorOptions,
   ) {
     super(message, options);
