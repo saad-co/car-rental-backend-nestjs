@@ -4,6 +4,25 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-17 — Shared list tables; Applications list with search (B75, steps 1-2)
+- **Why:** Abulkalam: every list like TailAdmin's "Recent Orders" table, built from reusable components, search +
+  Filter dropdown, 8 rows per page, "Basic Table 5" pagination.
+- **Done (frontend, step 1):** `components/tables/`: `TableCard`, `DataTable` (column list, row checkboxes, clickable
+  rows), `SearchInput` (300 ms pause), `FilterDropdown` (select per group, Apply/Clear, active count),
+  `useListParams` (`q`, filters, `page` in the URL; `LIST_PAGE_SIZE = 8`); `AvatarText` from TailAdmin; `Pagination`
+  restyled (Previous left, numbers centred, Next right). Copied from TailAdmin `crm/CrmRecentOrderTable.tsx` and
+  `ecommerce/ProductListTable.tsx` (this template copy's "Basic Table 4" is a different table).
+- **Done (backend, step 2):** `GET /applications?search=` (name, "first last", email, city with ILIKE; phone by digits);
+  shared `SearchQueryDto` and `common/search.ts` (`likePattern` escapes `%` `_` `\`, `phoneDigits`).
+- **Done (frontend, step 2):** Applications list on the shared components: Applicant column with initials, Status in
+  the Filter dropdown, per-row trash icon + bulk Delete (B66); selection cleared whenever the view changes.
+- **Verified:** backend lint, 114 unit + 82 e2e tests (new: `search.spec.ts`, `applications-list.e2e-spec.ts`);
+  frontend lint + build. Browser walkthrough: waiting for admin sign-in in the pane.
+- **NOT done:** step 3 (Drivers, Payments, Email log on the shared table, each with backend search).
+- **Branch:** `feature/delete-applications` (both repos; Abulkalam 2026-10-17: commit on this branch, no new branches).
+
+---
+
 ### 2026-10-17 — Delete applications, one or many (B66, D55)
 - **Why:** client revisions PDF (B63-B74, received 2026-10-17); B64/B65 set aside by Abulkalam.
 - **Done (backend):** `FileStorage.delete`; `ApplicationsService.deleteMany` (hard delete, all or nothing, approved
