@@ -550,3 +550,22 @@ contact texts in shown in a separate Files tab. Chosen by Abulkalam on 2026-10-1
 - **Known gaps:** no audit log yet (spec 4), so who deleted what is only in the server log. A website retry of the same
   `request_id` after a delete would store the application again (retries come within seconds; low risk).
 **Why:** the client asked for delete; hard delete was chosen over archive; blocking approved keeps drivers traceable.
+
+### D56 — 2026-10-17 — Driver statuses: onboarding, active, inactive; three onboarding steps (Abulkalam; B67, B68, B48)
+- A driver is **`active` only when contract signed, deposit paid and has a vehicle** (Abulkalam, 2026-10-17). Statuses:
+  `onboarding` (approved, steps missing; the default, so approval creates onboarding drivers), `active`, `inactive`.
+- **Steps, not one status per combination:** `contract_signed_at`, `deposit_paid_at`, `vehicle_assigned_at`, each with
+  the admin who ticked it (`…_by_id`). Any order. Ticked by hand by an admin for now (contracts and vehicles are not
+  built; the deposit could tick itself once deposit rules exist, B19). "Has a vehicle" is a yes/no for now.
+- **Automatic:** the third tick makes the driver `active`; un-ticking a step of an active driver puts them back in
+  `onboarding` (confirm dialog). A CHECK (`drivers_active_is_onboarded`) makes `active` without the three dates
+  impossible in the database.
+- **Inactive (B67):** deactivate turns the driver's login off (`users.active = false`, same transaction): login refused
+  and open sessions end at the next request. Steps are kept and locked (409) until reactivated; reactivate gives
+  `active` or `onboarding` from the steps and turns the login back on. Onboarding drivers can log in.
+- **Existing drivers:** the migration marked the drivers already active (imported) as onboarded at migration time with
+  no admin ("done before this system"); inactive ones keep empty steps. The legacy import does the same for active
+  drivers.
+- **Effects to come:** billing (M2) and reminders (M6) act on `active` drivers only. Payment matching looks at every
+  driver, so a deposit from an onboarding driver still matches them (answers part of B48).
+**Why:** the client's rule for when a driver starts; three independent facts would need 8 statuses as one enum.

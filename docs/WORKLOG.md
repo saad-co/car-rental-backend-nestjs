@@ -4,6 +4,26 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-17 — Driver statuses and onboarding steps (D56; B67 done, B68/B48 mostly)
+- **Why:** Abulkalam: a driver is active only with contract signed, deposit paid and a vehicle; steps in any order,
+  ticked by an admin, active automatically, onboarding drivers can log in, inactive ones cannot.
+- **Done (backend):** migration `AddDriverOnboarding` (enum rebuilt with `onboarding` as default; three step dates +
+  admin; CHECK `drivers_active_is_onboarded`; drivers already active marked onboarded at migration time); legacy
+  import fills steps for active drivers; `POST /drivers/:id/onboarding`, `/deactivate`, `/reactivate` (row locks;
+  deactivate turns `users.active` off); `DriverDto.onboarding`.
+- **Done (frontend):** shared `DriverStatusBadge` ("Onboarding · 2/3") in the list, driver page and assign dialog;
+  Status filter with Onboarding; Onboarding card (locked while inactive; confirm before un-ticking an active driver);
+  Deactivate (confirm) / Reactivate.
+- **Verified:** migration on local (19 active → steps set, 35 inactive), revert + re-run, schema check clean; backend
+  lint, 114 unit + 96 e2e tests (9 new: any order, auto-active, un-tick, DB CHECK, deactivate + real login refused,
+  reactivate, driver without login, body validation); frontend lint + build. Browser walkthrough on a fake driver
+  (created and deleted): badges and filter, ticks 0/3 → Active, un-tick Cancel/confirm, Deactivate (login flag off in
+  the database, steps locked), Reactivate (Onboarding 2/3, login back on).
+- **Staging:** the migration runs on the next deploy; the imported active drivers get their steps marked done.
+- **Branch:** `feature/delete-applications` (both repos).
+
+---
+
 ### 2026-10-17 — Drivers, Payments, Email log on the shared table (B75, step 3; B75 done)
 - **Done (backend):** `search` on `GET /drivers` (name, full name, email, phone digits), `GET /payments` (payer name
   and handle, assigned driver's name; existing status/source/driver/match filters unchanged, now a QueryBuilder
