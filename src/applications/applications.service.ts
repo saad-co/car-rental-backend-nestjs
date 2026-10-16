@@ -25,6 +25,8 @@ import { isUniqueViolation } from "../database/postgres-errors.js";
 import { driverWelcomeText } from "../drivers/driver-welcome.text.js";
 import { Driver } from "../drivers/driver.entity.js";
 import { toUsE164 } from "../drivers/us-phone.js";
+import { TemplateKey } from "../message-templates/message-template.entity.js";
+import { MessageTemplatesService } from "../message-templates/message-templates.service.js";
 import { SmsContactKind } from "../sms/sms-contact.js";
 import { SmsService } from "../sms/sms.service.js";
 import type { FileStorage } from "../sms/storage/file-storage.js";
@@ -77,6 +79,8 @@ export class ApplicationsService {
     config: ConfigService,
     /** Our file bucket, to remove copied files when an application is deleted. Null when no bucket is set up. */
     @Inject(FILE_STORAGE) private readonly storage: FileStorage | null,
+    /** The approved / declined texts the admin edits in Settings (B73). */
+    private readonly templates: MessageTemplatesService,
   ) {
     this.webAppUrl = config.getOrThrow<string>("WEB_APP_URL");
   }
@@ -249,21 +253,24 @@ export class ApplicationsService {
    *    gets the login by text, which proves the phone, so there is no confirmation link (D52);
    * 2. creates the Driver, linked to that login;
    * 3. marks the application approved;
-   * 4. texts the driver their email and temporary password, through the same chat as every other
-   *    text (D52): sent when SMS_MODE is `live`, saved as "Dry run: not sent" when `dry_run`
-   *    (the admin can read it in the chat and pass it on), refused when `off`.
+   * 4. texts the applicant the "approved" template from Settings (B71, D58), then their email and
+   *    temporary password (D52), as two texts through the same chat as every other text: sent when
+   *    SMS_MODE is `live`, saved as "Dry run: not sent" when `dry_run` (the admin can read them in
+   *    the chat and pass them on), refused when `off`. The login text is fixed in code, never a
+   *    template: an edit must never be able to break the credentials.
    *
-   * The text is sent last, inside the transaction: if it fails, everything is rolled back and
-   * the admin can simply try again. (The reverse, text sent but the commit failing, is very
-   * unlikely; the driver would hold a password for an account that does not exist, and
-   * approving again sends a new one.)
+   * The texts are sent last, inside the transaction: if one fails, everything is rolled back and
+   * the admin can simply try again. (A text that went out before the failure stays in the chat:
+   * it really was sent. The reverse, texts sent but the commit failing, is very unlikely; the
+   * driver would hold a password for an account that does not exist, and approving again sends
+   * a new one.)
    *
    * @param adminId the admin approving it (stored as the reviewer).
    * @throws NotFoundException if there is no application with this id.
    * @throws ConflictException if it is already approved, if a driver or login already has
    *   this email, or a driver has this phone.
    * @throws BadRequestException if the phone is not a valid US number.
-   * @throws ServiceUnavailableException if the login text could not be sent (nothing saved).
+   * @throws ServiceUnavailableException if a text could not be sent (nothing approved).
    */
   async approve(id: string, adminId: string): Promise<ApplicationDetailDto> {
     // Prepared before the transaction: hashing is deliberately slow, and the row lock taken
@@ -331,7 +338,28 @@ export class ApplicationsService {
         application.reviewedAt = new Date();
         const saved = await manager.save(application);
 
-        await this.sendLoginText(application, temporaryPassword, adminId);
+        await this.sendOrFail(
+          application,
+          await this.templates.render(
+            TemplateKey.application_approved,
+            this.templateValues(application),
+          ),
+          adminId,
+          "The approval text",
+          "nothing was approved",
+        );
+        await this.sendOrFail(
+          application,
+          driverWelcomeText({
+            firstName: application.firstName,
+            email: application.email,
+            temporaryPassword,
+            loginUrl: `${this.webAppUrl}/driver/login`,
+          }),
+          adminId,
+          "The login text",
+          "nothing was approved",
+        );
         return saved;
       });
       return this.toDetail(approved);
@@ -346,59 +374,84 @@ export class ApplicationsService {
   }
 
   /**
-   * Texts the approved driver their login details (D52). Called inside the approval transaction, through
-   * `SmsService.send`, so the text follows SMS_MODE, shows in the application's chat, and a failure comes back
-   * in plain words.
+   * Texts an applicant inside a review transaction, through `SmsService.send`, so the text follows SMS_MODE, shows
+   * in the application's chat, and a failure comes back in plain words. Throwing rolls the review back.
+   * @param what names the text in the message, e.g. "The login text".
+   * @param outcome what did not happen, e.g. "nothing was approved".
    * @throws ServiceUnavailableException if the text could not be sent or saved; the cause is logged.
    */
-  private async sendLoginText(
+  private async sendOrFail(
     application: Application,
-    temporaryPassword: string,
+    text: string,
     adminId: string,
+    what: string,
+    outcome: string,
   ): Promise<void> {
     try {
       await this.sms.send(
         SmsContactKind.applications,
         application.id,
-        driverWelcomeText({
-          firstName: application.firstName,
-          email: application.email,
-          temporaryPassword,
-          loginUrl: `${this.webAppUrl}/driver/login`,
-        }),
+        text,
         adminId,
       );
     } catch (error) {
       this.logger.error(
-        `Login text for application ${application.id} failed; approval rolled back.`,
+        `${what} for application ${application.id} failed; ${outcome}.`,
         error instanceof Error ? error.stack : String(error),
       );
       const reason =
         error instanceof HttpException ? error.message : "Please try again.";
       throw new ServiceUnavailableException(
-        `The login text could not be sent, so nothing was approved. ${reason}`,
+        `${what} could not be sent, so ${outcome}. ${reason}`,
       );
     }
   }
 
+  /** The values the application texts' placeholders are filled with (B73). */
+  private templateValues(application: Application): Record<string, string> {
+    return {
+      firstName: application.firstName,
+      lastName: application.lastName,
+    };
+  }
+
   /**
-   * Rejects an application or puts it on hold. No driver is created. Can be changed again
-   * later, unless the application has been approved.
+   * Declines an application (stored as `rejected`, B69) or puts it on hold. No driver is created. Can be changed
+   * again later, unless the application has been approved.
+   *
+   * Declining with `sendText` also texts the applicant the "declined" template from Settings (B72, D58), inside
+   * the same transaction: if the text fails, nothing is declined, and the admin can retry or decline without a
+   * text. `sendText` is ignored for "on hold".
    *
    * @throws NotFoundException if there is no application with this id.
    * @throws ConflictException if it is already approved.
+   * @throws ServiceUnavailableException if the decline text could not be sent (nothing declined).
    */
   async setStatus(
     id: string,
     status: ApplicationStatus.rejected | ApplicationStatus.on_hold,
     adminId: string,
+    options: { sendText?: boolean } = {},
   ): Promise<ApplicationDetailDto> {
     const updated = await this.dataSource.transaction(async (manager) => {
       const application = await this.loadForReview(manager, id);
       application.status = status;
       application.reviewedById = adminId;
       application.reviewedAt = new Date();
-      return manager.save(application);
+      const saved = await manager.save(application);
+      if (status === ApplicationStatus.rejected && options.sendText) {
+        await this.sendOrFail(
+          application,
+          await this.templates.render(
+            TemplateKey.application_declined,
+            this.templateValues(application),
+          ),
+          adminId,
+          "The decline text",
+          "nothing was declined",
+        );
+      }
+      return saved;
     });
     return this.toDetail(updated);
   }

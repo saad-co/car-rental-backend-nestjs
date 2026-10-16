@@ -21,6 +21,7 @@ import {
   ApplicationListDto,
 } from "./dto/application.dto.js";
 import { ApplicationReceivedDto } from "./dto/application-received.dto.js";
+import { DeclineApplicationDto } from "./dto/decline-application.dto.js";
 import {
   DeleteApplicationsDto,
   DeleteApplicationsResultDto,
@@ -117,17 +118,23 @@ export class ApplicationsController {
     return this.applications.approve(id, admin.id);
   }
 
-  /** `POST /applications/:id/reject`: rejects the application. No driver is created. */
+  /**
+   * `POST /applications/:id/reject`: declines the application (shown as "Declined", B69). No driver is created.
+   * Optional body `{ "sendText": true }` also texts the applicant the "declined" template (B72); without a body
+   * nothing is sent. `503` if the text could not be sent (then nothing is declined).
+   */
   @Post(":id/reject")
   @HttpCode(HttpStatus.OK)
   reject(
     @Param("id", ParseUUIDPipe) id: string,
+    @Body() body: DeclineApplicationDto,
     @CurrentUser() admin: AuthenticatedUser,
   ): Promise<ApplicationDetailDto> {
     return this.applications.setStatus(
       id,
       ApplicationStatus.rejected,
       admin.id,
+      { sendText: body.sendText },
     );
   }
 
