@@ -1,7 +1,8 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { In, Repository } from "typeorm";
+import { Brackets, In, Repository } from "typeorm";
 import { PaymentAlias } from "../aliases/payment-alias.entity.js";
+import { likePattern, phoneDigits } from "../common/search.js";
 import { Payment } from "../payments/payment.entity.js";
 import { Driver } from "./driver.entity.js";
 import { DriverDto, DriverListDto } from "./dto/driver.dto.js";
@@ -20,14 +21,41 @@ export class DriversService {
     @InjectRepository(Payment) private readonly payments: Repository<Payment>,
   ) {}
 
-  /** One page of drivers, newest first, optionally only one status. */
+  /**
+   * One page of drivers, newest first, optionally only one status and only those matching a search (B75): first
+   * name, last name, "first last", email (ILIKE, ignoring case), and the phone by its digits. Built like
+   * `ApplicationsService.list`; see there for the details.
+   */
   async list(query: ListDriversQueryDto): Promise<DriverListDto> {
-    const [rows, total] = await this.drivers.findAndCount({
-      where: query.status ? { status: query.status } : {},
-      order: { createdAt: "DESC", id: "DESC" },
-      skip: (query.page - 1) * query.limit,
-      take: query.limit,
-    });
+    const builder = this.drivers
+      .createQueryBuilder("d")
+      .orderBy("d.createdAt", "DESC")
+      .addOrderBy("d.id", "DESC")
+      .skip((query.page - 1) * query.limit)
+      .take(query.limit);
+    if (query.status) {
+      builder.andWhere("d.status = :status", { status: query.status });
+    }
+    if (query.search) {
+      const digits = phoneDigits(query.search);
+      builder.andWhere(
+        new Brackets((match) => {
+          match
+            .where("d.first_name ILIKE :pattern")
+            .orWhere("d.last_name ILIKE :pattern")
+            .orWhere("(d.first_name || ' ' || d.last_name) ILIKE :pattern")
+            .orWhere("d.email ILIKE :pattern");
+          if (digits) {
+            match.orWhere(
+              "regexp_replace(d.phone, '\\D', '', 'g') LIKE :digits",
+              { digits: likePattern(digits) },
+            );
+          }
+        }),
+        { pattern: likePattern(query.search) },
+      );
+    }
+    const [rows, total] = await builder.getManyAndCount();
     return {
       items: await this.withExtras(rows),
       total,

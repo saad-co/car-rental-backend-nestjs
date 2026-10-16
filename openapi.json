@@ -706,6 +706,16 @@
                 "inactive"
               ]
             }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "description": "Text to look for; which fields are searched depends on the list. Case does not matter.",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -784,6 +794,16 @@
                 "not_payment",
                 "duplicate_payment"
               ]
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "description": "Text to look for; which fields are searched depends on the list. Case does not matter.",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
             }
           },
           {
@@ -910,6 +930,16 @@
                 "assigned",
                 "review"
               ]
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "description": "Text to look for; which fields are searched depends on the list. Case does not matter.",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
             }
           }
         ],

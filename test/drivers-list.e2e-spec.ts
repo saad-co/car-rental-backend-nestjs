@@ -4,7 +4,7 @@ import {
   AliasSource,
   PaymentAlias,
 } from "../src/aliases/payment-alias.entity.js";
-import { Driver } from "../src/drivers/driver.entity.js";
+import { Driver, DriverStatus } from "../src/drivers/driver.entity.js";
 import { DriversService } from "../src/drivers/drivers.service.js";
 import {
   MatchMethod,
@@ -108,5 +108,47 @@ describe("Drivers list with aliases and payment summary (test database)", () => 
     });
 
     expect((await service.findOne(tim.id)).paymentCount).toBe(2);
+  });
+
+  describe("search (B75)", () => {
+    const names = async (search: string, status?: DriverStatus) =>
+      (await service.list({ page: 1, limit: 8, search, status })).items.map(
+        (d) => `${d.firstName} ${d.lastName}`,
+      );
+
+    beforeEach(async () => {
+      await db.getRepository(Driver).save([
+        {
+          firstName: "Patricia",
+          lastName: "Gomez",
+          email: "pg@example.com",
+          phone: "+13125550101",
+        },
+        {
+          firstName: "Sam",
+          lastName: "Patel",
+          email: "sam@fleet.test",
+          phone: "+17735550199",
+          status: DriverStatus.inactive,
+        },
+      ]);
+    });
+
+    it("matches first or last name, the full name, and email, ignoring case", async () => {
+      expect((await names("PAT")).sort()).toEqual([
+        "Patricia Gomez",
+        "Sam Patel",
+      ]);
+      expect(await names("sam patel")).toEqual(["Sam Patel"]);
+      expect(await names("fleet.test")).toEqual(["Sam Patel"]);
+    });
+
+    it("matches the phone by its digits, typed in any format", async () => {
+      expect(await names("(312) 555-0101")).toEqual(["Patricia Gomez"]);
+    });
+
+    it("combines the search with the status filter", async () => {
+      expect(await names("pat", DriverStatus.inactive)).toEqual(["Sam Patel"]);
+    });
   });
 });

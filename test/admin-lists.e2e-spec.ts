@@ -1,6 +1,7 @@
 import { plainToInstance } from "class-transformer";
 import { validateSync } from "class-validator";
 import type { DataSource } from "typeorm";
+import { Driver } from "../src/drivers/driver.entity.js";
 import { ListInboundEmailsQueryDto } from "../src/email-intake/dto/list-inbound-emails-query.dto.js";
 import {
   InboundEmail,
@@ -9,6 +10,7 @@ import {
 import { InboundEmailsService } from "../src/email-intake/inbound-emails.service.js";
 import { ListPaymentsQueryDto } from "../src/payments/dto/list-payments-query.dto.js";
 import {
+  MatchMethod,
   Payment,
   PaymentSource,
   PaymentStatus,
@@ -90,7 +92,7 @@ describe("Admin lists: payments and the email log (test database)", () => {
   });
 
   beforeEach(async () => {
-    await db.query("TRUNCATE payments, inbound_emails");
+    await db.query("TRUNCATE payments, inbound_emails, drivers CASCADE");
   });
 
   afterAll(async () => {
@@ -171,6 +173,79 @@ describe("Admin lists: payments and the email log (test database)", () => {
       }),
     );
     expect(venmoFailures.items.map((e) => e.id)).toEqual([failed]);
+  });
+
+  it("searches payments by payer name, payer handle and the assigned driver's name (B75)", async () => {
+    const [sutton] = await db.getRepository(Driver).save([
+      {
+        firstName: "Tim",
+        lastName: "Sutton",
+        email: "tim@example.com",
+        phone: "+13125550101",
+      },
+    ]);
+    const e1 = await addEmail(1, InboundEmailStatus.processed, "venmo");
+    const e2 = await addEmail(2, InboundEmailStatus.processed, "venmo");
+    const e3 = await addEmail(3, InboundEmailStatus.processed, "venmo");
+    const byName = await addPayment(
+      e1,
+      PaymentSource.email_venmo,
+      new Date("2026-10-09T10:00:00Z"),
+    ); // payer "Pat Example"
+    const byHandle = await addPayment(
+      e2,
+      PaymentSource.email_venmo,
+      new Date("2026-10-10T10:00:00Z"),
+    );
+    await db
+      .getRepository(Payment)
+      .update(byHandle, { senderName: "Someone", senderHandle: "@pat-x" });
+    const byDriver = await addPayment(
+      e3,
+      PaymentSource.email_venmo,
+      new Date("2026-10-11T10:00:00Z"),
+    );
+    await db.getRepository(Payment).update(byDriver, {
+      senderName: "Logistics LLC",
+      driverId: sutton.id,
+      status: PaymentStatus.confirmed,
+      matchMethod: MatchMethod.manual,
+    });
+
+    const ids = async (values: Record<string, string>) =>
+      (await payments.list(query(ListPaymentsQueryDto, values))).items.map(
+        (p) => p.id,
+      );
+    expect(await ids({ search: "PAT" })).toEqual([byHandle, byName]);
+    expect(await ids({ search: "tim sutton" })).toEqual([byDriver]);
+    expect(await ids({ search: "pat", match: "assigned" })).toEqual([]);
+    // The driver comes with the payment, as before the search was added.
+    expect(
+      (await payments.list(query(ListPaymentsQueryDto, { search: "sutton" })))
+        .items[0].driver,
+    ).toMatchObject({ id: sutton.id });
+  });
+
+  it("searches the email log by subject and sender address (B75)", async () => {
+    const venmo = await addEmail(20, InboundEmailStatus.processed, "venmo");
+    const chase = await addEmail(
+      21,
+      InboundEmailStatus.processed,
+      "zelle_chase",
+    );
+    await db
+      .getRepository(InboundEmail)
+      .update(chase, { fromAddress: "no.reply.alerts@chase.com" });
+
+    const ids = async (values: Record<string, string>) =>
+      (await emails.list(query(ListInboundEmailsQueryDto, values))).items.map(
+        (e) => e.id,
+      );
+    expect(await ids({ search: "email 20" })).toEqual([venmo]);
+    expect(await ids({ search: "CHASE.COM" })).toEqual([chase]);
+    expect(await ids({ search: "email", provider: "zelle_chase" })).toEqual([
+      chase,
+    ]);
   });
 
   it("rejects unknown filter values (the ValidationPipe answers 400)", () => {
