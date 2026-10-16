@@ -702,6 +702,7 @@
             "schema": {
               "type": "string",
               "enum": [
+                "onboarding",
                 "active",
                 "inactive"
               ]
@@ -762,6 +763,109 @@
           }
         },
         "summary": "`GET /drivers/:id`: one driver. `400` for a malformed id, `404` if unknown.",
+        "tags": [
+          "Drivers"
+        ]
+      }
+    },
+    "/drivers/{id}/onboarding": {
+      "post": {
+        "operationId": "DriversController_setOnboardingStep",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetOnboardingStepDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`POST /drivers/:id/onboarding`: ticks or un-ticks one onboarding step (D56). The driver becomes `active` when\nthe third step is ticked, and goes back to `onboarding` when one is un-ticked. Returns the updated driver.\n`409` if the driver is inactive.",
+        "tags": [
+          "Drivers"
+        ]
+      }
+    },
+    "/drivers/{id}/deactivate": {
+      "post": {
+        "operationId": "DriversController_deactivate",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`POST /drivers/:id/deactivate`: the driver left (B67). Their login stops working at once.",
+        "tags": [
+          "Drivers"
+        ]
+      }
+    },
+    "/drivers/{id}/reactivate": {
+      "post": {
+        "operationId": "DriversController_reactivate",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`POST /drivers/:id/reactivate`: back to `active` (all steps done) or `onboarding`; login works again.",
         "tags": [
           "Drivers"
         ]
@@ -1732,6 +1836,31 @@
           "limit"
         ]
       },
+      "DriverOnboardingDto": {
+        "type": "object",
+        "properties": {
+          "contractSignedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "depositPaidAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "vehicleAssignedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "contractSignedAt",
+          "depositPaidAt",
+          "vehicleAssignedAt"
+        ]
+      },
       "DriverAliasDto": {
         "type": "object",
         "properties": {
@@ -1787,11 +1916,16 @@
             "description": "E.164, e.g. `+13125550123`."
           },
           "status": {
+            "description": "`onboarding` until all three steps are done, then `active`; `inactive` when the driver left (D56).",
             "enum": [
+              "onboarding",
               "active",
               "inactive"
             ],
             "type": "string"
+          },
+          "onboarding": {
+            "$ref": "#/components/schemas/DriverOnboardingDto"
           },
           "createdAt": {
             "format": "date-time",
@@ -1823,6 +1957,7 @@
           "email",
           "phone",
           "status",
+          "onboarding",
           "createdAt",
           "aliases",
           "paymentCount",
@@ -1854,6 +1989,27 @@
           "total",
           "page",
           "limit"
+        ]
+      },
+      "SetOnboardingStepDto": {
+        "type": "object",
+        "properties": {
+          "step": {
+            "type": "string",
+            "enum": [
+              "contract",
+              "deposit",
+              "vehicle"
+            ]
+          },
+          "done": {
+            "type": "boolean",
+            "description": "`true` marks the step done (now, by the admin); `false` clears it."
+          }
+        },
+        "required": [
+          "step",
+          "done"
         ]
       },
       "InboundEmailProvider": {

@@ -131,6 +131,8 @@ describe("ApplicationsService.approve sends the login by text (test database)", 
     expect(user).toMatchObject({ must_change_password: true, role: "driver" });
     expect(user.email_verified_at).not.toBeNull();
     expect(await count("drivers")).toBe(1);
+    // An approved applicant is a driver in onboarding until contract, deposit and vehicle are done (D56).
+    expect(await count("drivers WHERE status = 'onboarding'")).toBe(1);
   });
 
   it("live: sends the text through Quo to the application's phone", async () => {
