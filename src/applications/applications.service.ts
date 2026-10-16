@@ -12,6 +12,7 @@ import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import { isEmail } from "class-validator";
 import {
+  Brackets,
   DataSource,
   EntityManager,
   In,
@@ -19,6 +20,7 @@ import {
   Not,
   Repository,
 } from "typeorm";
+import { likePattern, phoneDigits } from "../common/search.js";
 import { isUniqueViolation } from "../database/postgres-errors.js";
 import { driverWelcomeText } from "../drivers/driver-welcome.text.js";
 import { Driver } from "../drivers/driver.entity.js";
@@ -173,20 +175,53 @@ export class ApplicationsService {
   }
 
   /**
-   * One page of applications, newest first, optionally only one status.
+   * One page of applications, newest first, optionally only one status and only those matching a search.
+   *
+   * Built with a QueryBuilder because the search is "status = X AND (name OR email OR ...)", which `find()` cannot
+   * say simply. `:status`, `:pattern` are parameters: Postgres receives the values separately from the SQL, so a
+   * search can never change the query (no SQL injection).
+   *
+   * The search (B75) matches, ignoring case: first name, last name, "first last", email, city; and the phone by its
+   * digits, so "312 555" finds "(312) 555-0101". Mongo equivalent: `$or` of case-insensitive `$regex`es.
+   * With hundreds of rows Postgres simply reads them all; if this ever grows to many thousands, a trigram index
+   * (`pg_trgm`) would make `ILIKE '%...%'` fast.
    *
    * `skip` / `take` become SQL `OFFSET` / `LIMIT` (Mongoose: `.skip()` / `.limit()`).
-   * `findAndCount` also returns the total number of matching rows, for page numbers.
+   * `getManyAndCount` also returns the total number of matching rows, for page numbers.
    * `id` is a second sort key so rows received in the same millisecond keep a fixed order
    * across pages.
    */
   async list(query: ListApplicationsQueryDto): Promise<ApplicationListDto> {
-    const [rows, total] = await this.applications.findAndCount({
-      where: query.status ? { status: query.status } : {},
-      order: { createdAt: "DESC", id: "DESC" },
-      skip: (query.page - 1) * query.limit,
-      take: query.limit,
-    });
+    const builder = this.applications
+      .createQueryBuilder("a")
+      .orderBy("a.createdAt", "DESC")
+      .addOrderBy("a.id", "DESC")
+      .skip((query.page - 1) * query.limit)
+      .take(query.limit);
+    if (query.status) {
+      builder.andWhere("a.status = :status", { status: query.status });
+    }
+    if (query.search) {
+      const digits = phoneDigits(query.search);
+      builder.andWhere(
+        new Brackets((match) => {
+          match
+            .where("a.first_name ILIKE :pattern")
+            .orWhere("a.last_name ILIKE :pattern")
+            .orWhere("(a.first_name || ' ' || a.last_name) ILIKE :pattern")
+            .orWhere("a.email ILIKE :pattern")
+            .orWhere("a.city ILIKE :pattern");
+          if (digits) {
+            match.orWhere(
+              "regexp_replace(a.phone, '\\D', '', 'g') LIKE :digits",
+              { digits: likePattern(digits) },
+            );
+          }
+        }),
+        { pattern: likePattern(query.search) },
+      );
+    }
+    const [rows, total] = await builder.getManyAndCount();
     return {
       items: rows.map((row) => this.toListItem(row)),
       total,
