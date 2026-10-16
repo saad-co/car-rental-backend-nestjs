@@ -22,6 +22,10 @@ class FakeStorage implements FileStorage {
   presignGet(key: string) {
     return Promise.resolve(`https://bucket.test/${key}?signed`);
   }
+  delete(key: string) {
+    this.files.delete(key);
+    return Promise.resolve();
+  }
 }
 
 /** A network in memory: answers by URL, and records the headers each request carried. */

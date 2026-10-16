@@ -62,7 +62,7 @@ class EnvironmentVariables {
   @IsIn(["log", "smtp"])
   MAIL_MODE!: "log" | "smtp";
 
-  /** Sender shown in emails, e.g. `Car Rental <name@gmail.com>`. With Gmail, the account's own address. */
+  /** Sender shown in emails, e.g. `GonzoCar <name@gmail.com>`. With Gmail, the account's own address. */
   @IsString()
   @IsNotEmpty()
   MAIL_FROM!: string;

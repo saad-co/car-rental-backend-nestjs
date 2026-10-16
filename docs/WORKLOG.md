@@ -4,6 +4,130 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-17 — Internal notes on applications (B74, D57)
+- **Done (backend):** migration `CreateApplicationNotes` (`application_notes`: application CASCADE, author SET NULL,
+  CHECK body 1–2000 not blank, index (application_id, created_at)); `ApplicationNotesService` +
+  `ApplicationNotesController`: `GET /applications/:id/notes` (paginated, newest first, author email),
+  `POST` (trimmed body), `DELETE …/notes/:noteId` (author only, 403 otherwise, 204).
+- **Done (frontend):** `ApplicationNotesCard` under Review on the application page: add (TailAdmin `TextArea`,
+  2000 limit), list with author email and Chicago time, line breaks kept, "Show older notes" (infinite query, 10 per
+  page), trash on your own notes only with a confirm dialog.
+- **Verified:** migration locally (cascade and blank-note CHECK tested in SQL, revert + re-run, schema check clean);
+  backend lint, 114 unit + 104 e2e (8 new); route 401 without token; frontend lint + build. Browser on a fake
+  application with 11 notes by a fake second admin (all deleted after): 10 shown + "Show older (1 more)", no delete
+  icon on others' notes, Add disabled for blank, two-line note on top with author, Show older loads all 12, delete
+  Cancel/confirm, no failed requests; deleting the application removed its notes.
+- **Branch:** `feature/delete-applications` (both repos).
+
+---
+
+### 2026-10-17 — "Rejected" shown as "Declined" (B69)
+- **Done (frontend only):** `applicationStatus.ts` label `rejected` → "Declined" (badge on list and detail, Status
+  filter option); detail page button "Reject" → "Decline". Label only (Abulkalam): database value `rejected` and the
+  route `POST /applications/:id/reject` unchanged, no migration. The Email log's "Rejected (not genuine)" is a
+  different thing (a refused forged email) and was left as is.
+- **Verified:** frontend lint + build; browser on a fake application (created and deleted): Decline button, badge
+  "Declined", filter option "Declined", stored value still `rejected`.
+- **Branch:** `feature/delete-applications`.
+
+---
+
+### 2026-10-17 — "Car Rental" renamed "GonzoCar" (B70)
+- **Done (frontend):** `src/brand.ts` (`BRAND_NAME`, `BRAND_INITIALS`) used by the sidebar and the mobile header;
+  `index.html` title.
+- **Done (backend):** driver login text "your GonzoCar driver account" (was "Gonzo Car"); OpenAPI title and
+  description; `.env.example` `MAIL_FROM`; Quo webhook label in `scripts/quo-webhook.ts` (affects new webhooks only).
+- **Verified:** backend lint, 114 unit + 96 e2e; frontend lint + build; browser: tab title, sidebar, mobile header
+  (375 px) show GonzoCar, "Car Rental" nowhere on the page.
+- **Not changed:** local `.env` `MAIL_FROM` (Abulkalam's file; email unused since D52). Real logo/favicon: B12.
+- **Branch:** `feature/delete-applications` (both repos).
+
+---
+
+### 2026-10-17 — Driver statuses and onboarding steps (D56; B67 done, B68/B48 mostly)
+- **Why:** Abulkalam: a driver is active only with contract signed, deposit paid and a vehicle; steps in any order,
+  ticked by an admin, active automatically, onboarding drivers can log in, inactive ones cannot.
+- **Done (backend):** migration `AddDriverOnboarding` (enum rebuilt with `onboarding` as default; three step dates +
+  admin; CHECK `drivers_active_is_onboarded`; drivers already active marked onboarded at migration time); legacy
+  import fills steps for active drivers; `POST /drivers/:id/onboarding`, `/deactivate`, `/reactivate` (row locks;
+  deactivate turns `users.active` off); `DriverDto.onboarding`.
+- **Done (frontend):** shared `DriverStatusBadge` ("Onboarding · 2/3") in the list, driver page and assign dialog;
+  Status filter with Onboarding; Onboarding card (locked while inactive; confirm before un-ticking an active driver);
+  Deactivate (confirm) / Reactivate.
+- **Verified:** migration on local (19 active → steps set, 35 inactive), revert + re-run, schema check clean; backend
+  lint, 114 unit + 96 e2e tests (9 new: any order, auto-active, un-tick, DB CHECK, deactivate + real login refused,
+  reactivate, driver without login, body validation); frontend lint + build. Browser walkthrough on a fake driver
+  (created and deleted): badges and filter, ticks 0/3 → Active, un-tick Cancel/confirm, Deactivate (login flag off in
+  the database, steps locked), Reactivate (Onboarding 2/3, login back on).
+- **Staging:** the migration runs on the next deploy; the imported active drivers get their steps marked done.
+- **Branch:** `feature/delete-applications` (both repos).
+
+---
+
+### 2026-10-17 — Drivers, Payments, Email log on the shared table (B75, step 3; B75 done)
+- **Done (backend):** `search` on `GET /drivers` (name, full name, email, phone digits), `GET /payments` (payer name
+  and handle, assigned driver's name; existing status/source/driver/match filters unchanged, now a QueryBuilder
+  with LEFT JOINs), `GET /inbound-emails` (subject, sender address).
+- **Done (frontend):** the three pages on `TableCard` + `DataTable` + `useListParams`: Drivers (Status filter),
+  Payments (Match + Source filters; Accept / Assign / Change and the assign dialog kept), Email log (Outcome +
+  Provider filters; Provider is new in the UI). `filterOptions` helper.
+- **Also fixed:** (1) `TableCard` clipped the Filter panel on short lists (Abulkalam's screenshot): `overflow-hidden`
+  moved from the card to the table part. (2) A column's cell classes leaked into its header: `Column.align` added.
+  (3) `cn()` dropped the theme's font sizes (`text-theme-*`, `text-title-*`) whenever a colour followed, app-wide:
+  `extendTailwindMerge` now knows them.
+- **Verified:** backend lint, 114 unit + 87 e2e tests; frontend lint + build. Browser (local, read-only on real
+  local data): Drivers 8 rows / 7 pages, search "sutton", "312" + Inactive; Payments 8 rows / 3 pages, "sutton" +
+  Assigned, Filter panel with two groups fully visible over a 1-row list; Email log "square.com" + Not a payment;
+  cells 14 px / headers 12 px; no failed requests.
+- **Note:** Vite's dev server once served a stale `DataTable.tsx` after an edit (file watcher missed it); touching
+  the file fixed it. If a change does not show locally, check what Vite serves before debugging the code.
+- **Branch:** `feature/delete-applications` (both repos).
+
+---
+
+### 2026-10-17 — Shared list tables; Applications list with search (B75, steps 1-2)
+- **Why:** Abulkalam: every list like TailAdmin's "Recent Orders" table, built from reusable components, search +
+  Filter dropdown, 8 rows per page, "Basic Table 5" pagination.
+- **Done (frontend, step 1):** `components/tables/`: `TableCard`, `DataTable` (column list, row checkboxes, clickable
+  rows), `SearchInput` (300 ms pause), `FilterDropdown` (select per group, Apply/Clear, active count),
+  `useListParams` (`q`, filters, `page` in the URL; `LIST_PAGE_SIZE = 8`); `AvatarText` from TailAdmin; `Pagination`
+  restyled (Previous left, numbers centred, Next right). Copied from TailAdmin `crm/CrmRecentOrderTable.tsx` and
+  `ecommerce/ProductListTable.tsx` (this template copy's "Basic Table 4" is a different table).
+- **Done (backend, step 2):** `GET /applications?search=` (name, "first last", email, city with ILIKE; phone by digits);
+  shared `SearchQueryDto` and `common/search.ts` (`likePattern` escapes `%` `_` `\`, `phoneDigits`).
+- **Done (frontend, step 2):** Applications list on the shared components: Applicant column with initials, Status in
+  the Filter dropdown, per-row trash icon + bulk Delete (B66); selection cleared whenever the view changes.
+- **Verified:** backend lint, 114 unit + 82 e2e tests (new: `search.spec.ts`, `applications-list.e2e-spec.ts`);
+  frontend lint + build. **Browser walkthrough (local, 10 fake "Walk Test" applications, all deleted afterwards):**
+  8 rows per page, page 2, phone search "630 555-0007" (one request after the pause, back to page 1), city search,
+  search + Status filter (badge "1", in the URL), selection cleared by page change + Back, bulk Delete Cancel (no
+  request) and confirm, trash icon (does not open the row), detail-page Delete back to the list with the message,
+  select all, empty state, layout at 1400 px. Also seen in the log: B66 delete used by an admin at 01:12 (3 test rows).
+- **Fixed during the walkthrough:** after deleting from the detail page, the chat of the deleted application was
+  refetched while the page left (404 in the console); `useDeleteApplications` now marks chats stale without refetching.
+- **Not covered:** an approved row's disabled checkbox / missing trash icon (no approved application locally).
+- **NOT done:** step 3 (Drivers, Payments, Email log on the shared table, each with backend search).
+- **Branch:** `feature/delete-applications` (both repos; Abulkalam 2026-10-17: commit on this branch, no new branches).
+
+---
+
+### 2026-10-17 — Delete applications, one or many (B66, D55)
+- **Why:** client revisions PDF (B63-B74, received 2026-10-17); B64/B65 set aside by Abulkalam.
+- **Done (backend):** `FileStorage.delete`; `ApplicationsService.deleteMany` (hard delete, all or nothing, approved
+  refused with 409, chat deleted unless the phone is shared, files removed after commit); route
+  `POST /applications/bulk-delete` + `DeleteApplicationsDto`; `openapi.json` exported.
+- **Done (frontend):** client regenerated; `useDeleteApplications`; list page row checkboxes (approved disabled),
+  "Delete (n)", confirm dialog, result message; detail page Delete button; shared `Checkbox` (from TailAdmin),
+  `Button` `danger` variant, `ConfirmDialog` `confirmVariant`.
+- **Verified:** backend lint, 110 unit + 73 e2e tests (9 new in `application-delete.e2e-spec.ts`), build; route answers
+  401 without a token (local). Frontend lint + build.
+- **NOT done:** browser walkthrough (waiting for admin sign-in in the pane; will be done with the new list tables);
+  three local test applications "Test Delete 1-3" exist for it.
+- **Branch:** `feature/delete-applications` (both repos).
+- **NEXT:** shared TailAdmin-style list tables (search, filter dropdown, 8 rows per page) on `feature/list-tables`.
+
+---
+
 ### 2026-10-14 — Applicants' documents copied from the website into our storage (D54, B17, B45)
 - **Why:** the licence, rating and earnings uploads sit in the website's private Supabase bucket; the admin only saw
   "Uploaded", and the website can delete old files (its archive page).

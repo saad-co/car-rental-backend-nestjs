@@ -11,6 +11,16 @@ export class DriverAliasDto {
   source: AliasSource;
 }
 
+/**
+ * The three onboarding steps (D56): when each was ticked; null while not done. A driver is `active` only when all
+ * three are set.
+ */
+export class DriverOnboardingDto {
+  contractSignedAt: Date | null;
+  depositPaidAt: Date | null;
+  vehicleAssignedAt: Date | null;
+}
+
 /** A driver as the admin screens see it. Used by both the list and the detail endpoint. */
 export class DriverDto {
   id: string;
@@ -19,7 +29,9 @@ export class DriverDto {
   email: string;
   /** E.164, e.g. `+13125550123`. */
   phone: string;
+  /** `onboarding` until all three steps are done, then `active`; `inactive` when the driver left (D56). */
   status: DriverStatus;
+  onboarding: DriverOnboardingDto;
   /** When the driver was created (the application's approval). */
   createdAt: Date;
   /** Every payment alias of the driver, grouped by payment method then by value. Empty if none yet. */

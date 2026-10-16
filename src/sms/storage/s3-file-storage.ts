@@ -1,5 +1,6 @@
 import {
   CreateBucketCommand,
+  DeleteObjectCommand,
   GetObjectCommand,
   HeadBucketCommand,
   PutObjectCommand,
@@ -67,6 +68,13 @@ export class S3FileStorage implements FileStorage {
       this.client,
       new GetObjectCommand({ Bucket: this.options.bucket, Key: key }),
       { expiresIn: expiresInSeconds },
+    );
+  }
+
+  /** S3 answers success for a key that does not exist, so deleting twice is harmless. */
+  async delete(key: string): Promise<void> {
+    await this.client.send(
+      new DeleteObjectCommand({ Bucket: this.options.bucket, Key: key }),
     );
   }
 

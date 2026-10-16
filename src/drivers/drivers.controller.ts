@@ -1,7 +1,20 @@
-import { Controller, Get, Param, ParseUUIDPipe, Query } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+} from "@nestjs/common";
+import { CurrentUser } from "../auth/current-user.decorator.js";
+import type { AuthenticatedUser } from "../auth/jwt-auth.guard.js";
 import { DriversService } from "./drivers.service.js";
 import { DriverDto, DriverListDto } from "./dto/driver.dto.js";
 import { ListDriversQueryDto } from "./dto/list-drivers-query.dto.js";
+import { SetOnboardingStepDto } from "./dto/set-onboarding-step.dto.js";
 
 /** Admin driver routes under `/drivers`. All need a logged-in admin (global JwtAuthGuard). */
 @Controller("drivers")
@@ -18,5 +31,40 @@ export class DriversController {
   @Get(":id")
   findOne(@Param("id", ParseUUIDPipe) id: string): Promise<DriverDto> {
     return this.drivers.findOne(id);
+  }
+
+  /**
+   * `POST /drivers/:id/onboarding`: ticks or un-ticks one onboarding step (D56). The driver becomes `active` when
+   * the third step is ticked, and goes back to `onboarding` when one is un-ticked. Returns the updated driver.
+   * `409` if the driver is inactive.
+   */
+  @Post(":id/onboarding")
+  @HttpCode(HttpStatus.OK)
+  setOnboardingStep(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() body: SetOnboardingStepDto,
+    @CurrentUser() admin: AuthenticatedUser,
+  ): Promise<DriverDto> {
+    return this.drivers.setOnboardingStep(id, body.step, body.done, admin.id);
+  }
+
+  /** `POST /drivers/:id/deactivate`: the driver left (B67). Their login stops working at once. */
+  @Post(":id/deactivate")
+  @HttpCode(HttpStatus.OK)
+  deactivate(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() admin: AuthenticatedUser,
+  ): Promise<DriverDto> {
+    return this.drivers.deactivate(id, admin.id);
+  }
+
+  /** `POST /drivers/:id/reactivate`: back to `active` (all steps done) or `onboarding`; login works again. */
+  @Post(":id/reactivate")
+  @HttpCode(HttpStatus.OK)
+  reactivate(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() admin: AuthenticatedUser,
+  ): Promise<DriverDto> {
+    return this.drivers.reactivate(id, admin.id);
   }
 }

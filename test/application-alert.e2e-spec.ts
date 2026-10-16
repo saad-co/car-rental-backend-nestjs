@@ -78,6 +78,7 @@ describe("new-application alert to staff (test database)", () => {
       sms,
       alerts,
       config,
+      null,
     );
   };
 

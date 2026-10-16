@@ -76,7 +76,7 @@ if (command === "list") {
     url: argument,
     events: EVENTS,
     resourceIds: [requireEnv("QUO_PHONE_NUMBER_ID")],
-    label: "Car Rental chat",
+    label: "GonzoCar chat",
   });
   const hook = answer?.data as { id: string; key: string };
   console.log(`Created webhook ${hook.id} for ${argument}`);

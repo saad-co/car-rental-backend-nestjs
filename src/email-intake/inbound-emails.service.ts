@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { In, Repository } from "typeorm";
+import { Brackets, In, Repository } from "typeorm";
+import { likePattern } from "../common/search.js";
 import { Payment } from "../payments/payment.entity.js";
 import {
   InboundEmailDto,
@@ -18,17 +19,35 @@ export class InboundEmailsService {
     @InjectRepository(Payment) private readonly payments: Repository<Payment>,
   ) {}
 
-  /** One page of processed emails, newest first, optionally filtered by status and provider. */
+  /**
+   * One page of processed emails, newest first, optionally filtered by status and provider, and by a search (B75)
+   * on the subject and the sender's address (ILIKE, ignoring case). Never the body. Built like
+   * `ApplicationsService.list`; see there for the details.
+   */
   async list(query: ListInboundEmailsQueryDto): Promise<InboundEmailListDto> {
-    const [rows, total] = await this.emails.findAndCount({
-      where: {
-        ...(query.status && { status: query.status }),
-        ...(query.provider && { provider: query.provider }),
-      },
-      order: { receivedAt: "DESC", id: "DESC" },
-      skip: (query.page - 1) * query.limit,
-      take: query.limit,
-    });
+    const builder = this.emails
+      .createQueryBuilder("e")
+      .orderBy("e.receivedAt", "DESC")
+      .addOrderBy("e.id", "DESC")
+      .skip((query.page - 1) * query.limit)
+      .take(query.limit);
+    if (query.status) {
+      builder.andWhere("e.status = :status", { status: query.status });
+    }
+    if (query.provider) {
+      builder.andWhere("e.provider = :provider", { provider: query.provider });
+    }
+    if (query.search) {
+      builder.andWhere(
+        new Brackets((match) => {
+          match
+            .where("e.subject ILIKE :pattern")
+            .orWhere("e.from_address ILIKE :pattern");
+        }),
+        { pattern: likePattern(query.search) },
+      );
+    }
+    const [rows, total] = await builder.getManyAndCount();
 
     // The link lives on the payment (`external_id` = the email's id, D47): one query for the whole page.
     const linked =

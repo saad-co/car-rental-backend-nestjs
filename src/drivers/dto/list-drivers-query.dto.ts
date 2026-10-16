@@ -1,9 +1,12 @@
 import { IsEnum, IsOptional } from "class-validator";
-import { PaginationQueryDto } from "../../common/dto/pagination-query.dto.js";
+import { SearchQueryDto } from "../../common/dto/search-query.dto.js";
 import { DriverStatus } from "../driver.entity.js";
 
-/** Query string of `GET /drivers`, e.g. `?status=active&page=1&limit=20`. */
-export class ListDriversQueryDto extends PaginationQueryDto {
+/**
+ * Query string of `GET /drivers`, e.g. `?status=active&search=pat&page=1&limit=8`.
+ * `search` matches the name (first, last or both), email, and the phone by its digits.
+ */
+export class ListDriversQueryDto extends SearchQueryDto {
   /** Only drivers with this status. Omit for all. */
   @IsOptional()
   @IsEnum(DriverStatus)

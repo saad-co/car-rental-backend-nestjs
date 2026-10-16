@@ -76,9 +76,11 @@ so the two repos cannot silently drift apart.
 **User** — an account that can log in. `email` (unique), `passwordHash`, `role` (`admin` | `driver`, no default),
 `active`. Admins log in to the admin app; drivers log in to the driver portal with their email (D26).
 
-**Driver** — `firstName`, `lastName`, `phone` (E.164), `email`, `status` (`active` | `inactive`),
+**Driver** — `firstName`, `lastName`, `phone` (E.164), `email`, `status` (`onboarding` | `active` | `inactive`, D56),
+`contractSignedAt`, `depositPaidAt`, `vehicleAssignedAt` (onboarding steps, each with the admin who ticked it),
 `billingType` (`daily` | `weekly`), `billingRateCents`, `billingDueWeekday` (weekly only),
-`billingActive`, `smsOptedOut`.
+`billingActive`, `smsOptedOut`. New drivers start `onboarding`; `active` only when all three steps are done (CHECK);
+an `inactive` driver cannot log in.
 
 **PaymentAlias** — links a payment identity to a driver.
 `driverId`, `type` (`zelle_name` | `zelle_contact` | `venmo` | `cashapp` | `email` | `phone`),
@@ -177,7 +179,8 @@ An admin assigns an unmatched payment to a driver. This posts the payment and **
 
 ## 7. Billing and arrears
 
-- Daily job in `America/Chicago`: rent debit for every driver with `billingActive`.
+- Daily job in `America/Chicago`: rent debit for every `active` driver (D56) with `billingActive`. Onboarding and
+  inactive drivers are never billed or reminded.
   - `daily`: one debit per day.
   - `weekly`: one debit on `billingDueWeekday`.
   - `idempotencyKey = rent:<driverId>:<date>` — re-running a day never double-bills.

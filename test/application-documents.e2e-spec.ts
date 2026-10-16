@@ -48,6 +48,10 @@ class FakeStorage implements FileStorage {
   presignGet(key: string) {
     return Promise.resolve(`https://bucket.test/${key}?signed`);
   }
+  delete(key: string) {
+    this.files.delete(key);
+    return Promise.resolve();
+  }
 }
 
 describe("application documents are copied into our storage (test database)", () => {

@@ -534,3 +534,50 @@ contact texts in shown in a separate Files tab. Chosen by Abulkalam on 2026-10-1
   failed). Nothing is ever written to or deleted from the website's storage by us.
 - The shared file bucket is now one provider (`FileStorageModule`, `FILE_STORAGE`), used by the chat files and these documents.
 **Why:** the files are driver licences the admin must be able to see, and the website may clear its storage; we need our own copy.
+
+### D55 — 2026-10-17 — Deleting applications is a hard delete; approved ones cannot be deleted (B66, Abulkalam)
+- Client revision (B63): delete applications, one or many. **Hard delete** (Abulkalam: "we don't need them in future"):
+  the row is removed for good, no undo, no restore. Its `application_documents` rows go by `ON DELETE CASCADE`; its
+  copied files are removed from our bucket **after** the commit (a file that cannot be removed is logged with its reason
+  and counted in the answer, `filesNotRemoved`; the delete still stands).
+- **Approved applications cannot be deleted** (409, nothing deleted): they are where a driver came from. A driver who
+  leaves is made inactive instead (B67).
+- **Text history** (Claude's proposal, accepted with the plan): the chat of the application's phone is deleted too,
+  **unless** another application or a driver has that phone (then the chat belongs to them as well).
+- One route for one or many: `POST /applications/bulk-delete` `{ ids: [...] }` (1–100). POST, not DELETE, because a
+  DELETE with a body is poorly supported. All or nothing in one transaction; rows are locked (`FOR UPDATE`, sorted by
+  id) so nobody can approve one meanwhile. Unknown ids are ignored (deleting twice is not an error).
+- **Known gaps:** no audit log yet (spec 4), so who deleted what is only in the server log. A website retry of the same
+  `request_id` after a delete would store the application again (retries come within seconds; low risk).
+**Why:** the client asked for delete; hard delete was chosen over archive; blocking approved keeps drivers traceable.
+
+### D56 — 2026-10-17 — Driver statuses: onboarding, active, inactive; three onboarding steps (Abulkalam; B67, B68, B48)
+- A driver is **`active` only when contract signed, deposit paid and has a vehicle** (Abulkalam, 2026-10-17). Statuses:
+  `onboarding` (approved, steps missing; the default, so approval creates onboarding drivers), `active`, `inactive`.
+- **Steps, not one status per combination:** `contract_signed_at`, `deposit_paid_at`, `vehicle_assigned_at`, each with
+  the admin who ticked it (`…_by_id`). Any order. Ticked by hand by an admin for now (contracts and vehicles are not
+  built; the deposit could tick itself once deposit rules exist, B19). "Has a vehicle" is a yes/no for now.
+- **Automatic:** the third tick makes the driver `active`; un-ticking a step of an active driver puts them back in
+  `onboarding` (confirm dialog). A CHECK (`drivers_active_is_onboarded`) makes `active` without the three dates
+  impossible in the database.
+- **Inactive (B67):** deactivate turns the driver's login off (`users.active = false`, same transaction): login refused
+  and open sessions end at the next request. Steps are kept and locked (409) until reactivated; reactivate gives
+  `active` or `onboarding` from the steps and turns the login back on. Onboarding drivers can log in.
+- **Existing drivers:** the migration marked the drivers already active (imported) as onboarded at migration time with
+  no admin ("done before this system"); inactive ones keep empty steps. The legacy import does the same for active
+  drivers.
+- **Effects to come:** billing (M2) and reminders (M6) act on `active` drivers only. Payment matching looks at every
+  driver, so a deposit from an onboarding driver still matches them (answers part of B48).
+**Why:** the client's rule for when a driver starts; three independent facts would need 8 statuses as one enum.
+
+### D57 — 2026-10-17 — Internal notes on applications: a list, never edited, author-only delete (B74, Abulkalam)
+- Client revision (B63): a place for staff notes on an applicant ("insufficient earnings, too far from the service
+  area, poor driving history"). **Staff only:** never sent to the applicant, never in the driver portal.
+- **A table of notes** (`application_notes`), not one text field: each note keeps its author and time, and two admins
+  writing at once cannot overwrite each other. Body 1–2000 characters, not blank (DTO and a database CHECK).
+- **Never edited; only the author may delete** a note (403 for anyone else). A wrong note is deleted and rewritten, so
+  nobody can change or remove what another admin wrote.
+- Author shown as their **email** (admin accounts have no name). Author account removed → `author_id` NULL, note kept
+  ("Former admin"). **Deleting the application deletes its notes** (`ON DELETE CASCADE`, consistent with D55).
+- Notes stay on the application after approval; not shown on the driver page yet.
+**Why:** client request; a list with authors is the honest record of who decided what.
