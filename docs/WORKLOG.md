@@ -4,6 +4,17 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-17 — "Rejected" shown as "Declined" (B69)
+- **Done (frontend only):** `applicationStatus.ts` label `rejected` → "Declined" (badge on list and detail, Status
+  filter option); detail page button "Reject" → "Decline". Label only (Abulkalam): database value `rejected` and the
+  route `POST /applications/:id/reject` unchanged, no migration. The Email log's "Rejected (not genuine)" is a
+  different thing (a refused forged email) and was left as is.
+- **Verified:** frontend lint + build; browser on a fake application (created and deleted): Decline button, badge
+  "Declined", filter option "Declined", stored value still `rejected`.
+- **Branch:** `feature/delete-applications`.
+
+---
+
 ### 2026-10-17 — "Car Rental" renamed "GonzoCar" (B70)
 - **Done (frontend):** `src/brand.ts` (`BRAND_NAME`, `BRAND_INITIALS`) used by the sidebar and the mobile header;
   `index.html` title.
