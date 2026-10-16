@@ -14,7 +14,7 @@ export interface DriverWelcomeTextInput {
  */
 export function driverWelcomeText(input: DriverWelcomeTextInput): string {
   return [
-    `Hi ${input.firstName}, your Gonzo Car driver account is ready.`,
+    `Hi ${input.firstName}, your GonzoCar driver account is ready.`,
     `Log in at ${input.loginUrl}`,
     `Email: ${input.email}`,
     `Temporary password: ${input.temporaryPassword}`,

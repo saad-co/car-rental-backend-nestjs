@@ -1108,8 +1108,8 @@
     }
   },
   "info": {
-    "title": "Car Rental API",
-    "description": "Admin and driver API for the car rental platform.",
+    "title": "GonzoCar API",
+    "description": "Admin and driver API for the GonzoCar platform.",
     "version": "0.1.0",
     "contact": {}
   },

@@ -4,6 +4,18 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-17 — "Car Rental" renamed "GonzoCar" (B70)
+- **Done (frontend):** `src/brand.ts` (`BRAND_NAME`, `BRAND_INITIALS`) used by the sidebar and the mobile header;
+  `index.html` title.
+- **Done (backend):** driver login text "your GonzoCar driver account" (was "Gonzo Car"); OpenAPI title and
+  description; `.env.example` `MAIL_FROM`; Quo webhook label in `scripts/quo-webhook.ts` (affects new webhooks only).
+- **Verified:** backend lint, 114 unit + 96 e2e; frontend lint + build; browser: tab title, sidebar, mobile header
+  (375 px) show GonzoCar, "Car Rental" nowhere on the page.
+- **Not changed:** local `.env` `MAIL_FROM` (Abulkalam's file; email unused since D52). Real logo/favicon: B12.
+- **Branch:** `feature/delete-applications` (both repos).
+
+---
+
 ### 2026-10-17 — Driver statuses and onboarding steps (D56; B67 done, B68/B48 mostly)
 - **Why:** Abulkalam: a driver is active only with contract signed, deposit paid and a vehicle; steps in any order,
   ticked by an admin, active automatically, onboarding drivers can log in, inactive ones cannot.
