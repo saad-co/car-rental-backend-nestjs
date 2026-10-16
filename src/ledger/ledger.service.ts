@@ -13,6 +13,11 @@ import {
 import { isUniqueViolation } from "../database/postgres-errors.js";
 import { Driver } from "../drivers/driver.entity.js";
 import {
+  Payment,
+  PaymentSource,
+  PaymentStatus,
+} from "../payments/payment.entity.js";
+import {
   CHARGE_CATEGORIES,
   LedgerCategory,
   LedgerDirection,
@@ -27,6 +32,17 @@ import {
 
 /** The partial unique index that allows one opening balance per driver (see the entity). */
 const ONE_OPENING_BALANCE = "ledger_entries_one_opening_balance_key";
+
+/** How each payment source is named in a credit's description. */
+const SOURCE_LABEL: Record<PaymentSource, string> = {
+  [PaymentSource.email_zelle]: "Zelle",
+  [PaymentSource.email_cashapp]: "Cash App",
+  [PaymentSource.email_venmo]: "Venmo",
+  [PaymentSource.email_stripe]: "Stripe",
+  [PaymentSource.email_chime]: "Chime",
+  [PaymentSource.plaid_zelle]: "Zelle (bank)",
+  [PaymentSource.manual]: "Manual",
+};
 
 /**
  * The driver ledger (D58): writes entries and reads balances. Every write is append-only (the database trigger
@@ -203,6 +219,119 @@ export class LedgerService {
       }
       throw error;
     }
+  }
+
+  /**
+   * Makes the ledger agree with a payment, inside the caller's transaction (which must hold a lock on the payment
+   * row, so two writers for one payment run one after the other). The rule: a `confirmed` payment with a driver has
+   * exactly one active (not reversed) credit, on that driver; any other payment has none.
+   * - no credit yet → credit the driver;
+   * - credit on another driver (reassignment) → reverse it, credit the new driver;
+   * - credit on the same driver → nothing (a retry or a repeated assign changes nothing).
+   *
+   * Keys: the first credit is `payment:<id>`; a later one `payment:<id>:after:<previous credit id>`, so each credit
+   * of a payment has its own unique key and a retry of the same step can never write it twice.
+   *
+   * @param createdById the admin who caused it, or null for the system (matching, backfill).
+   */
+  async syncPaymentCredit(
+    manager: EntityManager,
+    paymentId: string,
+    createdById: string | null,
+  ): Promise<void> {
+    const payment = await manager.findOneByOrFail(Payment, { id: paymentId });
+    const credits = await manager.find(LedgerEntry, {
+      where: { paymentId, kind: LedgerEntryKind.payment },
+      order: { createdAt: "DESC", id: "DESC" },
+    });
+    const reversedIds = new Set(
+      (
+        await manager.find(LedgerEntry, {
+          where: { paymentId, kind: LedgerEntryKind.reversal },
+        })
+      ).map((r) => r.reversalOfId),
+    );
+    const active = credits.find((c) => !reversedIds.has(c.id)) ?? null;
+
+    const wanted =
+      payment.status === PaymentStatus.confirmed && payment.driverId !== null
+        ? payment.driverId
+        : null;
+    if (
+      active &&
+      active.driverId === wanted &&
+      active.amountCents === payment.amountCents
+    ) {
+      return;
+    }
+    if (active) {
+      await this.reverseEntry(
+        manager,
+        active,
+        wanted
+          ? "Payment moved to another driver"
+          : "Payment no longer confirmed",
+        createdById,
+      );
+    }
+    if (!wanted) return;
+
+    const latest = credits[0];
+    await manager.insert(LedgerEntry, {
+      driverId: wanted,
+      direction: LedgerDirection.credit,
+      amountCents: payment.amountCents,
+      kind: LedgerEntryKind.payment,
+      category: null,
+      description:
+        `${SOURCE_LABEL[payment.source]} payment from ${payment.senderName}`.slice(
+          0,
+          500,
+        ),
+      effectiveDate: chicagoDate(payment.occurredAt),
+      paymentId,
+      reversalOfId: null,
+      createdById,
+      idempotencyKey: latest
+        ? `payment:${paymentId}:after:${latest.id}`
+        : `payment:${paymentId}`,
+    });
+  }
+
+  /**
+   * Credits every `confirmed` payment that has no active credit on its driver: the payments confirmed before the
+   * ledger existed (D58). Each payment in its own transaction with the payment row locked, through
+   * `syncPaymentCredit`, so running it twice, or while matching runs, never credits twice.
+   *
+   * @param apply false = dry run: count only, write nothing.
+   * @returns how many payments needed a credit, and how many were credited.
+   */
+  async backfillPaymentCredits(
+    apply: boolean,
+  ): Promise<{ missing: number; credited: number }> {
+    const rows = (await this.dataSource.query(
+      `SELECT p.id FROM payments p
+       WHERE p.status = 'confirmed' AND p.driver_id IS NOT NULL
+         AND NOT EXISTS (
+           SELECT 1 FROM ledger_entries e
+           WHERE e.payment_id = p.id AND e.kind = 'payment' AND e.driver_id = p.driver_id
+             AND NOT EXISTS (SELECT 1 FROM ledger_entries r WHERE r.reversal_of_id = e.id))
+       ORDER BY p.occurred_at, p.id`,
+    )) as { id: string }[];
+    if (!apply) return { missing: rows.length, credited: 0 };
+
+    let credited = 0;
+    for (const { id } of rows) {
+      await this.dataSource.transaction(async (manager) => {
+        await manager.findOne(Payment, {
+          where: { id },
+          lock: { mode: "pessimistic_write" },
+        });
+        await this.syncPaymentCredit(manager, id, null);
+      });
+      credited++;
+    }
+    return { missing: rows.length, credited };
   }
 
   /**

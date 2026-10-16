@@ -42,6 +42,7 @@
     "legacy:import-drivers": "tsx --env-file-if-exists=.env scripts/legacy-import-drivers.ts",
     "legacy:import-aliases": "tsx --env-file-if-exists=.env scripts/legacy-import-aliases.ts",
     "seed:admin": "nest build && node --env-file-if-exists=.env dist/database/seed-admin.js",
+    "ledger:backfill": "nest build && node --env-file-if-exists=.env dist/ledger/ledger-backfill.js",
     "openapi:export": "nest build && node --env-file-if-exists=.env dist/openapi/export-openapi.js"
   },
   "dependencies": {

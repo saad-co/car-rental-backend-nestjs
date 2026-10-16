@@ -17,6 +17,7 @@ import {
   PaymentSource,
   PaymentStatus,
 } from "../src/payments/payment.entity.js";
+import { LedgerService } from "../src/ledger/ledger.service.js";
 import { openTestDatabase } from "./test-database.js";
 
 /** Stands in for the AI: answers what the test sets, counts calls. */
@@ -38,7 +39,11 @@ describe("MatchingService.matchPending (test database)", () => {
   let seq = 0;
 
   const service = () =>
-    new MatchingService(db, ai as unknown as AiDriverMatcher);
+    new MatchingService(
+      db,
+      new LedgerService(db),
+      ai as unknown as AiDriverMatcher,
+    );
   const reload = (id: string) =>
     db.getRepository(Payment).findOneByOrFail({ id });
 
