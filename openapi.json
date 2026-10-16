@@ -423,6 +423,131 @@
         ]
       }
     },
+    "/applications/{id}/notes": {
+      "get": {
+        "operationId": "ApplicationNotesController_list",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "description": "Page number, starting at 1.",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "description": "Items per page (1 to 100).",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationNoteListDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`GET /applications/:id/notes`: one page of notes, newest first. `404` unknown application.",
+        "tags": [
+          "ApplicationNotes"
+        ]
+      },
+      "post": {
+        "operationId": "ApplicationNotesController_add",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateApplicationNoteDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationNoteDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`POST /applications/:id/notes`: adds a note by the logged-in admin. `400` empty or too long.",
+        "tags": [
+          "ApplicationNotes"
+        ]
+      }
+    },
+    "/applications/{id}/notes/{noteId}": {
+      "delete": {
+        "operationId": "ApplicationNotesController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "noteId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "summary": "`DELETE /applications/:id/notes/:noteId`: deletes one of your own notes. `204` with no body; `403` someone\nelse's note; `404` unknown note.",
+        "tags": [
+          "ApplicationNotes"
+        ]
+      }
+    },
     "/sms/status": {
       "get": {
         "operationId": "SmsController_status",
@@ -1557,6 +1682,79 @@
           "items",
           "sourceConnected",
           "storageConnected"
+        ]
+      },
+      "ApplicationNoteDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "authorId": {
+            "type": "string",
+            "nullable": true,
+            "description": "The admin who wrote it; null if that account was removed since."
+          },
+          "authorEmail": {
+            "type": "string",
+            "nullable": true,
+            "description": "The author's email, shown as their name (admins have no name field). Null if the account was removed."
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "body",
+          "authorId",
+          "authorEmail",
+          "createdAt"
+        ]
+      },
+      "ApplicationNoteListDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApplicationNoteDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "description": "All notes of the application, across pages."
+          },
+          "page": {
+            "type": "number"
+          },
+          "limit": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit"
+        ]
+      },
+      "CreateApplicationNoteDto": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": "string",
+            "description": "The note, 1 to 2000 characters after trimming; line breaks are kept. `@Transform` trims it before the checks, so\na note of only spaces is refused (400) instead of saved empty.",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "body"
         ]
       },
       "SmsStatusDto": {

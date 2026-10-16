@@ -15,6 +15,8 @@ import {
 } from "./documents/application-document-copier.js";
 import { ApplicationDocument } from "./documents/application-document.entity.js";
 import { ApplicationNote } from "./notes/application-note.entity.js";
+import { ApplicationNotesController } from "./notes/application-notes.controller.js";
+import { ApplicationNotesService } from "./notes/application-notes.service.js";
 import { ApplicationDocumentsController } from "./documents/application-documents.controller.js";
 import { SupabaseDocumentSource } from "./documents/supabase-document-source.js";
 import type { FileStorage } from "../sms/storage/file-storage.js";
@@ -44,9 +46,14 @@ import {
     SmsModule,
     FileStorageModule,
   ],
-  controllers: [ApplicationsController, ApplicationDocumentsController],
+  controllers: [
+    ApplicationsController,
+    ApplicationDocumentsController,
+    ApplicationNotesController,
+  ],
   providers: [
     ApplicationsService,
+    ApplicationNotesService,
     ApplicationAlertService,
     ApplicationDocumentCopier,
     {
