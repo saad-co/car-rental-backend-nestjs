@@ -17,7 +17,14 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 - **Done (frontend, step 2):** Applications list on the shared components: Applicant column with initials, Status in
   the Filter dropdown, per-row trash icon + bulk Delete (B66); selection cleared whenever the view changes.
 - **Verified:** backend lint, 114 unit + 82 e2e tests (new: `search.spec.ts`, `applications-list.e2e-spec.ts`);
-  frontend lint + build. Browser walkthrough: waiting for admin sign-in in the pane.
+  frontend lint + build. **Browser walkthrough (local, 10 fake "Walk Test" applications, all deleted afterwards):**
+  8 rows per page, page 2, phone search "630 555-0007" (one request after the pause, back to page 1), city search,
+  search + Status filter (badge "1", in the URL), selection cleared by page change + Back, bulk Delete Cancel (no
+  request) and confirm, trash icon (does not open the row), detail-page Delete back to the list with the message,
+  select all, empty state, layout at 1400 px. Also seen in the log: B66 delete used by an admin at 01:12 (3 test rows).
+- **Fixed during the walkthrough:** after deleting from the detail page, the chat of the deleted application was
+  refetched while the page left (404 in the console); `useDeleteApplications` now marks chats stale without refetching.
+- **Not covered:** an approved row's disabled checkbox / missing trash icon (no approved application locally).
 - **NOT done:** step 3 (Drivers, Payments, Email log on the shared table, each with backend search).
 - **Branch:** `feature/delete-applications` (both repos; Abulkalam 2026-10-17: commit on this branch, no new branches).
 
