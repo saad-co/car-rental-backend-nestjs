@@ -10,11 +10,20 @@ const UNIQUE_VIOLATION = "23505";
  * The database is what enforces uniqueness, even when two requests arrive at the same
  * instant. Services catch this error, turn it into a friendly HTTP response, and rethrow
  * every other kind of error.
+ *
+ * @param constraint when given, only a violation of that constraint (or unique index) counts.
  */
-export function isUniqueViolation(error: unknown): boolean {
+export function isUniqueViolation(
+  error: unknown,
+  constraint?: string,
+): boolean {
   if (!(error instanceof QueryFailedError)) {
     return false;
   }
-  const driverError = error.driverError as { code?: string } | undefined;
-  return driverError?.code === UNIQUE_VIOLATION;
+  const driverError = error.driverError as
+    { code?: string; constraint?: string } | undefined;
+  return (
+    driverError?.code === UNIQUE_VIOLATION &&
+    (constraint === undefined || driverError.constraint === constraint)
+  );
 }

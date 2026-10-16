@@ -11,6 +11,7 @@ import { DriversModule } from "./drivers/drivers.module.js";
 import { ApplicationsModule } from "./applications/applications.module.js";
 import { AuthModule } from "./auth/auth.module.js";
 import { EmailIntakeModule } from "./email-intake/email-intake.module.js";
+import { LedgerModule } from "./ledger/ledger.module.js";
 import { PaymentsModule } from "./payments/payments.module.js";
 import { SmsModule } from "./sms/sms.module.js";
 import { UsersModule } from "./users/users.module.js";
@@ -37,6 +38,7 @@ import { UsersModule } from "./users/users.module.js";
     EmailIntakeModule,
     PaymentsModule,
     AliasesModule,
+    LedgerModule,
     SmsModule,
   ],
   controllers: [AppController],
