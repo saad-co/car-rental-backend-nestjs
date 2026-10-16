@@ -4,6 +4,27 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-17 — Drivers, Payments, Email log on the shared table (B75, step 3; B75 done)
+- **Done (backend):** `search` on `GET /drivers` (name, full name, email, phone digits), `GET /payments` (payer name
+  and handle, assigned driver's name; existing status/source/driver/match filters unchanged, now a QueryBuilder
+  with LEFT JOINs), `GET /inbound-emails` (subject, sender address).
+- **Done (frontend):** the three pages on `TableCard` + `DataTable` + `useListParams`: Drivers (Status filter),
+  Payments (Match + Source filters; Accept / Assign / Change and the assign dialog kept), Email log (Outcome +
+  Provider filters; Provider is new in the UI). `filterOptions` helper.
+- **Also fixed:** (1) `TableCard` clipped the Filter panel on short lists (Abulkalam's screenshot): `overflow-hidden`
+  moved from the card to the table part. (2) A column's cell classes leaked into its header: `Column.align` added.
+  (3) `cn()` dropped the theme's font sizes (`text-theme-*`, `text-title-*`) whenever a colour followed, app-wide:
+  `extendTailwindMerge` now knows them.
+- **Verified:** backend lint, 114 unit + 87 e2e tests; frontend lint + build. Browser (local, read-only on real
+  local data): Drivers 8 rows / 7 pages, search "sutton", "312" + Inactive; Payments 8 rows / 3 pages, "sutton" +
+  Assigned, Filter panel with two groups fully visible over a 1-row list; Email log "square.com" + Not a payment;
+  cells 14 px / headers 12 px; no failed requests.
+- **Note:** Vite's dev server once served a stale `DataTable.tsx` after an edit (file watcher missed it); touching
+  the file fixed it. If a change does not show locally, check what Vite serves before debugging the code.
+- **Branch:** `feature/delete-applications` (both repos).
+
+---
+
 ### 2026-10-17 — Shared list tables; Applications list with search (B75, steps 1-2)
 - **Why:** Abulkalam: every list like TailAdmin's "Recent Orders" table, built from reusable components, search +
   Filter dropdown, 8 rows per page, "Basic Table 5" pagination.
