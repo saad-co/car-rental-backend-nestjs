@@ -569,3 +569,15 @@ contact texts in shown in a separate Files tab. Chosen by Abulkalam on 2026-10-1
 - **Effects to come:** billing (M2) and reminders (M6) act on `active` drivers only. Payment matching looks at every
   driver, so a deposit from an onboarding driver still matches them (answers part of B48).
 **Why:** the client's rule for when a driver starts; three independent facts would need 8 statuses as one enum.
+
+### D57 — 2026-10-17 — Internal notes on applications: a list, never edited, author-only delete (B74, Abulkalam)
+- Client revision (B63): a place for staff notes on an applicant ("insufficient earnings, too far from the service
+  area, poor driving history"). **Staff only:** never sent to the applicant, never in the driver portal.
+- **A table of notes** (`application_notes`), not one text field: each note keeps its author and time, and two admins
+  writing at once cannot overwrite each other. Body 1–2000 characters, not blank (DTO and a database CHECK).
+- **Never edited; only the author may delete** a note (403 for anyone else). A wrong note is deleted and rewritten, so
+  nobody can change or remove what another admin wrote.
+- Author shown as their **email** (admin accounts have no name). Author account removed → `author_id` NULL, note kept
+  ("Former admin"). **Deleting the application deletes its notes** (`ON DELETE CASCADE`, consistent with D55).
+- Notes stay on the application after approval; not shown on the driver page yet.
+**Why:** client request; a list with authors is the honest record of who decided what.

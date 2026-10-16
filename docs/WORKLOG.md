@@ -4,6 +4,23 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-17 — Internal notes on applications (B74, D57)
+- **Done (backend):** migration `CreateApplicationNotes` (`application_notes`: application CASCADE, author SET NULL,
+  CHECK body 1–2000 not blank, index (application_id, created_at)); `ApplicationNotesService` +
+  `ApplicationNotesController`: `GET /applications/:id/notes` (paginated, newest first, author email),
+  `POST` (trimmed body), `DELETE …/notes/:noteId` (author only, 403 otherwise, 204).
+- **Done (frontend):** `ApplicationNotesCard` under Review on the application page: add (TailAdmin `TextArea`,
+  2000 limit), list with author email and Chicago time, line breaks kept, "Show older notes" (infinite query, 10 per
+  page), trash on your own notes only with a confirm dialog.
+- **Verified:** migration locally (cascade and blank-note CHECK tested in SQL, revert + re-run, schema check clean);
+  backend lint, 114 unit + 104 e2e (8 new); route 401 without token; frontend lint + build. Browser on a fake
+  application with 11 notes by a fake second admin (all deleted after): 10 shown + "Show older (1 more)", no delete
+  icon on others' notes, Add disabled for blank, two-line note on top with author, Show older loads all 12, delete
+  Cancel/confirm, no failed requests; deleting the application removed its notes.
+- **Branch:** `feature/delete-applications` (both repos).
+
+---
+
 ### 2026-10-17 — "Rejected" shown as "Declined" (B69)
 - **Done (frontend only):** `applicationStatus.ts` label `rejected` → "Declined" (badge on list and detail, Status
   filter option); detail page button "Reject" → "Decline". Label only (Abulkalam): database value `rejected` and the
