@@ -24,6 +24,14 @@ import {
   LedgerEntry,
   LedgerEntryKind,
 } from "./ledger-entry.entity.js";
+import { PaginationQueryDto } from "../common/dto/pagination-query.dto.js";
+import {
+  LedgerPageDto,
+  LedgerPeriod,
+  LedgerPeriodDto,
+  LedgerSummaryDto,
+  LedgerSummaryQueryDto,
+} from "./dto/ledger-read.dto.js";
 import {
   CreateLedgerEntryDto,
   LedgerEntryDto,
@@ -32,6 +40,12 @@ import {
 
 /** The partial unique index that allows one opening balance per driver (see the entity). */
 const ONE_OPENING_BALANCE = "ledger_entries_one_opening_balance_key";
+
+/** Most periods one summary request may cover (two years of weeks). */
+const MAX_SUMMARY_PERIODS = 104;
+
+/** SQL for an entry's signed amount: credits count up, debits down. */
+const SIGNED = `CASE WHEN direction = 'credit' THEN amount_cents ELSE -amount_cents END`;
 
 /** How each payment source is named in a credit's description. */
 const SOURCE_LABEL: Record<PaymentSource, string> = {
@@ -335,6 +349,169 @@ export class LedgerService {
   }
 
   /**
+   * One page of a driver's ledger, newest first, each row with the balance right after it. The running balance is
+   * a window function over the driver's whole history in date order (so a backdated entry lands in the right place),
+   * computed before the page is cut.
+   *
+   * Order in time: the day the entry belongs to, then when it was recorded. A reversal and the credit that replaces
+   * it share one transaction (same `created_at`), so the reversal counts first; `id` keeps the order stable.
+   * @throws NotFoundException unknown driver.
+   */
+  async listPage(
+    driverId: string,
+    query: PaginationQueryDto,
+  ): Promise<LedgerPageDto> {
+    await this.assertDriverExists(driverId);
+    const rows = (await this.dataSource.query(
+      `WITH history AS (
+         SELECT e.*,
+           SUM(${SIGNED}) OVER (
+             ORDER BY effective_date, created_at, (kind = 'reversal') DESC, id
+             ROWS UNBOUNDED PRECEDING)::bigint AS running
+         FROM ledger_entries e WHERE e.driver_id = $1)
+       SELECT h.id, h.driver_id, h.direction, h.amount_cents, h.kind, h.category, h.description,
+              h.effective_date::text AS effective_date, h.payment_id, h.reversal_of_id, h.created_by_id,
+              h.created_at, h.running, u.email AS created_by_email, r.id AS reversed_by_id
+       FROM history h
+       LEFT JOIN users u ON u.id = h.created_by_id
+       LEFT JOIN ledger_entries r ON r.reversal_of_id = h.id
+       ORDER BY h.effective_date DESC, h.created_at DESC, (h.kind = 'reversal') ASC, h.id DESC
+       LIMIT $2 OFFSET $3`,
+      [driverId, query.limit, (query.page - 1) * query.limit],
+    )) as RawLedgerRow[];
+    const [{ total, balance }] = (await this.dataSource.query(
+      `SELECT COUNT(*)::int AS total, COALESCE(SUM(${SIGNED}), 0)::bigint AS balance
+       FROM ledger_entries WHERE driver_id = $1`,
+      [driverId],
+    )) as [{ total: number; balance: string }];
+
+    return {
+      items: rows.map((row) =>
+        Object.assign(
+          this.toDto(
+            {
+              id: row.id,
+              driverId: row.driver_id,
+              direction: row.direction,
+              amountCents: row.amount_cents,
+              kind: row.kind,
+              category: row.category,
+              description: row.description,
+              effectiveDate: row.effective_date,
+              paymentId: row.payment_id,
+              reversalOfId: row.reversal_of_id,
+              createdById: row.created_by_id,
+              createdBy: row.created_by_email
+                ? ({ email: row.created_by_email } as LedgerEntry["createdBy"])
+                : null,
+              idempotencyKey: "",
+              createdAt: row.created_at,
+            },
+            row.reversed_by_id,
+          ),
+          { runningBalanceCents: Number(row.running) },
+        ),
+      ),
+      total,
+      page: query.page,
+      limit: query.limit,
+      balanceCents: Number(balance),
+    };
+  }
+
+  /**
+   * A driver's ledger grouped by week (Monday to Sunday) or calendar month, newest first, empty periods included.
+   * Grouping is by `effective_date`, a plain calendar day, cast to `timestamp` WITHOUT time zone before
+   * `date_trunc`, so neither the server's time zone nor daylight saving can move a day into another period.
+   * @throws NotFoundException unknown driver.
+   * @throws BadRequestException a date that is not a real day, `from` after `to`, or more than 104 periods.
+   */
+  async summary(
+    driverId: string,
+    query: LedgerSummaryQueryDto,
+  ): Promise<LedgerSummaryDto> {
+    await this.assertDriverExists(driverId);
+    const to = query.to ?? chicagoDate(new Date());
+    for (const day of [query.from, to]) {
+      if (day !== undefined && !isCalendarDate(day)) {
+        throw new BadRequestException(`${day} is not a real calendar day.`);
+      }
+    }
+    if (query.from !== undefined && query.from > to) {
+      throw new BadRequestException("from must not be after to.");
+    }
+    const unit = query.period === LedgerPeriod.week ? "week" : "month";
+
+    // The periods to show: from the one containing `from` (default: 11 periods earlier) to the one containing `to`.
+    const periods = (await this.dataSource.query(
+      `SELECT gs::date::text AS start, (gs + $3::interval)::date::text AS next
+       FROM generate_series(
+         COALESCE(date_trunc($1, $2::date::timestamp), date_trunc($1, $4::date::timestamp) - 11 * $3::interval),
+         date_trunc($1, $4::date::timestamp),
+         $3::interval) gs
+       ORDER BY gs`,
+      [unit, query.from ?? null, `1 ${unit}`, to],
+    )) as { start: string; next: string }[];
+    if (periods.length > MAX_SUMMARY_PERIODS) {
+      throw new BadRequestException(
+        `At most ${MAX_SUMMARY_PERIODS} periods at a time.`,
+      );
+    }
+    const first = periods[0].start;
+    const after = periods[periods.length - 1].next;
+
+    const [{ opening }] = (await this.dataSource.query(
+      `SELECT COALESCE(SUM(${SIGNED}), 0)::bigint AS opening
+       FROM ledger_entries WHERE driver_id = $1 AND effective_date < $2::date`,
+      [driverId, first],
+    )) as [{ opening: string }];
+    const totals = (await this.dataSource.query(
+      `SELECT date_trunc($2, effective_date::timestamp)::date::text AS start,
+         COALESCE(SUM(amount_cents) FILTER (WHERE kind IN ('rent', 'adjustment') AND direction = 'debit'), 0)::bigint AS charges,
+         COALESCE(SUM(amount_cents) FILTER (WHERE kind = 'payment'), 0)::bigint AS payments,
+         COALESCE(SUM(amount_cents) FILTER (WHERE kind = 'adjustment' AND direction = 'credit'), 0)::bigint AS credits,
+         COALESCE(SUM(${SIGNED}) FILTER (WHERE kind = 'reversal'), 0)::bigint AS reversals,
+         COUNT(*)::int AS entries
+       FROM ledger_entries
+       WHERE driver_id = $1 AND effective_date >= $3::date AND effective_date < $4::date
+       GROUP BY 1`,
+      [driverId, unit, first, after],
+    )) as {
+      start: string;
+      charges: string;
+      payments: string;
+      credits: string;
+      reversals: string;
+      entries: number;
+    }[];
+    const byStart = new Map(totals.map((t) => [t.start, t]));
+
+    // Oldest to newest, chaining each closing balance into the next opening; then newest first for the screen.
+    let balance = Number(opening);
+    const items: LedgerPeriodDto[] = periods.map(({ start, next }) => {
+      const t = byStart.get(start);
+      const charges = Number(t?.charges ?? 0);
+      const payments = Number(t?.payments ?? 0);
+      const credits = Number(t?.credits ?? 0);
+      const reversals = Number(t?.reversals ?? 0);
+      const openingCents = balance;
+      balance = openingCents + payments + credits - charges + reversals;
+      return {
+        start,
+        end: addDays(next, -1),
+        openingCents,
+        chargesCents: charges,
+        paymentsCents: payments,
+        creditsCents: credits,
+        reversalsCents: reversals,
+        closingCents: balance,
+        entryCount: t?.entries ?? 0,
+      };
+    });
+    return { period: query.period, items: items.reverse() };
+  }
+
+  /**
    * The driver's balance in cents: credits minus debits. Negative means the driver owes money. Summed by Postgres
    * over integers, never in JavaScript floats.
    */
@@ -441,4 +618,23 @@ export class LedgerService {
       throw new NotFoundException("Driver not found.");
     }
   }
+}
+
+/** A row of `listPage`'s query, as Postgres returns it (snake_case columns, bigint as string). */
+interface RawLedgerRow {
+  id: string;
+  driver_id: string;
+  direction: LedgerDirection;
+  amount_cents: number;
+  kind: LedgerEntryKind;
+  category: LedgerCategory | null;
+  description: string;
+  effective_date: string;
+  payment_id: string | null;
+  reversal_of_id: string | null;
+  created_by_id: string | null;
+  created_by_email: string | null;
+  reversed_by_id: string | null;
+  created_at: Date;
+  running: string;
 }

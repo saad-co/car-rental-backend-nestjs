@@ -1,6 +1,20 @@
-import { Body, Controller, Param, ParseUUIDPipe, Post } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+} from "@nestjs/common";
 import { CurrentUser } from "../auth/current-user.decorator.js";
 import type { AuthenticatedUser } from "../auth/jwt-auth.guard.js";
+import { PaginationQueryDto } from "../common/dto/pagination-query.dto.js";
+import {
+  LedgerPageDto,
+  LedgerSummaryDto,
+  LedgerSummaryQueryDto,
+} from "./dto/ledger-read.dto.js";
 import {
   CreateLedgerEntryDto,
   LedgerEntryDto,
@@ -16,6 +30,30 @@ import { LedgerService } from "./ledger.service.js";
 @Controller("drivers/:id/ledger")
 export class LedgerController {
   constructor(private readonly ledger: LedgerService) {}
+
+  /**
+   * `GET /drivers/:id/ledger`: one page of entries, newest first, each with the balance after it, plus the
+   * balance now. `404` unknown driver.
+   */
+  @Get()
+  list(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Query() query: PaginationQueryDto,
+  ): Promise<LedgerPageDto> {
+    return this.ledger.listPage(id, query);
+  }
+
+  /**
+   * `GET /drivers/:id/ledger/summary?period=week|month`: totals per week (Monday to Sunday) or month, newest
+   * first, empty periods included. `400` bad dates or more than 104 periods; `404` unknown driver.
+   */
+  @Get("summary")
+  summary(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Query() query: LedgerSummaryQueryDto,
+  ): Promise<LedgerSummaryDto> {
+    return this.ledger.summary(id, query);
+  }
 
   /**
    * `POST /drivers/:id/ledger/entries`: adds a manual charge or credit (late fee, flat tire, discount, …).
