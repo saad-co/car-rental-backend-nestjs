@@ -4,6 +4,27 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-17 — Editable approve / decline texts (B71–B73, D58)
+- **Done (backend):** migration `CreateMessageTemplates` (table + placeholder default texts); `MessageTemplatesModule`
+  (`GET /message-templates`, `PUT /message-templates/:key`, unknown placeholders refused, `render`); approval sends the
+  approved template then the login text; `POST /applications/:id/reject` takes `{ sendText }`; shared `sendOrFail`
+  (failure rolls the review back with the reason). Test helper `seedTestTemplates` (a `TRUNCATE users CASCADE` also
+  empties `message_templates`).
+- **Done (frontend):** Settings page (new sidebar item, `PlugInIcon` from TailAdmin): one editor per template with
+  placeholders, character / SMS count, live preview, Save / Undo, last editor. Decline dialog with preview and two
+  ways to go ahead (`ConfirmDialog.secondary`). Review actions refresh the chat.
+- **Verified:** migration locally (defaults inserted, blank refused, revert + re-run, no drift); backend lint, 114 unit
+  + 117 e2e (13 new); route 401 without token; frontend lint + build. Browser walkthrough in `dry_run` on three fake
+  applications (all removed after, default texts restored): Settings defaults and preview, `{name}` refused with a
+  plain message, edit saved with editor, decline without text (no text stored), decline with text (filled-in edited
+  text stored as dry run), approve (two texts in order, shown in the chat at once).
+- **Fixed during the walkthrough:** the chat did not show texts sent by approve/decline until a reload; the decline
+  dialog's third button wrapped (dialog wider with a second action).
+- **For the client on staging:** edit both texts in Settings; replace "[add company names and phone numbers here]".
+- **Branch:** `feature/delete-applications` (both repos).
+
+---
+
 ### 2026-10-17 — Internal notes on applications (B74, D57)
 - **Done (backend):** migration `CreateApplicationNotes` (`application_notes`: application CASCADE, author SET NULL,
   CHECK body 1–2000 not blank, index (application_id, created_at)); `ApplicationNotesService` +
