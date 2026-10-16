@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { Driver } from "../drivers/driver.entity.js";
+import { MessageTemplatesModule } from "../message-templates/message-templates.module.js";
 import { SmsModule } from "../sms/sms.module.js";
 import { UsersModule } from "../users/users.module.js";
 import { Application } from "./application.entity.js";
@@ -44,6 +45,7 @@ import {
     ]),
     UsersModule,
     SmsModule,
+    MessageTemplatesModule,
     FileStorageModule,
   ],
   controllers: [

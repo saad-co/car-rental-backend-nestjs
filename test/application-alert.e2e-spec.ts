@@ -1,4 +1,5 @@
 import type { ConfigService } from "@nestjs/config";
+import type { MessageTemplatesService } from "../src/message-templates/message-templates.service.js";
 import type { DataSource } from "typeorm";
 import { ApplicationAlertService } from "../src/applications/application-alert.service.js";
 import { Application } from "../src/applications/application.entity.js";
@@ -79,6 +80,7 @@ describe("new-application alert to staff (test database)", () => {
       alerts,
       config,
       null,
+      {} as MessageTemplatesService,
     );
   };
 

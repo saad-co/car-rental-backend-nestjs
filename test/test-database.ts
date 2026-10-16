@@ -32,3 +32,17 @@ export async function openTestDatabase(): Promise<DataSource> {
   await db.runMigrations();
   return db;
 }
+
+/**
+ * Puts known text templates in place (B73). The migration inserts the real defaults once, but a test's
+ * `TRUNCATE users CASCADE` also empties `message_templates` (it references users), so tests that send templates call
+ * this first. The bodies are short and predictable, for asserting the filled-in text.
+ */
+export async function seedTestTemplates(db: DataSource): Promise<void> {
+  await db.query(
+    `INSERT INTO message_templates (key, body) VALUES
+       ('application_approved', 'Approved: {firstName} {lastName}'),
+       ('application_declined', 'Declined: {firstName}')
+     ON CONFLICT (key) DO UPDATE SET body = EXCLUDED.body, updated_by_id = NULL`,
+  );
+}

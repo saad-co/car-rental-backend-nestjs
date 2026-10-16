@@ -1,4 +1,5 @@
 import { ConflictException } from "@nestjs/common";
+import type { MessageTemplatesService } from "../src/message-templates/message-templates.service.js";
 import type { ConfigService } from "@nestjs/config";
 import { plainToInstance } from "class-transformer";
 import { validateSync } from "class-validator";
@@ -50,6 +51,7 @@ describe("ApplicationsService.deleteMany (test database)", () => {
       {} as ApplicationAlertService,
       { getOrThrow: () => "https://app.test" } as unknown as ConfigService,
       bucket,
+      {} as MessageTemplatesService,
     );
 
   const count = async (sql: string) =>

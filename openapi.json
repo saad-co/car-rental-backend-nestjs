@@ -344,6 +344,16 @@
             }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeclineApplicationDto"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "",
@@ -356,7 +366,7 @@
             }
           }
         },
-        "summary": "`POST /applications/:id/reject`: rejects the application. No driver is created.",
+        "summary": "`POST /applications/:id/reject`: declines the application (shown as \"Declined\", B69). No driver is created.\nOptional body `{ \"sendText\": true }` also texts the applicant the \"declined\" template (B72); without a body\nnothing is sent. `503` if the text could not be sent (then nothing is declined).",
         "tags": [
           "Applications"
         ]
@@ -789,6 +799,72 @@
         },
         "tags": [
           "QuoWebhook"
+        ]
+      }
+    },
+    "/message-templates": {
+      "get": {
+        "operationId": "MessageTemplatesController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MessageTemplateDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "`GET /message-templates`: every template with its placeholders and last edit.",
+        "tags": [
+          "MessageTemplates"
+        ]
+      }
+    },
+    "/message-templates/{key}": {
+      "put": {
+        "operationId": "MessageTemplatesController_update",
+        "parameters": [
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMessageTemplateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageTemplateDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`PUT /message-templates/:key`: replaces a template's text. PUT because the whole text is replaced. `400` empty,\ntoo long, unknown placeholder, or a key that is not a template (`ParseEnumPipe`).",
+        "tags": [
+          "MessageTemplates"
         ]
       }
     },
@@ -1606,6 +1682,15 @@
           "alertedAt"
         ]
       },
+      "DeclineApplicationDto": {
+        "type": "object",
+        "properties": {
+          "sendText": {
+            "type": "boolean",
+            "description": "`true` also texts the applicant the \"declined\" template from Settings. Default false."
+          }
+        }
+      },
       "ApplicationDocumentDto": {
         "type": "object",
         "properties": {
@@ -2032,6 +2117,59 @@
           "total",
           "page",
           "limit"
+        ]
+      },
+      "MessageTemplateDto": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "enum": [
+              "application_approved",
+              "application_declined"
+            ],
+            "type": "string"
+          },
+          "body": {
+            "type": "string",
+            "description": "The text with its placeholders, e.g. `Hi {firstName}, ...`."
+          },
+          "placeholders": {
+            "description": "The placeholders this template may use, e.g. `[\"firstName\", \"lastName\"]`.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedByEmail": {
+            "type": "string",
+            "nullable": true,
+            "description": "Email of the admin who last edited it; null for the default text (or a removed account)."
+          }
+        },
+        "required": [
+          "key",
+          "body",
+          "placeholders",
+          "updatedAt",
+          "updatedByEmail"
+        ]
+      },
+      "UpdateMessageTemplateDto": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": "string",
+            "description": "The new text, 1 to 1000 characters after trimming; line breaks kept. Unknown placeholders are refused (400).",
+            "minLength": 1,
+            "maxLength": 1000
+          }
+        },
+        "required": [
+          "body"
         ]
       },
       "DriverOnboardingDto": {
