@@ -8,6 +8,9 @@ export interface FileStorage {
 
   /** A link that opens the file for `expiresInSeconds`, then stops working. Nothing is public. */
   presignGet(key: string, expiresInSeconds: number): Promise<string>;
+
+  /** Removes the file under `key`. A key that is already gone is not an error. Throws on any other failure. */
+  delete(key: string): Promise<void>;
 }
 
 /** How long a file link stays valid. The chat asks again whenever it reloads. */

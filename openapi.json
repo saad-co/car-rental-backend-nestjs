@@ -227,6 +227,38 @@
         ]
       }
     },
+    "/applications/bulk-delete": {
+      "post": {
+        "operationId": "ApplicationsController_bulkDelete",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteApplicationsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteApplicationsResultDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`POST /applications/bulk-delete`: deletes applications for good, with their documents and (when no one else\nuses the phone) their text history (B66). All or nothing: `409` if any is approved, and then nothing is\ndeleted. Unknown ids are ignored.\n\nPOST with a body rather than DELETE: a DELETE request with a body is poorly supported by proxies and HTTP\nclients. Declared before `:id` routes so \"bulk-delete\" is never read as an id (it is also a POST, so it\ncould not clash with `GET :id` anyway).",
+        "tags": [
+          "Applications"
+        ]
+      }
+    },
     "/applications/{id}": {
       "get": {
         "operationId": "ApplicationsController_findOne",
@@ -1150,6 +1182,40 @@
           "total",
           "page",
           "limit"
+        ]
+      },
+      "DeleteApplicationsDto": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "description": "The applications to delete. Ids that no longer exist are ignored.",
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "required": [
+          "ids"
+        ]
+      },
+      "DeleteApplicationsResultDto": {
+        "type": "object",
+        "properties": {
+          "deleted": {
+            "type": "number",
+            "description": "Applications removed from the database."
+          },
+          "filesNotRemoved": {
+            "type": "number",
+            "description": "Copied files (documents, texted-in files) that could not be removed from the bucket. The database rows are\ngone either way; the reason for each is in the server log. 0 when everything was removed."
+          }
+        },
+        "required": [
+          "deleted",
+          "filesNotRemoved"
         ]
       },
       "ApplicationDetailDto": {

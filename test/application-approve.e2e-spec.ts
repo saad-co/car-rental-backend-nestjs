@@ -62,6 +62,7 @@ describe("ApplicationsService.approve sends the login by text (test database)", 
         notifyInBackground: () => undefined,
       } as unknown as ApplicationAlertService,
       { getOrThrow: () => "https://app.test" } as unknown as ConfigService,
+      null,
     );
 
   const count = async (table: string) =>

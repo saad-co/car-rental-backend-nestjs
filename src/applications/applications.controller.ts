@@ -21,6 +21,10 @@ import {
   ApplicationListDto,
 } from "./dto/application.dto.js";
 import { ApplicationReceivedDto } from "./dto/application-received.dto.js";
+import {
+  DeleteApplicationsDto,
+  DeleteApplicationsResultDto,
+} from "./dto/delete-applications.dto.js";
 import { ListApplicationsQueryDto } from "./dto/list-applications-query.dto.js";
 
 /**
@@ -65,6 +69,24 @@ export class ApplicationsController {
   @Get()
   list(@Query() query: ListApplicationsQueryDto): Promise<ApplicationListDto> {
     return this.applications.list(query);
+  }
+
+  /**
+   * `POST /applications/bulk-delete`: deletes applications for good, with their documents and (when no one else
+   * uses the phone) their text history (B66). All or nothing: `409` if any is approved, and then nothing is
+   * deleted. Unknown ids are ignored.
+   *
+   * POST with a body rather than DELETE: a DELETE request with a body is poorly supported by proxies and HTTP
+   * clients. Declared before `:id` routes so "bulk-delete" is never read as an id (it is also a POST, so it
+   * could not clash with `GET :id` anyway).
+   */
+  @Post("bulk-delete")
+  @HttpCode(HttpStatus.OK)
+  bulkDelete(
+    @Body() body: DeleteApplicationsDto,
+    @CurrentUser() admin: AuthenticatedUser,
+  ): Promise<DeleteApplicationsResultDto> {
+    return this.applications.deleteMany(body.ids, admin.id);
   }
 
   /**

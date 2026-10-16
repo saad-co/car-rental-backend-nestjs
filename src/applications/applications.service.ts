@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   HttpException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
@@ -10,22 +11,33 @@ import {
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import { isEmail } from "class-validator";
-import { DataSource, EntityManager, Repository } from "typeorm";
+import {
+  DataSource,
+  EntityManager,
+  In,
+  IsNull,
+  Not,
+  Repository,
+} from "typeorm";
 import { isUniqueViolation } from "../database/postgres-errors.js";
 import { driverWelcomeText } from "../drivers/driver-welcome.text.js";
 import { Driver } from "../drivers/driver.entity.js";
 import { toUsE164 } from "../drivers/us-phone.js";
 import { SmsContactKind } from "../sms/sms-contact.js";
 import { SmsService } from "../sms/sms.service.js";
+import type { FileStorage } from "../sms/storage/file-storage.js";
+import { FILE_STORAGE } from "../sms/storage/file-storage.module.js";
 import { PasswordService } from "../users/password.service.js";
 import { Role, User } from "../users/user.entity.js";
 import { ApplicationAlertService } from "./application-alert.service.js";
 import { Application, ApplicationStatus } from "./application.entity.js";
+import { ApplicationDocument } from "./documents/application-document.entity.js";
 import {
   ApplicationDetailDto,
   ApplicationListDto,
   ApplicationListItemDto,
 } from "./dto/application.dto.js";
+import { DeleteApplicationsResultDto } from "./dto/delete-applications.dto.js";
 import { ListApplicationsQueryDto } from "./dto/list-applications-query.dto.js";
 
 /** Result of receiving a submission. `created` is false when it was a repeat of one already stored. */
@@ -38,8 +50,8 @@ export interface ReceiveResult {
 type Submission = Record<string, unknown>;
 
 /**
- * Driver applications: intake from the website, the admin list and detail views, and review
- * (approve, reject, on hold).
+ * Driver applications: intake from the website, the admin list and detail views, review
+ * (approve, reject, on hold) and delete.
  *
  * Intake is lenient on purpose. The website is not ours and sends every value as text, so
  * instead of a strict DTO (which would reject a real application the day the form adds or
@@ -61,6 +73,8 @@ export class ApplicationsService {
     private readonly sms: SmsService,
     private readonly alerts: ApplicationAlertService,
     config: ConfigService,
+    /** Our file bucket, to remove copied files when an application is deleted. Null when no bucket is set up. */
+    @Inject(FILE_STORAGE) private readonly storage: FileStorage | null,
   ) {
     this.webAppUrl = config.getOrThrow<string>("WEB_APP_URL");
   }
@@ -352,6 +366,150 @@ export class ApplicationsService {
       return manager.save(application);
     });
     return this.toDetail(updated);
+  }
+
+  /**
+   * Deletes applications for good (B66: hard delete, no undo). All or nothing, in one transaction:
+   * 1. loads and locks the rows (`FOR UPDATE`), so nobody can approve one of them meanwhile. Sorted by id, so two
+   *    deletes of overlapping sets lock in the same order and cannot deadlock;
+   * 2. refuses the whole request if any is approved: an approved application is where its driver came from;
+   * 3. deletes the text history of each phone that no other application and no driver uses. A shared phone keeps
+   *    its chat, because that chat also belongs to the other record;
+   * 4. deletes the applications; their `application_documents` rows go with them (`ON DELETE CASCADE`).
+   * After the commit, the copied files are removed from the bucket. Files go last on purpose: if the database
+   * step fails nothing is touched, and a file that cannot be removed does not undo the delete; it is logged with
+   * its reason and counted in `filesNotRemoved`.
+   *
+   * Ids that do not exist (already deleted) are ignored, so deleting twice is not an error.
+   * @throws ConflictException naming the approved applications; nothing is deleted.
+   */
+  async deleteMany(
+    ids: string[],
+    adminId: string,
+  ): Promise<DeleteApplicationsResultDto> {
+    const { deletedIds, fileKeys } = await this.dataSource.transaction(
+      async (manager) => {
+        const rows = await manager.find(Application, {
+          where: { id: In([...new Set(ids)]) },
+          order: { id: "ASC" },
+          lock: { mode: "pessimistic_write" },
+        });
+
+        const approved = rows.filter(
+          (a) => a.status === ApplicationStatus.approved,
+        );
+        if (approved.length > 0) {
+          const names = approved
+            .map((a) => `${a.firstName} ${a.lastName}`)
+            .join(", ");
+          throw new ConflictException(
+            `Approved applications cannot be deleted: ${names}. Nothing was deleted.`,
+          );
+        }
+        if (rows.length === 0) return { deletedIds: [], fileKeys: [] };
+        const rowIds = rows.map((a) => a.id);
+
+        const documents = await manager.find(ApplicationDocument, {
+          where: { applicationId: In(rowIds), storageKey: Not(IsNull()) },
+          select: { id: true, storageKey: true },
+        });
+        const chatPhones = await this.unsharedPhones(manager, rows);
+        const attachmentKeys = await this.deleteChats(manager, chatPhones);
+        await manager.delete(Application, rowIds);
+
+        return {
+          deletedIds: rowIds,
+          fileKeys: [...documents.map((d) => d.storageKey!), ...attachmentKeys],
+        };
+      },
+    );
+
+    if (deletedIds.length > 0) {
+      this.logger.log(
+        `Admin ${adminId} deleted ${deletedIds.length} application(s): ${deletedIds.join(", ")}`,
+      );
+    }
+    const filesNotRemoved = await this.removeFiles(fileKeys);
+    return { deleted: deletedIds.length, filesNotRemoved };
+  }
+
+  /**
+   * The phones (E.164) of these applications that no other application and no driver uses: their text history
+   * belongs only to the applications being deleted. A phone that is not a US number never had a chat (the chat
+   * refuses it), so it is left out. Applications are compared on the last 10 digits, as the webhook does (D51).
+   */
+  private async unsharedPhones(
+    manager: EntityManager,
+    deleting: Application[],
+  ): Promise<string[]> {
+    const ids = deleting.map((a) => a.id);
+    const phones = new Set(
+      deleting
+        .map((a) => toUsE164(a.phone))
+        .filter((p): p is string => p !== null),
+    );
+    const unshared: string[] = [];
+    for (const phone of phones) {
+      if (await manager.exists(Driver, { where: { phone } })) continue;
+      const others: unknown[] = await manager.query(
+        `SELECT 1 FROM applications
+         WHERE right(regexp_replace(phone, '\\D', '', 'g'), 10) = $1 AND id <> ALL($2::uuid[])
+         LIMIT 1`,
+        [phone.slice(2), ids],
+      );
+      if (others.length === 0) unshared.push(phone);
+    }
+    return unshared;
+  }
+
+  /**
+   * Deletes every text with these phones; their attachment rows go with them (`ON DELETE CASCADE`).
+   * @returns the bucket keys of the attachments that had been copied, to remove after the commit.
+   */
+  private async deleteChats(
+    manager: EntityManager,
+    phones: string[],
+  ): Promise<string[]> {
+    if (phones.length === 0) return [];
+    const attachments: { storage_key: string }[] = await manager.query(
+      `SELECT a.storage_key FROM sms_attachments a
+       JOIN sms_messages m ON m.id = a.message_id
+       WHERE m.contact_phone = ANY($1) AND a.storage_key IS NOT NULL`,
+      [phones],
+    );
+    await manager.query(
+      `DELETE FROM sms_messages WHERE contact_phone = ANY($1)`,
+      [phones],
+    );
+    return attachments.map((a) => a.storage_key);
+  }
+
+  /**
+   * Removes files from the bucket, one by one, so one failure does not stop the others. Each failure is logged
+   * with its reason (no silent failure).
+   * @returns how many could not be removed.
+   */
+  private async removeFiles(keys: string[]): Promise<number> {
+    if (keys.length === 0) return 0;
+    if (!this.storage) {
+      this.logger.error(
+        `No file bucket is set up (S3_BUCKET), so ${keys.length} copied file(s) of deleted applications were left in place: ${keys.join(", ")}`,
+      );
+      return keys.length;
+    }
+    let failed = 0;
+    for (const key of keys) {
+      try {
+        await this.storage.delete(key);
+      } catch (error) {
+        failed++;
+        this.logger.error(
+          `Could not remove file ${key} of a deleted application.`,
+          error instanceof Error ? error.stack : String(error),
+        );
+      }
+    }
+    return failed;
   }
 
   /**

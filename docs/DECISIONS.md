@@ -534,3 +534,19 @@ contact texts in shown in a separate Files tab. Chosen by Abulkalam on 2026-10-1
   failed). Nothing is ever written to or deleted from the website's storage by us.
 - The shared file bucket is now one provider (`FileStorageModule`, `FILE_STORAGE`), used by the chat files and these documents.
 **Why:** the files are driver licences the admin must be able to see, and the website may clear its storage; we need our own copy.
+
+### D55 — 2026-10-17 — Deleting applications is a hard delete; approved ones cannot be deleted (B66, Abulkalam)
+- Client revision (B63): delete applications, one or many. **Hard delete** (Abulkalam: "we don't need them in future"):
+  the row is removed for good, no undo, no restore. Its `application_documents` rows go by `ON DELETE CASCADE`; its
+  copied files are removed from our bucket **after** the commit (a file that cannot be removed is logged with its reason
+  and counted in the answer, `filesNotRemoved`; the delete still stands).
+- **Approved applications cannot be deleted** (409, nothing deleted): they are where a driver came from. A driver who
+  leaves is made inactive instead (B67).
+- **Text history** (Claude's proposal, accepted with the plan): the chat of the application's phone is deleted too,
+  **unless** another application or a driver has that phone (then the chat belongs to them as well).
+- One route for one or many: `POST /applications/bulk-delete` `{ ids: [...] }` (1–100). POST, not DELETE, because a
+  DELETE with a body is poorly supported. All or nothing in one transaction; rows are locked (`FOR UPDATE`, sorted by
+  id) so nobody can approve one meanwhile. Unknown ids are ignored (deleting twice is not an error).
+- **Known gaps:** no audit log yet (spec 4), so who deleted what is only in the server log. A website retry of the same
+  `request_id` after a delete would store the application again (retries come within seconds; low risk).
+**Why:** the client asked for delete; hard delete was chosen over archive; blocking approved keeps drivers traceable.

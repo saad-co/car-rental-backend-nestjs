@@ -4,6 +4,23 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-17 — Delete applications, one or many (B66, D55)
+- **Why:** client revisions PDF (B63-B74, received 2026-10-17); B64/B65 set aside by Abulkalam.
+- **Done (backend):** `FileStorage.delete`; `ApplicationsService.deleteMany` (hard delete, all or nothing, approved
+  refused with 409, chat deleted unless the phone is shared, files removed after commit); route
+  `POST /applications/bulk-delete` + `DeleteApplicationsDto`; `openapi.json` exported.
+- **Done (frontend):** client regenerated; `useDeleteApplications`; list page row checkboxes (approved disabled),
+  "Delete (n)", confirm dialog, result message; detail page Delete button; shared `Checkbox` (from TailAdmin),
+  `Button` `danger` variant, `ConfirmDialog` `confirmVariant`.
+- **Verified:** backend lint, 110 unit + 73 e2e tests (9 new in `application-delete.e2e-spec.ts`), build; route answers
+  401 without a token (local). Frontend lint + build.
+- **NOT done:** browser walkthrough (waiting for admin sign-in in the pane; will be done with the new list tables);
+  three local test applications "Test Delete 1-3" exist for it.
+- **Branch:** `feature/delete-applications` (both repos).
+- **NEXT:** shared TailAdmin-style list tables (search, filter dropdown, 8 rows per page) on `feature/list-tables`.
+
+---
+
 ### 2026-10-14 — Applicants' documents copied from the website into our storage (D54, B17, B45)
 - **Why:** the licence, rating and earnings uploads sit in the website's private Supabase bucket; the admin only saw
   "Uploaded", and the website can delete old files (its archive page).
