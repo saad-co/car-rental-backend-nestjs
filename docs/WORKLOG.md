@@ -4,6 +4,18 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-17 — Staging deploy: driver ledger (B77, D60, D61)
+- **Merged:** backend PR #15 (`4fff3d9`) and frontend PR #12 (`69320cb`) into `dev`.
+- **Deployed** with the Deployment steps from the `deploy-*` worktrees: backend `4fff3d9` (2026-10-17 18:45 UTC),
+  frontend `69320cb` (18:47 UTC). Railway: both `SUCCESS`; backend log: `CreateLedgerEntries` executed (table and both
+  triggers), app started.
+- **Backfill on staging** (`railway ssh --service backend -- node dist/ledger/ledger-backfill.js`): dry run 65 confirmed
+  payments without a credit; `--apply` credited 65 of 65; a second dry run found 0.
+- **Verified:** `GET /drivers/:id/ledger` and `/ledger/summary` answer 401 without a login (deployed, admin only), an
+  unknown route 404; the frontend loads. Not checked in a signed-in browser on staging yet.
+
+---
+
 ### 2026-10-17 — Driver ledger (B77, D60, D61)
 - **Done (backend):** migration `CreateLedgerEntries`: `ledger_entries` (direction, cents, kind `rent | payment |
   adjustment | reversal`, reason, `effective_date` as a Chicago day, unique `idempotency_key`, unique
