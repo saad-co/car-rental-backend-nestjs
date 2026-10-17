@@ -4,6 +4,33 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-17 — Driver ledger (B77, D60)
+- **Done (backend):** migration `CreateLedgerEntries`: `ledger_entries` (direction, cents, kind `rent | payment |
+  adjustment | reversal`, category enum, `effective_date` as a Chicago day, unique `idempotency_key`, unique
+  `reversal_of_id`, CHECKs for shapes, amount range and category direction, one opening balance per driver) plus two
+  triggers: `ledger_entries_append_only` (refuses UPDATE/DELETE) and `ledger_entries_check_reversal` (same driver and
+  amount, opposite direction, never a reversal of a reversal). `LedgerModule`: `POST /drivers/:id/ledger/entries`
+  (manual charge/credit, request key, today to 90 days back, $10,000 max), `POST …/entries/:entryId/reverse`,
+  `GET /drivers/:id/ledger` (newest first, running balance), `GET …/ledger/summary?period=week|month` (Monday weeks,
+  calendar months, empty periods, opening/closing chain). `syncPaymentCredit` runs inside the payment's transaction in
+  `PaymentsService.assign` and `MatchingService` (reassignment = reversal + new credit). `DriverDto.balanceCents`.
+  `npm run ledger:backfill` (dry run; `-- --apply` writes) credits payments confirmed before the ledger existed.
+- **Done (frontend):** Ledger card on the driver page (balance "Owes / In credit / Settled", Add entry dialog with
+  category groups and a summary line, Entries tab with running balance and Reverse dialog, Weekly and Monthly tabs);
+  Balance column on the Drivers list; shared `Select`, `BalanceText`; assigning a payment refreshes the ledger.
+- **Verified:** migration run, revert, re-run and no drift on a separate local database (`car_rental_ledger`); SQL
+  checks of the triggers and constraints; backend lint, 118 unit + 140 e2e (22 ledger tests: reversals incl. two at
+  once, append-only, request key, dates, opening balance, payment credit A → B → A, matching, backfill twice, running
+  balance, week/month/daylight-saving boundaries); frontend lint + build. Backfill on the local copy: 19 payments,
+  $2,414.00, second run 0. Browser: empty ledger, form validation, a $25 late fee (balance "Owes $25.00").
+- **Not done:** rest of the browser walkthrough (backdated entry, reversal, Weekly/Monthly, list balance); rent
+  billing (M2); driver portal view (B78); manual cash payments (B79); old ledger import (B80).
+- **On staging after the deploy:** run the backfill once (`npm run ledger:backfill`, then `-- --apply`) so payments
+  confirmed before the ledger are credited.
+- **Branch:** `feature/driver-ledger` (both repos), `dev` merged in.
+
+---
+
 ### 2026-10-17 — Staging: one failed Cash App email fixed by hand (one-off exception to D37)
 - **Why:** before the 5xx fix (B76) reached staging, Gemini 503s made the intake give up on one real payment email:
   `inbound_emails` `6924d0bb-7f1c-441f-9d19-41de09391723` (Cash App, UID 22200, received 2026-10-16 16:00 UTC,

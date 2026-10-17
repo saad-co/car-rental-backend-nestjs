@@ -31,7 +31,8 @@ through a client generated from the API's OpenAPI document.
 Gmail ──► allow-listed sender + DKIM ──► LLM extract + validate ──► Payment (unmatched)   [built, D47]
 Payment ──► match: alias / email / phone exact, else LLM (70% assign, below → review) ──► Payment (confirmed)   [built, D48, D49]
 Plaid ──► filter: incoming, posted, Zelle ──► Payment (bank check, M5)                      [not built]
-Confirmed Payment ──► LedgerEntry (credit, once per payment)                                  [not built, M1]
+Confirmed Payment ──► LedgerEntry (credit, same transaction; reassign = reversal + new credit)   [built, D60]
+Admin ──► LedgerEntry (manual charge/credit by category, reversal)                         [built, D60]
 Billing job (America/Chicago) ──► LedgerEntry (rent debit)
 Reminder job ──► effective balance check ──► Quo SMS (off / dry_run / live)
 ```
@@ -41,10 +42,11 @@ Full rules: `PHASE1_SPEC.md` sections 5–8.
 | Folder | Role |
 |---|---|
 | `src/email-intake/` | Module, 3-minute scheduler, `EmailIntakeService` (lock, cursor, one transaction per email), email log API. Subfolders: `mailbox/` (IMAP reader behind an interface), `verification/` (DKIM, sender allow-list, parser, `EmailProcessor`), `extraction/` (LLM prompt and answer validation) |
-| `src/llm/` | `LlmJsonClient` interface, Gemini adapter, `LlmRateLimitError` (shared by intake and matching) |
+| `src/llm/` | `LlmJsonClient` interface, Gemini adapter, `LlmTemporaryError` (rate limit 429 and overload 5xx; shared by intake and matching) |
 | `src/payments/` | `payments` table, admin list, manual assign |
 | `src/aliases/` | `payment_aliases` table, normalisation |
 | `src/matching/` | `MatchingService`, `AliasIndex`, AI driver matcher |
+| `src/ledger/` | `ledger_entries` (append-only: database triggers refuse UPDATE/DELETE and check reversals), `LedgerService` (manual entries, reversals, `syncPaymentCredit` called by payments and matching in their transaction, balance, history with running balance, weekly/monthly summaries by Chicago `effective_date`), routes `/drivers/:id/ledger…`, `ledger:backfill` command (D60) |
 | `src/sms/` | Quo chat (D50, D51): `sms_messages` / `sms_attachments`, `SmsService` (send by `SMS_MODE`, list, history sync, webhook apply), admin routes `/sms/...`, `POST /webhooks/quo` (signature-checked). Subfolders: `quo/` (client behind an interface, signature check, event parser), `storage/` (S3-compatible bucket behind an interface), `attachments/` (copies texted-in files into the bucket) |
 
 `scripts/` holds developer tools (not part of the API): IMAP peek, extraction evaluation, old-database report and imports.
