@@ -4,6 +4,18 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-18 — Driver ledger wrapped up; next: rent billing (M2)
+- **Cleanup:** the `wt-backend` / `wt-frontend` worktrees and their local branches removed (all merged into `dev`);
+  their local databases `car_rental_ledger` / `_test` dropped. The main local database `car_rental_db` was migrated
+  (`CreateLedgerEntries`) and backfilled (31 payments credited).
+- **Open from the ledger (BACKLOG):** B78 driver portal view, B79 record a cash payment, B80 old ledger import.
+- **NEXT (new chat "05 - Rent billing (M2)"):** plan first (plan mode): billing fields on drivers (`billingType`
+  daily/weekly, `billingRateCents`, `billingDueWeekday`, `billingActive`), a daily job in America/Chicago with an
+  advisory lock that writes `rent` ledger debits with key `rent:<driverId>:<date>` for `active` drivers only, days late
+  per spec 7, and the switch to turn it off.
+
+---
+
 ### 2026-10-17 — Staging deploy: driver ledger (B77, D60, D61)
 - **Merged:** backend PR #15 (`4fff3d9`) and frontend PR #12 (`69320cb`) into `dev`.
 - **Deployed** with the Deployment steps from the `deploy-*` worktrees: backend `4fff3d9` (2026-10-17 18:45 UTC),
