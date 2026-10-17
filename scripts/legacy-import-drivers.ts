@@ -93,10 +93,16 @@ try {
     await db.query("ROLLBACK");
     console.log("\nDry run: nothing written. Add --apply to write.");
   } else {
+    // An active driver must have its three onboarding steps done (CHECK drivers_active_is_onboarded, D56). Drivers
+    // active in the old system were onboarded there: their steps are marked done now, by no admin.
     for (const d of plan.inserts) {
       await db.query(
-        `INSERT INTO drivers (legacy_id, first_name, last_name, email, phone, status, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, coalesce($7::timestamptz, now()))`,
+        `INSERT INTO drivers (legacy_id, first_name, last_name, email, phone, status, created_at,
+                              contract_signed_at, deposit_paid_at, vehicle_assigned_at)
+         VALUES ($1, $2, $3, $4, $5, $6, coalesce($7::timestamptz, now()),
+                 CASE WHEN $6 = 'active' THEN now() END,
+                 CASE WHEN $6 = 'active' THEN now() END,
+                 CASE WHEN $6 = 'active' THEN now() END)`,
         [
           d.legacyId,
           d.firstName,
@@ -110,7 +116,10 @@ try {
     }
     for (const { id, driver: d } of plan.updates) {
       await db.query(
-        `UPDATE drivers SET first_name = $2, last_name = $3, email = $4, phone = $5, status = $6, updated_at = now()
+        `UPDATE drivers SET first_name = $2, last_name = $3, email = $4, phone = $5, status = $6, updated_at = now(),
+           contract_signed_at = CASE WHEN $6 = 'active' THEN coalesce(contract_signed_at, now()) ELSE contract_signed_at END,
+           deposit_paid_at = CASE WHEN $6 = 'active' THEN coalesce(deposit_paid_at, now()) ELSE deposit_paid_at END,
+           vehicle_assigned_at = CASE WHEN $6 = 'active' THEN coalesce(vehicle_assigned_at, now()) ELSE vehicle_assigned_at END
          WHERE id = $1 AND legacy_id = $7`,
         [id, d.firstName, d.lastName, d.email, d.phone, d.status, d.legacyId],
       );

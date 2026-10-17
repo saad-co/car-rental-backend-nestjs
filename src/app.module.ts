@@ -9,9 +9,11 @@ import { validateEnv } from "./config/env.validation.js";
 import { buildBaseOptions } from "./database/typeorm-options.js";
 import { DriversModule } from "./drivers/drivers.module.js";
 import { ApplicationsModule } from "./applications/applications.module.js";
+import { MessageTemplatesModule } from "./message-templates/message-templates.module.js";
 import { AuthModule } from "./auth/auth.module.js";
 import { EmailIntakeModule } from "./email-intake/email-intake.module.js";
 import { PaymentsModule } from "./payments/payments.module.js";
+import { SmsModule } from "./sms/sms.module.js";
 import { UsersModule } from "./users/users.module.js";
 
 @Module({
@@ -32,10 +34,12 @@ import { UsersModule } from "./users/users.module.js";
     UsersModule,
     AuthModule,
     ApplicationsModule,
+    MessageTemplatesModule,
     DriversModule,
     EmailIntakeModule,
     PaymentsModule,
     AliasesModule,
+    SmsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -18,8 +18,8 @@ import {
  */
 export function buildOpenApiDocument(app: INestApplication): OpenAPIObject {
   const config = new DocumentBuilder()
-    .setTitle("Car Rental API")
-    .setDescription("Admin and driver API for the car rental platform.")
+    .setTitle("GonzoCar API")
+    .setDescription("Admin and driver API for the GonzoCar platform.")
     .setVersion("0.1.0")
     // Declares "send a Bearer token" and applies it to every endpoint, matching the
     // global auth guard. Public routes simply ignore the token.

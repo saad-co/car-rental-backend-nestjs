@@ -1,9 +1,12 @@
 import { IsEnum, IsIn, IsOptional, IsUUID } from "class-validator";
-import { PaginationQueryDto } from "../../common/dto/pagination-query.dto.js";
+import { SearchQueryDto } from "../../common/dto/search-query.dto.js";
 import { PaymentSource, PaymentStatus } from "../payment.entity.js";
 
-/** Query string of `GET /payments`, e.g. `?match=review&source=email_zelle&page=1&limit=20`. */
-export class ListPaymentsQueryDto extends PaginationQueryDto {
+/**
+ * Query string of `GET /payments`, e.g. `?match=review&source=email_zelle&search=sutton&page=1&limit=8`.
+ * `search` matches the payer's name and handle, and the assigned driver's name.
+ */
+export class ListPaymentsQueryDto extends SearchQueryDto {
   /** Only payments with this status. Omit for all. */
   @IsOptional()
   @IsEnum(PaymentStatus)

@@ -4,6 +4,275 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-17 — Editable approve / decline texts (B71–B73, D58)
+- **Done (backend):** migration `CreateMessageTemplates` (table + placeholder default texts); `MessageTemplatesModule`
+  (`GET /message-templates`, `PUT /message-templates/:key`, unknown placeholders refused, `render`); approval sends the
+  approved template then the login text; `POST /applications/:id/reject` takes `{ sendText }`; shared `sendOrFail`
+  (failure rolls the review back with the reason). Test helper `seedTestTemplates` (a `TRUNCATE users CASCADE` also
+  empties `message_templates`).
+- **Done (frontend):** Settings page (new sidebar item, `PlugInIcon` from TailAdmin): one editor per template with
+  placeholders, character / SMS count, live preview, Save / Undo, last editor. Decline dialog with preview and two
+  ways to go ahead (`ConfirmDialog.secondary`). Review actions refresh the chat.
+- **Verified:** migration locally (defaults inserted, blank refused, revert + re-run, no drift); backend lint, 114 unit
+  + 117 e2e (13 new); route 401 without token; frontend lint + build. Browser walkthrough in `dry_run` on three fake
+  applications (all removed after, default texts restored): Settings defaults and preview, `{name}` refused with a
+  plain message, edit saved with editor, decline without text (no text stored), decline with text (filled-in edited
+  text stored as dry run), approve (two texts in order, shown in the chat at once).
+- **Fixed during the walkthrough:** the chat did not show texts sent by approve/decline until a reload; the decline
+  dialog's third button wrapped (dialog wider with a second action).
+- **For the client on staging:** edit both texts in Settings; replace "[add company names and phone numbers here]".
+- **Branch:** `feature/delete-applications` (both repos).
+
+---
+
+### 2026-10-17 — Internal notes on applications (B74, D57)
+- **Done (backend):** migration `CreateApplicationNotes` (`application_notes`: application CASCADE, author SET NULL,
+  CHECK body 1–2000 not blank, index (application_id, created_at)); `ApplicationNotesService` +
+  `ApplicationNotesController`: `GET /applications/:id/notes` (paginated, newest first, author email),
+  `POST` (trimmed body), `DELETE …/notes/:noteId` (author only, 403 otherwise, 204).
+- **Done (frontend):** `ApplicationNotesCard` under Review on the application page: add (TailAdmin `TextArea`,
+  2000 limit), list with author email and Chicago time, line breaks kept, "Show older notes" (infinite query, 10 per
+  page), trash on your own notes only with a confirm dialog.
+- **Verified:** migration locally (cascade and blank-note CHECK tested in SQL, revert + re-run, schema check clean);
+  backend lint, 114 unit + 104 e2e (8 new); route 401 without token; frontend lint + build. Browser on a fake
+  application with 11 notes by a fake second admin (all deleted after): 10 shown + "Show older (1 more)", no delete
+  icon on others' notes, Add disabled for blank, two-line note on top with author, Show older loads all 12, delete
+  Cancel/confirm, no failed requests; deleting the application removed its notes.
+- **Branch:** `feature/delete-applications` (both repos).
+
+---
+
+### 2026-10-17 — "Rejected" shown as "Declined" (B69)
+- **Done (frontend only):** `applicationStatus.ts` label `rejected` → "Declined" (badge on list and detail, Status
+  filter option); detail page button "Reject" → "Decline". Label only (Abulkalam): database value `rejected` and the
+  route `POST /applications/:id/reject` unchanged, no migration. The Email log's "Rejected (not genuine)" is a
+  different thing (a refused forged email) and was left as is.
+- **Verified:** frontend lint + build; browser on a fake application (created and deleted): Decline button, badge
+  "Declined", filter option "Declined", stored value still `rejected`.
+- **Branch:** `feature/delete-applications`.
+
+---
+
+### 2026-10-17 — "Car Rental" renamed "GonzoCar" (B70)
+- **Done (frontend):** `src/brand.ts` (`BRAND_NAME`, `BRAND_INITIALS`) used by the sidebar and the mobile header;
+  `index.html` title.
+- **Done (backend):** driver login text "your GonzoCar driver account" (was "Gonzo Car"); OpenAPI title and
+  description; `.env.example` `MAIL_FROM`; Quo webhook label in `scripts/quo-webhook.ts` (affects new webhooks only).
+- **Verified:** backend lint, 114 unit + 96 e2e; frontend lint + build; browser: tab title, sidebar, mobile header
+  (375 px) show GonzoCar, "Car Rental" nowhere on the page.
+- **Not changed:** local `.env` `MAIL_FROM` (Abulkalam's file; email unused since D52). Real logo/favicon: B12.
+- **Branch:** `feature/delete-applications` (both repos).
+
+---
+
+### 2026-10-17 — Driver statuses and onboarding steps (D56; B67 done, B68/B48 mostly)
+- **Why:** Abulkalam: a driver is active only with contract signed, deposit paid and a vehicle; steps in any order,
+  ticked by an admin, active automatically, onboarding drivers can log in, inactive ones cannot.
+- **Done (backend):** migration `AddDriverOnboarding` (enum rebuilt with `onboarding` as default; three step dates +
+  admin; CHECK `drivers_active_is_onboarded`; drivers already active marked onboarded at migration time); legacy
+  import fills steps for active drivers; `POST /drivers/:id/onboarding`, `/deactivate`, `/reactivate` (row locks;
+  deactivate turns `users.active` off); `DriverDto.onboarding`.
+- **Done (frontend):** shared `DriverStatusBadge` ("Onboarding · 2/3") in the list, driver page and assign dialog;
+  Status filter with Onboarding; Onboarding card (locked while inactive; confirm before un-ticking an active driver);
+  Deactivate (confirm) / Reactivate.
+- **Verified:** migration on local (19 active → steps set, 35 inactive), revert + re-run, schema check clean; backend
+  lint, 114 unit + 96 e2e tests (9 new: any order, auto-active, un-tick, DB CHECK, deactivate + real login refused,
+  reactivate, driver without login, body validation); frontend lint + build. Browser walkthrough on a fake driver
+  (created and deleted): badges and filter, ticks 0/3 → Active, un-tick Cancel/confirm, Deactivate (login flag off in
+  the database, steps locked), Reactivate (Onboarding 2/3, login back on).
+- **Staging:** the migration runs on the next deploy; the imported active drivers get their steps marked done.
+- **Branch:** `feature/delete-applications` (both repos).
+
+---
+
+### 2026-10-17 — Drivers, Payments, Email log on the shared table (B75, step 3; B75 done)
+- **Done (backend):** `search` on `GET /drivers` (name, full name, email, phone digits), `GET /payments` (payer name
+  and handle, assigned driver's name; existing status/source/driver/match filters unchanged, now a QueryBuilder
+  with LEFT JOINs), `GET /inbound-emails` (subject, sender address).
+- **Done (frontend):** the three pages on `TableCard` + `DataTable` + `useListParams`: Drivers (Status filter),
+  Payments (Match + Source filters; Accept / Assign / Change and the assign dialog kept), Email log (Outcome +
+  Provider filters; Provider is new in the UI). `filterOptions` helper.
+- **Also fixed:** (1) `TableCard` clipped the Filter panel on short lists (Abulkalam's screenshot): `overflow-hidden`
+  moved from the card to the table part. (2) A column's cell classes leaked into its header: `Column.align` added.
+  (3) `cn()` dropped the theme's font sizes (`text-theme-*`, `text-title-*`) whenever a colour followed, app-wide:
+  `extendTailwindMerge` now knows them.
+- **Verified:** backend lint, 114 unit + 87 e2e tests; frontend lint + build. Browser (local, read-only on real
+  local data): Drivers 8 rows / 7 pages, search "sutton", "312" + Inactive; Payments 8 rows / 3 pages, "sutton" +
+  Assigned, Filter panel with two groups fully visible over a 1-row list; Email log "square.com" + Not a payment;
+  cells 14 px / headers 12 px; no failed requests.
+- **Note:** Vite's dev server once served a stale `DataTable.tsx` after an edit (file watcher missed it); touching
+  the file fixed it. If a change does not show locally, check what Vite serves before debugging the code.
+- **Branch:** `feature/delete-applications` (both repos).
+
+---
+
+### 2026-10-17 — Shared list tables; Applications list with search (B75, steps 1-2)
+- **Why:** Abulkalam: every list like TailAdmin's "Recent Orders" table, built from reusable components, search +
+  Filter dropdown, 8 rows per page, "Basic Table 5" pagination.
+- **Done (frontend, step 1):** `components/tables/`: `TableCard`, `DataTable` (column list, row checkboxes, clickable
+  rows), `SearchInput` (300 ms pause), `FilterDropdown` (select per group, Apply/Clear, active count),
+  `useListParams` (`q`, filters, `page` in the URL; `LIST_PAGE_SIZE = 8`); `AvatarText` from TailAdmin; `Pagination`
+  restyled (Previous left, numbers centred, Next right). Copied from TailAdmin `crm/CrmRecentOrderTable.tsx` and
+  `ecommerce/ProductListTable.tsx` (this template copy's "Basic Table 4" is a different table).
+- **Done (backend, step 2):** `GET /applications?search=` (name, "first last", email, city with ILIKE; phone by digits);
+  shared `SearchQueryDto` and `common/search.ts` (`likePattern` escapes `%` `_` `\`, `phoneDigits`).
+- **Done (frontend, step 2):** Applications list on the shared components: Applicant column with initials, Status in
+  the Filter dropdown, per-row trash icon + bulk Delete (B66); selection cleared whenever the view changes.
+- **Verified:** backend lint, 114 unit + 82 e2e tests (new: `search.spec.ts`, `applications-list.e2e-spec.ts`);
+  frontend lint + build. **Browser walkthrough (local, 10 fake "Walk Test" applications, all deleted afterwards):**
+  8 rows per page, page 2, phone search "630 555-0007" (one request after the pause, back to page 1), city search,
+  search + Status filter (badge "1", in the URL), selection cleared by page change + Back, bulk Delete Cancel (no
+  request) and confirm, trash icon (does not open the row), detail-page Delete back to the list with the message,
+  select all, empty state, layout at 1400 px. Also seen in the log: B66 delete used by an admin at 01:12 (3 test rows).
+- **Fixed during the walkthrough:** after deleting from the detail page, the chat of the deleted application was
+  refetched while the page left (404 in the console); `useDeleteApplications` now marks chats stale without refetching.
+- **Not covered:** an approved row's disabled checkbox / missing trash icon (no approved application locally).
+- **NOT done:** step 3 (Drivers, Payments, Email log on the shared table, each with backend search).
+- **Branch:** `feature/delete-applications` (both repos; Abulkalam 2026-10-17: commit on this branch, no new branches).
+
+---
+
+### 2026-10-17 — Delete applications, one or many (B66, D55)
+- **Why:** client revisions PDF (B63-B74, received 2026-10-17); B64/B65 set aside by Abulkalam.
+- **Done (backend):** `FileStorage.delete`; `ApplicationsService.deleteMany` (hard delete, all or nothing, approved
+  refused with 409, chat deleted unless the phone is shared, files removed after commit); route
+  `POST /applications/bulk-delete` + `DeleteApplicationsDto`; `openapi.json` exported.
+- **Done (frontend):** client regenerated; `useDeleteApplications`; list page row checkboxes (approved disabled),
+  "Delete (n)", confirm dialog, result message; detail page Delete button; shared `Checkbox` (from TailAdmin),
+  `Button` `danger` variant, `ConfirmDialog` `confirmVariant`.
+- **Verified:** backend lint, 110 unit + 73 e2e tests (9 new in `application-delete.e2e-spec.ts`), build; route answers
+  401 without a token (local). Frontend lint + build.
+- **NOT done:** browser walkthrough (waiting for admin sign-in in the pane; will be done with the new list tables);
+  three local test applications "Test Delete 1-3" exist for it.
+- **Branch:** `feature/delete-applications` (both repos).
+- **NEXT:** shared TailAdmin-style list tables (search, filter dropdown, 8 rows per page) on `feature/list-tables`.
+
+---
+
+### 2026-10-14 — Applicants' documents copied from the website into our storage (D54, B17, B45)
+- **Why:** the licence, rating and earnings uploads sit in the website's private Supabase bucket; the admin only saw
+  "Uploaded", and the website can delete old files (its archive page).
+- **Done (backend):** table `application_documents` (migration `CreateApplicationDocuments`); `DocumentSource` interface
+  + `SupabaseDocumentSource` (asks the website's read-only function for a 60-second signed link, then downloads it, 25 MB
+  cap); `ApplicationDocumentCopier` (every minute and right after a new application; records missing rows first = backfill;
+  5 attempts; a refused token stops the run without using attempts); `GET /applications/:id/documents` (signed links, 10
+  minutes); shared `FileStorageModule`; settings `DOCUMENTS_SOURCE_URL` / `DOCUMENTS_SOURCE_TOKEN` (optional).
+- **Done on the website (Lovable, by Abulkalam):** edge function `get-driver-document` at
+  `https://htaaxbghiuvgnmkwkdlh.supabase.co/functions/v1/get-driver-document`, secret `DOCUMENTS_READ_TOKEN`
+  (read-only; 401 wrong token, 404 no file, 400 bad path). Only the wrong-token case was tested by Lovable.
+- **Done (frontend):** the Documents tab shows the pictures (or "Copying…", "not set up", or the failure reason).
+- **Verified:** 108 unit + 62 e2e tests (new: the source adapter, the copier incl. backfill / gone file / refused token /
+  retries, the list route); the Documents tab in the browser with a stored, a pending and a failed document (local).
+  NOT yet tried against the real function or real files.
+- **NEXT:** merge and deploy (the migration runs); in Railway set `DOCUMENTS_SOURCE_URL` (the function URL above) and
+  `DOCUMENTS_SOURCE_TOKEN` (same value as `DOCUMENTS_READ_TOKEN`, typed by Abulkalam); the next minute the existing
+  applications are backfilled; open an application's Documents tab and check. Ask the client NOT to use the website's
+  "Delete archived files" until the copies are verified.
+- **Branch:** `feat/application-documents` (both repos).
+
+---
+
+### 2026-10-14 — Text alert to staff for every new application (D53)
+- **Done (backend):** `APPLICATION_ALERT_PHONE` (optional, validated US number; empty = no alerts);
+  `ApplicationAlertService` (name + link, started after the application is saved, never waited for, never throws);
+  `SmsService.sendAlert` and a shared private `deliver` (same mode / number / Quo rules as `send`); migration
+  `AddApplicationAlert` (`alerted_at`, `alert_error` on `applications`, nullable); `alertError` in the list and detail
+  API, `alertedAt` in the detail.
+- **Done (frontend):** a warning on the application page ("The text alert to staff … was not sent: <reason>") and an
+  "Alert not sent" marker in the list; client regenerated.
+- **Verified:** 102 unit + 54 e2e tests (6 new: dry_run saves name + link only, live sends once and records when, a
+  repeat sends nothing, no phone = nothing, a Quo daily-limit refusal leaves the application stored with the reason on
+  it, off). NOT yet tried on staging.
+- **NEXT:** merge, deploy (the migration runs on deploy), then set `APPLICATION_ALERT_PHONE=+12243282246` on the
+  backend in Railway. Staging is `live`: from then on every new application there texts that number (including test
+  and mirrored real ones). Check that the text arrives as a regular SMS (the number is a Quo line, see D53).
+- **Branch:** `feat/sms-driver-invite` (same branch as the driver-invite work below, separate commits).
+
+---
+
+### 2026-10-14 — Driver login by text instead of email (D52, B41, B62)
+- **Why:** staging could not send email (Railway blocks outbound SMTP on non-Pro plans), so no approval could complete;
+  the client mostly uses SMS and Quo is connected.
+- **Done (backend):** `ApplicationsService.approve` creates the login with `emailVerifiedAt` set (no token, no
+  confirmation link) and texts the driver their login link, email and temporary password through `SmsService.send`
+  (same chat, follows `SMS_MODE`; `live` sends, `dry_run` saves "not sent" so the admin can read it, `off` refuses; any
+  failure rolls the approval back with a plain message). New `driver-welcome.text.ts`; `driver-welcome.email.ts`
+  removed; `ApplicationsModule` imports `SmsModule` instead of `MailModule`.
+- **Done (frontend):** the Approve dialog says a text with the login will be sent.
+- **Verified:** 102 unit + 48 e2e tests (4 new: dry_run approves and the password in the saved text really opens the
+  account; live sends to the application's phone; off creates nothing; a Quo refusal rolls everything back with the
+  plain reason). NOT yet tried on staging.
+- **NEXT:** merge both PRs, deploy backend then frontend, approve ONLY the "Quo Test" application (US phone
+  305 721 0909, owner agreed) in `live`, check the text arrives and the login works; remove dead code (B41 list).
+- **Branches:** backend and frontend `feat/sms-driver-invite`.
+
+---
+
+### 2026-10-14 — Quo chat on staging in `dry_run` (rollout steps 1-6 done; going live waits for a US test)
+- **Done:** PRs merged into `dev` (backend 5, frontend 6); Railway Storage Bucket added (variables are references to it,
+  `S3_FORCE_PATH_STYLE=false`); `QUO_API_KEY`, `QUO_PHONE_NUMBER_ID=PNlq6NzLQ3`, `SMS_MODE=dry_run` set; both services
+  deployed (migration `CreateSms` ran); webhook **43940** created with `npm run quo:webhook` (general line only, four
+  message events) and `QUO_WEBHOOK_SECRET` set; the staging Texts card shows the Dry run badge and a dry-run send was saved.
+- **Verified on staging:** a Quo test event and real events from the general line were accepted (deliveries SUCCESS) and
+  skipped correctly in the log ("not an application or a driver", "other Quo number"): real signature, parsing and the
+  D51 filters work. NOT yet verified on staging: a stored incoming text and a file in the bucket (needs a US-number
+  contact), a live send.
+- **Found:** a non-US phone cannot be tested: applications and drivers are US-only (`toUsE164`, drivers CHECK), so its
+  texts are skipped (B61). A 10-digit non-US number typed on an application would be read as a US number: the test
+  application "Quo Test" was therefore **deleted from staging** (with its text) before going live.
+- **NEXT:** Saad or the client submits an application with a US phone they own and texts the general line (must appear
+  in that chat; a photo must appear in Files and open); then `SMS_MODE=live` in Railway and ONE send to that same phone
+  from that chat. Never click Send on a real applicant or driver before Saad agrees. Then remove the test application.
+- **Not committed:** `scripts/quo-webhook.ts` gained `test <id>` and `deliveries <id>` (local `dev`, needs a small branch).
+
+---
+
+### 2026-10-14 — Quo chat: send, receive, files, on the application and driver pages (D50, D51; B46)
+- **Done (backend):** `sms_messages` + `sms_attachments` (migration `CreateSms`, CHECKs and UNIQUE keys in the database);
+  `src/sms/`: `QuoClient` interface + HTTP adapter (v1 send and history), webhook signature check
+  (`verify-quo-signature.ts`) and event parser, `SmsService` (send by `SMS_MODE` off / dry_run / live, list, history sync,
+  webhook apply: idempotent on the Quo id, status only moves forward, only known contacts stored), `SmsController`
+  (`/sms/status`, `/sms/:kind/:id/messages|sync|files`), `POST /webhooks/quo` (public, signature-checked, `rawBody: true`),
+  `AttachmentDownloader` (copies MMS files into the bucket, minute cron + right after a webhook/sync, 25 MB cap,
+  5 attempts), `S3FileStorage` (MinIO locally, Railway Storage Bucket on staging), env `SMS_MODE`, `QUO_*`, `S3_*`.
+  Scripts: `quo:numbers`, `quo:simulate`, `storage:init`. MinIO in `docker-compose.yml` (Chainguard image: Docker Hub
+  no longer has MinIO).
+- **Done (frontend):** `src/api/sms.queries.ts`, `components/sms/` (`ConversationCard` with Messages and Files tabs,
+  polls every 10 s), placed in the side column of `ApplicationDetail` and `DriverDetail`.
+- **Verified:** 88 unit + 43 e2e tests (new: 12 + 7); real HTTP: signed webhook stored, forged 401, stranger skipped;
+  real MinIO: a public PNG copied and shown through a signed link; dead links recorded as failed with the reason;
+  browser walkthrough of the application page (dry-run send, incoming text appears by itself, Files tab, no console
+  errors); the sync read the real Quo account (read-only) with 200. NOT tested: the driver page in the browser (it would
+  pull a real driver's texts), a live send, a real webhook from Quo.
+- **Found / fixed:** an empty `S3_BUCKET=` line made the app refuse to start (fixed in `env.validation.ts`).
+- **Not done / open:** live send and webhook on staging (B59: client's OK for the webhook; credits and A2P still to
+  confirm; staging bucket and variables, then deploy, create the webhook, one real text and MMS, then `live`);
+  STOP/opt-out (B58); "more info" status, decision texts, upload link (B47); media-link expiry (B57); the Settings
+  table replaces `SMS_MODE` (M7); chat on other Quo numbers (D51).
+- **NEXT, exact steps (staging rollout; Saad said "bring it live" on 2026-10-14; a short chat "03 - Quo chat (staging rollout)"):**
+  1. Review, commit and push both repos; PRs into `dev` (Abulkalam opens, Saad merges), or deploy from the branch if Saad
+     prefers (`railway up` uploads the working folder).
+  2. Railway dashboard (typed by Abulkalam, never in chat), project `car-rental-staging`: add a **Storage Bucket**;
+     on the `backend` service set `S3_BUCKET`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` (variable
+     references to the bucket's own values), `S3_REGION=auto`, `S3_FORCE_PATH_STYLE=false` (if the first file link
+     fails, try `true`), `QUO_API_KEY`, `QUO_PHONE_NUMBER_ID=PNlq6NzLQ3`, **`SMS_MODE=dry_run`**. Apply.
+  3. `railway up --service backend`, then `--service frontend` (D43). The pre-deploy command runs `CreateSms`.
+  4. Open any application as admin: the card must show the "Dry run" badge and load. Logs: no errors.
+  5. Create the webhook from your terminal, with the staging URL (needs Saad's OK, changes the client's Quo):
+     `npm run quo:webhook -- create https://backend-production-1f569.up.railway.app/webhooks/quo`. It prints the
+     secret once: set `QUO_WEBHOOK_SECRET` in Railway, Apply. Do NOT use the dashboard's webhook page (other signature format).
+  6. Make a test application with YOUR OWN phone (the website form as on 2026-10-11, then reject it in the old system).
+     Text the general line from your phone: it must appear in that application's chat within seconds; send a photo:
+     it must appear in Files.
+  7. Only then go live: `SMS_MODE=live` in Railway, Apply. Send ONE text from the test application's chat to your own
+     phone; reply from the phone; confirm. Never click Send on a real applicant or driver before Saad agrees.
+  8. Tell Saad; remove the test application; later dev to main (Saad).
+- **Local test data to remove:** application with `request_id = 'quo-sim-test'` and its texts
+  (`DELETE FROM applications WHERE request_id='quo-sim-test'; DELETE FROM sms_messages WHERE contact_phone='+13125550188';`).
+- **Branches:** backend and frontend `feature/quo-chat` (both merged with `dev` on 2026-10-14; nothing pushed after that).
+
+---
+
 ### 2026-10-13 — Matching, aliases, one-stage payments, Payments / Email log / Drivers pages (D48, D49)
 - **Done (backend):** `payment_aliases` (UNIQUE type+value; types = payment methods + email/phone) and
   `npm run legacy:import-aliases` (dry run, `--apply --target=<db>`, skips damaged old aliases); match columns on

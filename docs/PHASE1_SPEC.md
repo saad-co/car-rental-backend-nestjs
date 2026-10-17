@@ -76,9 +76,11 @@ so the two repos cannot silently drift apart.
 **User** — an account that can log in. `email` (unique), `passwordHash`, `role` (`admin` | `driver`, no default),
 `active`. Admins log in to the admin app; drivers log in to the driver portal with their email (D26).
 
-**Driver** — `firstName`, `lastName`, `phone` (E.164), `email`, `status` (`active` | `inactive`),
+**Driver** — `firstName`, `lastName`, `phone` (E.164), `email`, `status` (`onboarding` | `active` | `inactive`, D56),
+`contractSignedAt`, `depositPaidAt`, `vehicleAssignedAt` (onboarding steps, each with the admin who ticked it),
 `billingType` (`daily` | `weekly`), `billingRateCents`, `billingDueWeekday` (weekly only),
-`billingActive`, `smsOptedOut`.
+`billingActive`, `smsOptedOut`. New drivers start `onboarding`; `active` only when all three steps are done (CHECK);
+an `inactive` driver cannot log in.
 
 **PaymentAlias** — links a payment identity to a driver.
 `driverId`, `type` (`zelle_name` | `zelle_contact` | `venmo` | `cashapp` | `email` | `phone`),
@@ -113,8 +115,14 @@ Balance = sum(credits) − sum(debits). Never stored.
 **SmsMessage** — `driverId`, `direction` (`outbound` | `inbound`), `body`, `templateKey`,
 `mode` (`dry_run` | `live`), `status` (`composed` | `sent` | `delivered` | `failed` | `received`),
 `quoMessageId`, `error`, `reminderTier`, `createdAt`.
+*As built for the chat (D50, D51), keyed by phone, not by driver:* `sms_messages` has `contactPhone` (E.164) instead of
+`driverId`, `sentById`, `occurredAt`, and statuses `composed | queued | sent | delivered | undelivered | failed | received`;
+`templateKey` and `reminderTier` come with the reminders (M6). A separate `sms_attachments` table holds the files.
 
 **MessageTemplate** — `key`, `body` with placeholders `{firstName}`, `{balance}`, `{daysLate}`, `{rate}`.
+*As built (D58):* table `message_templates`, `key` is the primary key, plus `updatedAt` and `updatedById`. Keys so far:
+`application_approved`, `application_declined` (placeholders `{firstName}`, `{lastName}`), edited in Settings; the
+reminder keys and their placeholders come with M6.
 
 **Setting** — key/value for switches, thresholds, tier timings, SMS mode.
 
@@ -174,7 +182,8 @@ An admin assigns an unmatched payment to a driver. This posts the payment and **
 
 ## 7. Billing and arrears
 
-- Daily job in `America/Chicago`: rent debit for every driver with `billingActive`.
+- Daily job in `America/Chicago`: rent debit for every `active` driver (D56) with `billingActive`. Onboarding and
+  inactive drivers are never billed or reminded.
   - `daily`: one debit per day.
   - `weekly`: one debit on `billingDueWeekday`.
   - `idempotencyKey = rent:<driverId>:<date>` — re-running a day never double-bills.

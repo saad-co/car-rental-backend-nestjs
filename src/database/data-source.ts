@@ -2,9 +2,14 @@ import "reflect-metadata";
 import { DataSource } from "typeorm";
 import { PaymentAlias } from "../aliases/payment-alias.entity.js";
 import { Application } from "../applications/application.entity.js";
+import { ApplicationDocument } from "../applications/documents/application-document.entity.js";
+import { ApplicationNote } from "../applications/notes/application-note.entity.js";
+import { MessageTemplate } from "../message-templates/message-template.entity.js";
 import { Driver } from "../drivers/driver.entity.js";
 import { InboundEmail } from "../email-intake/inbound-email.entity.js";
 import { Payment } from "../payments/payment.entity.js";
+import { SmsAttachment } from "../sms/sms-attachment.entity.js";
+import { SmsMessage } from "../sms/sms-message.entity.js";
 import { User } from "../users/user.entity.js";
 import { buildBaseOptions } from "./typeorm-options.js";
 
@@ -18,7 +23,19 @@ if (!databaseUrl) {
 
 export default new DataSource({
   ...buildBaseOptions(databaseUrl),
-  entities: [User, Driver, Application, InboundEmail, Payment, PaymentAlias],
+  entities: [
+    User,
+    Driver,
+    Application,
+    InboundEmail,
+    Payment,
+    PaymentAlias,
+    SmsMessage,
+    SmsAttachment,
+    ApplicationDocument,
+    ApplicationNote,
+    MessageTemplate,
+  ],
   // `.ts` when run from the sources (tsx, local), `.js` when run compiled (production). Never
   // both: the build also writes `.d.ts` type files next to each migration, which are not migrations.
   migrations: [

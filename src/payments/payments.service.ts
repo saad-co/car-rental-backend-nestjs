@@ -4,8 +4,9 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { DataSource, IsNull, Not, type FindOptionsWhere } from "typeorm";
+import { Brackets, DataSource } from "typeorm";
 import { normalizeAliasValue } from "../aliases/normalize-alias.js";
+import { likePattern } from "../common/search.js";
 import { AliasSource, PaymentAlias } from "../aliases/payment-alias.entity.js";
 import { Driver } from "../drivers/driver.entity.js";
 import { ALIAS_TYPE_BY_SOURCE } from "../matching/alias-index.js";
@@ -30,29 +31,56 @@ const ASSIGNABLE = [
 export class PaymentsService {
   constructor(private readonly dataSource: DataSource) {}
 
-  /** One page of payments, most recent first, filtered by status, source and match state. */
+  /**
+   * One page of payments, most recent first, filtered by status, source, driver and match state, and by a search
+   * (B75): the payer's name and handle, and the assigned driver's first, last or full name (ILIKE, ignoring case).
+   * Built like `ApplicationsService.list`; see there for the details.
+   *
+   * `leftJoinAndSelect` loads the driver and the suggested driver with the payment (a LEFT JOIN keeps payments
+   * that have none). With joins, TypeORM pages by first picking the page's payment ids, so `take` counts payments,
+   * not joined rows.
+   */
   async list(query: ListPaymentsQueryDto): Promise<PaymentListDto> {
-    const where: FindOptionsWhere<Payment> = {
-      ...(query.status && { status: query.status }),
-      ...(query.source && { source: query.source }),
-      ...(query.driverId && { driverId: query.driverId }),
-      ...(query.match === "assigned" && { driverId: Not(IsNull()) }),
-      // Looked at by matching and not placed. Payments not looked at yet are left out: they are seconds old.
-      ...(query.match === "review" && {
-        driverId: IsNull(),
-        matchAttemptedAt: Not(IsNull()),
-      }),
-    };
-    const [rows, total] = await this.dataSource
+    const builder = this.dataSource
       .getRepository(Payment)
-      .findAndCount({
-        where,
-        relations: { driver: true, suggestedDriver: true },
-        // `id` breaks ties, so two payments with the same time never swap places between pages.
-        order: { occurredAt: "DESC", id: "DESC" },
-        skip: (query.page - 1) * query.limit,
-        take: query.limit,
-      });
+      .createQueryBuilder("p")
+      .leftJoinAndSelect("p.driver", "driver")
+      .leftJoinAndSelect("p.suggestedDriver", "suggestedDriver")
+      // `id` breaks ties, so two payments with the same time never swap places between pages.
+      .orderBy("p.occurredAt", "DESC")
+      .addOrderBy("p.id", "DESC")
+      .skip((query.page - 1) * query.limit)
+      .take(query.limit);
+    if (query.status) {
+      builder.andWhere("p.status = :status", { status: query.status });
+    }
+    if (query.source) {
+      builder.andWhere("p.source = :source", { source: query.source });
+    }
+    if (query.driverId) {
+      builder.andWhere("p.driverId = :driverId", { driverId: query.driverId });
+    }
+    if (query.match === "assigned") {
+      builder.andWhere("p.driverId IS NOT NULL");
+    }
+    if (query.match === "review") {
+      // Looked at by matching and not placed. Payments not looked at yet are left out: they are seconds old.
+      builder.andWhere("p.driverId IS NULL AND p.matchAttemptedAt IS NOT NULL");
+    }
+    if (query.search) {
+      builder.andWhere(
+        new Brackets((match) => {
+          match
+            .where("p.sender_name ILIKE :pattern")
+            .orWhere("p.sender_handle ILIKE :pattern")
+            .orWhere(
+              "(driver.first_name || ' ' || driver.last_name) ILIKE :pattern",
+            );
+        }),
+        { pattern: likePattern(query.search) },
+      );
+    }
+    const [rows, total] = await builder.getManyAndCount();
     return {
       items: rows.map((row) => this.toDto(row)),
       total,

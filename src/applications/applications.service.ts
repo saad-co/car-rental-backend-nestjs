@@ -1,6 +1,8 @@
 import {
   BadRequestException,
   ConflictException,
+  HttpException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
@@ -9,21 +11,37 @@ import {
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import { isEmail } from "class-validator";
-import { DataSource, EntityManager, Repository } from "typeorm";
-import { createOneTimeToken } from "../auth/one-time-token.js";
+import {
+  Brackets,
+  DataSource,
+  EntityManager,
+  In,
+  IsNull,
+  Not,
+  Repository,
+} from "typeorm";
+import { likePattern, phoneDigits } from "../common/search.js";
 import { isUniqueViolation } from "../database/postgres-errors.js";
-import { driverWelcomeEmail } from "../drivers/driver-welcome.email.js";
+import { driverWelcomeText } from "../drivers/driver-welcome.text.js";
 import { Driver } from "../drivers/driver.entity.js";
 import { toUsE164 } from "../drivers/us-phone.js";
-import { MailService } from "../mail/mail.service.js";
+import { TemplateKey } from "../message-templates/message-template.entity.js";
+import { MessageTemplatesService } from "../message-templates/message-templates.service.js";
+import { SmsContactKind } from "../sms/sms-contact.js";
+import { SmsService } from "../sms/sms.service.js";
+import type { FileStorage } from "../sms/storage/file-storage.js";
+import { FILE_STORAGE } from "../sms/storage/file-storage.module.js";
 import { PasswordService } from "../users/password.service.js";
 import { Role, User } from "../users/user.entity.js";
+import { ApplicationAlertService } from "./application-alert.service.js";
 import { Application, ApplicationStatus } from "./application.entity.js";
+import { ApplicationDocument } from "./documents/application-document.entity.js";
 import {
   ApplicationDetailDto,
   ApplicationListDto,
   ApplicationListItemDto,
 } from "./dto/application.dto.js";
+import { DeleteApplicationsResultDto } from "./dto/delete-applications.dto.js";
 import { ListApplicationsQueryDto } from "./dto/list-applications-query.dto.js";
 
 /** Result of receiving a submission. `created` is false when it was a repeat of one already stored. */
@@ -35,12 +53,9 @@ export interface ReceiveResult {
 /** A submission from the website: a flat JSON object whose values are mostly strings. */
 type Submission = Record<string, unknown>;
 
-/** How long a new driver's email verification link works. */
-const VERIFY_LINK_VALID_HOURS = 48;
-
 /**
- * Driver applications: intake from the website, the admin list and detail views, and review
- * (approve, reject, on hold).
+ * Driver applications: intake from the website, the admin list and detail views, review
+ * (approve, reject, on hold) and delete.
  *
  * Intake is lenient on purpose. The website is not ours and sends every value as text, so
  * instead of a strict DTO (which would reject a real application the day the form adds or
@@ -50,7 +65,7 @@ const VERIFY_LINK_VALID_HOURS = 48;
 @Injectable()
 export class ApplicationsService {
   private readonly logger = new Logger(ApplicationsService.name);
-  /** Base address of the web app, for links in emails. */
+  /** Base address of the web app, for the login link in the text. */
   private readonly webAppUrl: string;
 
   constructor(
@@ -59,8 +74,13 @@ export class ApplicationsService {
     /** The database connection, used to run several writes as one transaction. */
     private readonly dataSource: DataSource,
     private readonly passwords: PasswordService,
-    private readonly mail: MailService,
+    private readonly sms: SmsService,
+    private readonly alerts: ApplicationAlertService,
     config: ConfigService,
+    /** Our file bucket, to remove copied files when an application is deleted. Null when no bucket is set up. */
+    @Inject(FILE_STORAGE) private readonly storage: FileStorage | null,
+    /** The approved / declined texts the admin edits in Settings (B73). */
+    private readonly templates: MessageTemplatesService,
   ) {
     this.webAppUrl = config.getOrThrow<string>("WEB_APP_URL");
   }
@@ -143,10 +163,11 @@ export class ApplicationsService {
     });
 
     try {
-      return {
-        application: await this.applications.save(application),
-        created: true,
-      };
+      const saved = await this.applications.save(application);
+      // Staff are told by text (D53). Not waited for and never throws: the website's submission must succeed
+      // even if Quo is down. Only for a new application, never for a repeat of the same request_id.
+      this.alerts.notifyInBackground(saved);
+      return { application: saved, created: true };
     } catch (error) {
       if (!isUniqueViolation(error)) throw error;
       // `request_id` is the only unique column set on insert, so this is a repeat.
@@ -158,20 +179,53 @@ export class ApplicationsService {
   }
 
   /**
-   * One page of applications, newest first, optionally only one status.
+   * One page of applications, newest first, optionally only one status and only those matching a search.
+   *
+   * Built with a QueryBuilder because the search is "status = X AND (name OR email OR ...)", which `find()` cannot
+   * say simply. `:status`, `:pattern` are parameters: Postgres receives the values separately from the SQL, so a
+   * search can never change the query (no SQL injection).
+   *
+   * The search (B75) matches, ignoring case: first name, last name, "first last", email, city; and the phone by its
+   * digits, so "312 555" finds "(312) 555-0101". Mongo equivalent: `$or` of case-insensitive `$regex`es.
+   * With hundreds of rows Postgres simply reads them all; if this ever grows to many thousands, a trigram index
+   * (`pg_trgm`) would make `ILIKE '%...%'` fast.
    *
    * `skip` / `take` become SQL `OFFSET` / `LIMIT` (Mongoose: `.skip()` / `.limit()`).
-   * `findAndCount` also returns the total number of matching rows, for page numbers.
+   * `getManyAndCount` also returns the total number of matching rows, for page numbers.
    * `id` is a second sort key so rows received in the same millisecond keep a fixed order
    * across pages.
    */
   async list(query: ListApplicationsQueryDto): Promise<ApplicationListDto> {
-    const [rows, total] = await this.applications.findAndCount({
-      where: query.status ? { status: query.status } : {},
-      order: { createdAt: "DESC", id: "DESC" },
-      skip: (query.page - 1) * query.limit,
-      take: query.limit,
-    });
+    const builder = this.applications
+      .createQueryBuilder("a")
+      .orderBy("a.createdAt", "DESC")
+      .addOrderBy("a.id", "DESC")
+      .skip((query.page - 1) * query.limit)
+      .take(query.limit);
+    if (query.status) {
+      builder.andWhere("a.status = :status", { status: query.status });
+    }
+    if (query.search) {
+      const digits = phoneDigits(query.search);
+      builder.andWhere(
+        new Brackets((match) => {
+          match
+            .where("a.first_name ILIKE :pattern")
+            .orWhere("a.last_name ILIKE :pattern")
+            .orWhere("(a.first_name || ' ' || a.last_name) ILIKE :pattern")
+            .orWhere("a.email ILIKE :pattern")
+            .orWhere("a.city ILIKE :pattern");
+          if (digits) {
+            match.orWhere(
+              "regexp_replace(a.phone, '\\D', '', 'g') LIKE :digits",
+              { digits: likePattern(digits) },
+            );
+          }
+        }),
+        { pattern: likePattern(query.search) },
+      );
+    }
+    const [rows, total] = await builder.getManyAndCount();
     return {
       items: rows.map((row) => this.toListItem(row)),
       total,
@@ -194,32 +248,35 @@ export class ApplicationsService {
 
   /**
    * Approves an application, in one transaction:
-   * 1. creates the driver's login (`users`, role `driver`) with a generated password, not yet
-   *    verified and required to change the password (D26);
+   * 1. creates the driver's login (`users`, role `driver`) with a generated password, required to
+   *    change it at first login (D26). The email counts as confirmed from the start: the driver
+   *    gets the login by text, which proves the phone, so there is no confirmation link (D52);
    * 2. creates the Driver, linked to that login;
    * 3. marks the application approved;
-   * 4. emails the driver their password and verification link.
+   * 4. texts the applicant the "approved" template from Settings (B71, D58), then their email and
+   *    temporary password (D52), as two texts through the same chat as every other text: sent when
+   *    SMS_MODE is `live`, saved as "Dry run: not sent" when `dry_run` (the admin can read them in
+   *    the chat and pass them on), refused when `off`. The login text is fixed in code, never a
+   *    template: an edit must never be able to break the credentials.
    *
-   * The email is sent last, inside the transaction: if it fails, everything is rolled back and
-   * the admin can simply try again. (The reverse, email sent but the commit failing, is very
-   * unlikely; the driver would hold a password for an account that does not exist, and
-   * approving again sends a new one.)
+   * The texts are sent last, inside the transaction: if one fails, everything is rolled back and
+   * the admin can simply try again. (A text that went out before the failure stays in the chat:
+   * it really was sent. The reverse, texts sent but the commit failing, is very unlikely; the
+   * driver would hold a password for an account that does not exist, and approving again sends
+   * a new one.)
    *
    * @param adminId the admin approving it (stored as the reviewer).
    * @throws NotFoundException if there is no application with this id.
    * @throws ConflictException if it is already approved, if a driver or login already has
    *   this email, or a driver has this phone.
    * @throws BadRequestException if the phone is not a valid US number.
-   * @throws ServiceUnavailableException if the welcome email could not be sent (nothing saved).
+   * @throws ServiceUnavailableException if a text could not be sent (nothing approved).
    */
   async approve(id: string, adminId: string): Promise<ApplicationDetailDto> {
     // Prepared before the transaction: hashing is deliberately slow, and the row lock taken
     // inside should be held as briefly as possible.
     const temporaryPassword = this.passwords.generate();
     const passwordHash = await this.passwords.hash(temporaryPassword);
-    const verification = createOneTimeToken(
-      VERIFY_LINK_VALID_HOURS * 60 * 60 * 1000,
-    );
 
     try {
       const approved = await this.dataSource.transaction(async (manager) => {
@@ -261,8 +318,7 @@ export class ApplicationsService {
             passwordHash,
             role: Role.driver,
             mustChangePassword: true,
-            emailVerificationTokenHash: verification.tokenHash,
-            emailVerificationExpiresAt: verification.expiresAt,
+            emailVerifiedAt: new Date(),
           }),
         );
 
@@ -282,10 +338,27 @@ export class ApplicationsService {
         application.reviewedAt = new Date();
         const saved = await manager.save(application);
 
-        await this.sendWelcomeEmail(
+        await this.sendOrFail(
           application,
-          temporaryPassword,
-          verification.token,
+          await this.templates.render(
+            TemplateKey.application_approved,
+            this.templateValues(application),
+          ),
+          adminId,
+          "The approval text",
+          "nothing was approved",
+        );
+        await this.sendOrFail(
+          application,
+          driverWelcomeText({
+            firstName: application.firstName,
+            email: application.email,
+            temporaryPassword,
+            loginUrl: `${this.webAppUrl}/driver/login`,
+          }),
+          adminId,
+          "The login text",
+          "nothing was approved",
         );
         return saved;
       });
@@ -301,56 +374,230 @@ export class ApplicationsService {
   }
 
   /**
-   * Sends the approved driver their login details. Called inside the approval transaction.
-   * @throws ServiceUnavailableException if the email could not be sent; the cause is logged.
+   * Texts an applicant inside a review transaction, through `SmsService.send`, so the text follows SMS_MODE, shows
+   * in the application's chat, and a failure comes back in plain words. Throwing rolls the review back.
+   * @param what names the text in the message, e.g. "The login text".
+   * @param outcome what did not happen, e.g. "nothing was approved".
+   * @throws ServiceUnavailableException if the text could not be sent or saved; the cause is logged.
    */
-  private async sendWelcomeEmail(
+  private async sendOrFail(
     application: Application,
-    temporaryPassword: string,
-    verificationToken: string,
+    text: string,
+    adminId: string,
+    what: string,
+    outcome: string,
   ): Promise<void> {
     try {
-      await this.mail.send(
-        driverWelcomeEmail({
-          firstName: application.firstName,
-          email: application.email,
-          temporaryPassword,
-          verifyUrl: `${this.webAppUrl}/driver/verify-email?token=${verificationToken}`,
-          loginUrl: `${this.webAppUrl}/driver/login`,
-          validForHours: VERIFY_LINK_VALID_HOURS,
-        }),
+      await this.sms.send(
+        SmsContactKind.applications,
+        application.id,
+        text,
+        adminId,
       );
     } catch (error) {
       this.logger.error(
-        `Welcome email to ${application.email} failed; approval rolled back.`,
+        `${what} for application ${application.id} failed; ${outcome}.`,
         error instanceof Error ? error.stack : String(error),
       );
+      const reason =
+        error instanceof HttpException ? error.message : "Please try again.";
       throw new ServiceUnavailableException(
-        "The welcome email could not be sent, so nothing was approved. Please try again.",
+        `${what} could not be sent, so ${outcome}. ${reason}`,
       );
     }
   }
 
+  /** The values the application texts' placeholders are filled with (B73). */
+  private templateValues(application: Application): Record<string, string> {
+    return {
+      firstName: application.firstName,
+      lastName: application.lastName,
+    };
+  }
+
   /**
-   * Rejects an application or puts it on hold. No driver is created. Can be changed again
-   * later, unless the application has been approved.
+   * Declines an application (stored as `rejected`, B69) or puts it on hold. No driver is created. Can be changed
+   * again later, unless the application has been approved.
+   *
+   * Declining with `sendText` also texts the applicant the "declined" template from Settings (B72, D58), inside
+   * the same transaction: if the text fails, nothing is declined, and the admin can retry or decline without a
+   * text. `sendText` is ignored for "on hold".
    *
    * @throws NotFoundException if there is no application with this id.
    * @throws ConflictException if it is already approved.
+   * @throws ServiceUnavailableException if the decline text could not be sent (nothing declined).
    */
   async setStatus(
     id: string,
     status: ApplicationStatus.rejected | ApplicationStatus.on_hold,
     adminId: string,
+    options: { sendText?: boolean } = {},
   ): Promise<ApplicationDetailDto> {
     const updated = await this.dataSource.transaction(async (manager) => {
       const application = await this.loadForReview(manager, id);
       application.status = status;
       application.reviewedById = adminId;
       application.reviewedAt = new Date();
-      return manager.save(application);
+      const saved = await manager.save(application);
+      if (status === ApplicationStatus.rejected && options.sendText) {
+        await this.sendOrFail(
+          application,
+          await this.templates.render(
+            TemplateKey.application_declined,
+            this.templateValues(application),
+          ),
+          adminId,
+          "The decline text",
+          "nothing was declined",
+        );
+      }
+      return saved;
     });
     return this.toDetail(updated);
+  }
+
+  /**
+   * Deletes applications for good (B66: hard delete, no undo). All or nothing, in one transaction:
+   * 1. loads and locks the rows (`FOR UPDATE`), so nobody can approve one of them meanwhile. Sorted by id, so two
+   *    deletes of overlapping sets lock in the same order and cannot deadlock;
+   * 2. refuses the whole request if any is approved: an approved application is where its driver came from;
+   * 3. deletes the text history of each phone that no other application and no driver uses. A shared phone keeps
+   *    its chat, because that chat also belongs to the other record;
+   * 4. deletes the applications; their `application_documents` rows go with them (`ON DELETE CASCADE`).
+   * After the commit, the copied files are removed from the bucket. Files go last on purpose: if the database
+   * step fails nothing is touched, and a file that cannot be removed does not undo the delete; it is logged with
+   * its reason and counted in `filesNotRemoved`.
+   *
+   * Ids that do not exist (already deleted) are ignored, so deleting twice is not an error.
+   * @throws ConflictException naming the approved applications; nothing is deleted.
+   */
+  async deleteMany(
+    ids: string[],
+    adminId: string,
+  ): Promise<DeleteApplicationsResultDto> {
+    const { deletedIds, fileKeys } = await this.dataSource.transaction(
+      async (manager) => {
+        const rows = await manager.find(Application, {
+          where: { id: In([...new Set(ids)]) },
+          order: { id: "ASC" },
+          lock: { mode: "pessimistic_write" },
+        });
+
+        const approved = rows.filter(
+          (a) => a.status === ApplicationStatus.approved,
+        );
+        if (approved.length > 0) {
+          const names = approved
+            .map((a) => `${a.firstName} ${a.lastName}`)
+            .join(", ");
+          throw new ConflictException(
+            `Approved applications cannot be deleted: ${names}. Nothing was deleted.`,
+          );
+        }
+        if (rows.length === 0) return { deletedIds: [], fileKeys: [] };
+        const rowIds = rows.map((a) => a.id);
+
+        const documents = await manager.find(ApplicationDocument, {
+          where: { applicationId: In(rowIds), storageKey: Not(IsNull()) },
+          select: { id: true, storageKey: true },
+        });
+        const chatPhones = await this.unsharedPhones(manager, rows);
+        const attachmentKeys = await this.deleteChats(manager, chatPhones);
+        await manager.delete(Application, rowIds);
+
+        return {
+          deletedIds: rowIds,
+          fileKeys: [...documents.map((d) => d.storageKey!), ...attachmentKeys],
+        };
+      },
+    );
+
+    if (deletedIds.length > 0) {
+      this.logger.log(
+        `Admin ${adminId} deleted ${deletedIds.length} application(s): ${deletedIds.join(", ")}`,
+      );
+    }
+    const filesNotRemoved = await this.removeFiles(fileKeys);
+    return { deleted: deletedIds.length, filesNotRemoved };
+  }
+
+  /**
+   * The phones (E.164) of these applications that no other application and no driver uses: their text history
+   * belongs only to the applications being deleted. A phone that is not a US number never had a chat (the chat
+   * refuses it), so it is left out. Applications are compared on the last 10 digits, as the webhook does (D51).
+   */
+  private async unsharedPhones(
+    manager: EntityManager,
+    deleting: Application[],
+  ): Promise<string[]> {
+    const ids = deleting.map((a) => a.id);
+    const phones = new Set(
+      deleting
+        .map((a) => toUsE164(a.phone))
+        .filter((p): p is string => p !== null),
+    );
+    const unshared: string[] = [];
+    for (const phone of phones) {
+      if (await manager.exists(Driver, { where: { phone } })) continue;
+      const others: unknown[] = await manager.query(
+        `SELECT 1 FROM applications
+         WHERE right(regexp_replace(phone, '\\D', '', 'g'), 10) = $1 AND id <> ALL($2::uuid[])
+         LIMIT 1`,
+        [phone.slice(2), ids],
+      );
+      if (others.length === 0) unshared.push(phone);
+    }
+    return unshared;
+  }
+
+  /**
+   * Deletes every text with these phones; their attachment rows go with them (`ON DELETE CASCADE`).
+   * @returns the bucket keys of the attachments that had been copied, to remove after the commit.
+   */
+  private async deleteChats(
+    manager: EntityManager,
+    phones: string[],
+  ): Promise<string[]> {
+    if (phones.length === 0) return [];
+    const attachments: { storage_key: string }[] = await manager.query(
+      `SELECT a.storage_key FROM sms_attachments a
+       JOIN sms_messages m ON m.id = a.message_id
+       WHERE m.contact_phone = ANY($1) AND a.storage_key IS NOT NULL`,
+      [phones],
+    );
+    await manager.query(
+      `DELETE FROM sms_messages WHERE contact_phone = ANY($1)`,
+      [phones],
+    );
+    return attachments.map((a) => a.storage_key);
+  }
+
+  /**
+   * Removes files from the bucket, one by one, so one failure does not stop the others. Each failure is logged
+   * with its reason (no silent failure).
+   * @returns how many could not be removed.
+   */
+  private async removeFiles(keys: string[]): Promise<number> {
+    if (keys.length === 0) return 0;
+    if (!this.storage) {
+      this.logger.error(
+        `No file bucket is set up (S3_BUCKET), so ${keys.length} copied file(s) of deleted applications were left in place: ${keys.join(", ")}`,
+      );
+      return keys.length;
+    }
+    let failed = 0;
+    for (const key of keys) {
+      try {
+        await this.storage.delete(key);
+      } catch (error) {
+        failed++;
+        this.logger.error(
+          `Could not remove file ${key} of a deleted application.`,
+          error instanceof Error ? error.stack : String(error),
+        );
+      }
+    }
+    return failed;
   }
 
   /**
@@ -406,6 +653,8 @@ export class ApplicationsService {
       reviewedById: application.reviewedById,
       reviewedAt: application.reviewedAt,
       driverId: application.driverId,
+      alertedAt: application.alertedAt,
+      alertError: application.alertError,
     };
   }
 
@@ -421,6 +670,7 @@ export class ApplicationsService {
       city: application.city,
       submittedAt: application.submittedAt,
       receivedAt: application.createdAt,
+      alertError: application.alertError,
     };
   }
 

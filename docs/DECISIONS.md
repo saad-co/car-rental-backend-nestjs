@@ -447,3 +447,153 @@ payment, it would be missed. Look-alikes (`mail.chime.com`, `evilchime.com`) are
   already the bank's notice. What is given up for now: a net for cancelled/failed Zelle transfers and for forged
   emails that would pass DKIM.
 **Why:** the two-stage state was never moved forward (no Plaid yet) and confused the team; Saad asked for the simple model.
+
+### D50 — 2026-10-13 — Quo chat: conversation by phone, local copy of messages, files in our own bucket (changes spec 4 `SmsMessage`)
+First Quo feature (chat 03): a chat on the application and driver pages to read and send texts, with the files a
+contact texts in shown in a separate Files tab. Chosen by Abulkalam on 2026-10-13; simplest option first.
+- **A conversation is a contact phone (E.164) on our one Quo number**, not a `driverId`. An applicant is not a driver
+  yet, and the thread must survive approval. Application pages convert the raw phone with `toUsE164()`; driver pages
+  use `drivers.phone`. Routes are scoped by application or driver id, so an admin cannot text a free-typed number.
+- **Local copy, synced from Quo:** `sms_messages` and `sms_attachments`, filled by our own sends, the Quo webhook
+  (`message.received/delivered/failed/undelivered`) and a catch-up sync when a chat opens (so texts sent from the Quo
+  app appear too). Every Quo message id is UNIQUE, so a repeated webhook or re-sync inserts nothing twice; status only
+  moves forward because delivery order is not guaranteed.
+- **Quo facts used:** sending exists only on API v1 (`POST /v1/messages`, text only, no MMS out); history is
+  `GET /v1/messages`; webhooks are signed HMAC-SHA256 over `webhook-id.webhook-timestamp.rawBody` (secret `whsec_…`),
+  so NestJS needs `rawBody: true`.
+- **`SMS_MODE` (`off | dry_run | live`) is an environment variable until the Settings table (M7).** It defaults to
+  `dry_run`: the message is saved and shown as "Dry run: not sent", never sent. `off` refuses the send.
+- **MMS files are copied into our own S3-compatible bucket** (MinIO locally, Railway Storage Bucket on staging; B45)
+  and opened through short-lived signed links. Whether Quo's media links expire is unknown; B57.
+- **Deferred:** STOP/opt-out handling (to the reminders milestone), the "more info" status, decision texts, upload
+  link (B47), reminders (M6).
+**Why:** Abulkalam is short on time and wants send/receive plus a files view first. Quo has no embeddable inbox
+(B46), so we build the chat ourselves.
+
+### D51 — 2026-10-14 — Quo chat uses the general line +1 312 736 2939; only known contacts are stored (extends D50)
+- The workspace has 9 Quo numbers. The client (2026-10-14) uses **+1 312 736 2939** (`PNlq6NzLQ3`, "Sales / Customer Service"),
+  the line advertised on the website and Google, and plans an AI agent on it for new inquiries and phone applications.
+  The chat starts on this one line (suggested by Claude, accepted by Abulkalam). `QUO_PHONE_NUMBER_ID` stays a setting.
+- **Only known contacts are stored.** The line is public (customers, spam). The webhook stores a text only when the
+  sender's phone matches an application or a driver; anything else is logged and skipped. Opening a chat syncs the
+  contact's earlier history from Quo, so a person who applies later loses nothing. The webhook is created for this one
+  number only (`resourceIds`), so the other eight lines never reach us.
+- **Open for later:** the AI agent and staff may reply in the same thread (the agent should stay quiet once a human
+  has replied); rent reminders (M6) may move to Payments and Collections (+1 312 300 2032), which then needs the Quo
+  number stored per message.
+**Why:** one thread per person on the number applicants already know; no new number or registration.
+
+### D52 — 2026-10-14 — Driver login is sent by text, not email (changes D26 and D33; closes B41 for approval)
+- When an admin approves an application, the driver gets one text from the business number (+1 312 736 2939) with the
+  login link, their email and a temporary password. It is sent through the same `SmsService.send` as every other text,
+  so it shows in the application's chat (and later the driver's), follows `SMS_MODE`, and a failure comes back in plain
+  words. Wording: `src/drivers/driver-welcome.text.ts`.
+- **No email, no confirmation link.** The user is created with `emailVerifiedAt` set: receiving the text is the proof
+  that the phone is theirs (Abulkalam, with the client: they mostly use SMS; Saad had agreed to drop confirmation, B41).
+  They still must choose their own password at first login (`mustChangePassword`, D33).
+- **By mode:** `live` sends; `dry_run` approves and saves the text as "Dry run: not sent" so the admin can read the
+  credentials in the chat and pass them on; `off` refuses the approval. If the text fails, the whole approval is rolled
+  back, as the email did (D26).
+- Why not email: Railway blocks outbound SMTP on non-Pro plans, so no approval could complete on staging (B62).
+- **Known trade-offs:** the temporary password sits in our `sms_messages` and in Quo's inbox, readable by anyone with
+  access to either; it must be changed at first login. A one-time "set your password" link would avoid putting a
+  password in a text (later, if wanted). `MailService` and `MAIL_*` settings are now unused; `POST /auth/verify-email`,
+  the unverified-login check and the frontend `/driver/verify-email` page are dead code, to be removed later.
+**Why:** simplest thing that works on staging and matches how the client communicates.
+
+### D53 — 2026-10-14 — Text alert to staff for every new application (Abulkalam)
+- When the website submits a NEW application (a repeat of the same `request_id` does not count), the system texts one
+  staff phone, `APPLICATION_ALERT_PHONE` (+1 224 328 2246): the applicant's name and a link to
+  `<WEB_APP_URL>/admin/applications/<id>`, nothing else (an SMS is not a safe place for more personal data).
+- **Same rules as every text:** `SMS_MODE` decides (`live` sends, `dry_run` only saves it, `off` skips) and every attempt
+  is a row in `sms_messages` (no `sent_by`, since the system sent it). `SmsService.sendAlert` never throws.
+- **It never gets in the way of the submission:** the alert starts after the application is saved and is not waited
+  for, so the website still gets its success answer if Quo is down (B22).
+- **No custom limit** (Abulkalam). If Quo refuses (daily limit, credits, A2P), the plain reason is written on the
+  application (`alert_error`; `alerted_at` when really sent) and shown on its page and as "Alert not sent" in the list.
+- One number for now; a list and a Settings-page switch can come later (M7). The number is a Quo line ("Primary");
+  whether it shows up on a person's phone depends on how that line is set up in Quo (to check on staging).
+**Why:** staff must notice new applications without watching the admin; Quo is connected and email is blocked on staging (B62).
+
+### D54 — 2026-10-14 — Applicants' uploaded documents are copied from the website into our own storage (settles B17, B45)
+- The gonzocar.com form (Lovable Cloud, Supabase) keeps licence, rating and earnings uploads in a **private** bucket
+  `driver-documents`; the application only stores their paths (`license_storage_path` ...). The website also has a
+  "Driver document archive" page whose function can list, zip and **delete** old files "to free space", so the website's
+  copy may disappear.
+- **We copy each file into our own private bucket** (`applications/<applicationId>/<kind>-<id>.<ext>`) and record it in
+  `application_documents` (one row per application and kind: pending / stored / failed, plain-language reason, 5 attempts).
+  The copier (`ApplicationDocumentCopier`) runs every minute and right after a new application, and first records a
+  row for every path that has none yet, so applications that arrived earlier are **backfilled automatically**.
+- **How we read the website's bucket:** not with the archive token (it can delete) and not with a service key. The
+  website got one small **read-only edge function** `get-driver-document` (Lovable, 2026-10-14): `POST {path}` with the
+  header `x-documents-token` (its secret `DOCUMENTS_READ_TOKEN`), answers a 60-second signed link; it never lists, moves
+  or deletes. Our settings: `DOCUMENTS_SOURCE_URL`, `DOCUMENTS_SOURCE_TOKEN` (same value as that secret). Without them
+  documents stay "pending" and the page says the connection is not set up. A refused token stops the run without using
+  attempts, so it recovers by itself once fixed.
+- The admin Documents tab shows our copies (pictures, links valid about 10 minutes, "Copying…", or the reason a copy
+  failed). Nothing is ever written to or deleted from the website's storage by us.
+- The shared file bucket is now one provider (`FileStorageModule`, `FILE_STORAGE`), used by the chat files and these documents.
+**Why:** the files are driver licences the admin must be able to see, and the website may clear its storage; we need our own copy.
+
+### D55 — 2026-10-17 — Deleting applications is a hard delete; approved ones cannot be deleted (B66, Abulkalam)
+- Client revision (B63): delete applications, one or many. **Hard delete** (Abulkalam: "we don't need them in future"):
+  the row is removed for good, no undo, no restore. Its `application_documents` rows go by `ON DELETE CASCADE`; its
+  copied files are removed from our bucket **after** the commit (a file that cannot be removed is logged with its reason
+  and counted in the answer, `filesNotRemoved`; the delete still stands).
+- **Approved applications cannot be deleted** (409, nothing deleted): they are where a driver came from. A driver who
+  leaves is made inactive instead (B67).
+- **Text history** (Claude's proposal, accepted with the plan): the chat of the application's phone is deleted too,
+  **unless** another application or a driver has that phone (then the chat belongs to them as well).
+- One route for one or many: `POST /applications/bulk-delete` `{ ids: [...] }` (1–100). POST, not DELETE, because a
+  DELETE with a body is poorly supported. All or nothing in one transaction; rows are locked (`FOR UPDATE`, sorted by
+  id) so nobody can approve one meanwhile. Unknown ids are ignored (deleting twice is not an error).
+- **Known gaps:** no audit log yet (spec 4), so who deleted what is only in the server log. A website retry of the same
+  `request_id` after a delete would store the application again (retries come within seconds; low risk).
+**Why:** the client asked for delete; hard delete was chosen over archive; blocking approved keeps drivers traceable.
+
+### D56 — 2026-10-17 — Driver statuses: onboarding, active, inactive; three onboarding steps (Abulkalam; B67, B68, B48)
+- A driver is **`active` only when contract signed, deposit paid and has a vehicle** (Abulkalam, 2026-10-17). Statuses:
+  `onboarding` (approved, steps missing; the default, so approval creates onboarding drivers), `active`, `inactive`.
+- **Steps, not one status per combination:** `contract_signed_at`, `deposit_paid_at`, `vehicle_assigned_at`, each with
+  the admin who ticked it (`…_by_id`). Any order. Ticked by hand by an admin for now (contracts and vehicles are not
+  built; the deposit could tick itself once deposit rules exist, B19). "Has a vehicle" is a yes/no for now.
+- **Automatic:** the third tick makes the driver `active`; un-ticking a step of an active driver puts them back in
+  `onboarding` (confirm dialog). A CHECK (`drivers_active_is_onboarded`) makes `active` without the three dates
+  impossible in the database.
+- **Inactive (B67):** deactivate turns the driver's login off (`users.active = false`, same transaction): login refused
+  and open sessions end at the next request. Steps are kept and locked (409) until reactivated; reactivate gives
+  `active` or `onboarding` from the steps and turns the login back on. Onboarding drivers can log in.
+- **Existing drivers:** the migration marked the drivers already active (imported) as onboarded at migration time with
+  no admin ("done before this system"); inactive ones keep empty steps. The legacy import does the same for active
+  drivers.
+- **Effects to come:** billing (M2) and reminders (M6) act on `active` drivers only. Payment matching looks at every
+  driver, so a deposit from an onboarding driver still matches them (answers part of B48).
+**Why:** the client's rule for when a driver starts; three independent facts would need 8 statuses as one enum.
+
+### D57 — 2026-10-17 — Internal notes on applications: a list, never edited, author-only delete (B74, Abulkalam)
+- Client revision (B63): a place for staff notes on an applicant ("insufficient earnings, too far from the service
+  area, poor driving history"). **Staff only:** never sent to the applicant, never in the driver portal.
+- **A table of notes** (`application_notes`), not one text field: each note keeps its author and time, and two admins
+  writing at once cannot overwrite each other. Body 1–2000 characters, not blank (DTO and a database CHECK).
+- **Never edited; only the author may delete** a note (403 for anyone else). A wrong note is deleted and rewritten, so
+  nobody can change or remove what another admin wrote.
+- Author shown as their **email** (admin accounts have no name). Author account removed → `author_id` NULL, note kept
+  ("Former admin"). **Deleting the application deletes its notes** (`ON DELETE CASCADE`, consistent with D55).
+- Notes stay on the application after approval; not shown on the driver page yet.
+**Why:** client request; a list with authors is the honest record of who decided what.
+
+### D58 — 2026-10-17 — Editable approve / decline texts; approval sends two texts; decline asks (B71–B73, Abulkalam)
+- **Templates in the database** (`message_templates`, key = primary key), edited by admins in **Settings → Message
+  templates** (spec 4 `MessageTemplate`). Placeholders `{firstName}`, `{lastName}`; any other `{word}` is refused on
+  save (a typo would be texted word for word). Body 1–1000 characters (DTO + CHECK). Last editor and time kept, no
+  version history. Payment reminders (M6) will add their keys and placeholders to the same table.
+- **Default wording is placeholder text by Claude** (inserted by the migration) for the client to edit on staging; the
+  decline text contains "[add company names and phone numbers here]" so the other companies' numbers are not missed.
+- **Approve (B71):** sends the "approved" template, then the login text (D52) as a **second, fixed** text: an edit can
+  never break the credentials.
+- **Decline (B72):** the Decline button opens a dialog with the filled-in decline text and "Decline and send text" /
+  "Decline without text". API: `POST /applications/:id/reject` with optional `{ sendText }` (default false).
+- Every text is sent inside the review transaction: a failure rolls the approval or decline back with the reason. A
+  text already sent stays in the chat (it really went out). SMS_MODE applies (`dry_run` on staging).
+**Why:** the client wants to word these texts themselves; the real wording and the other companies' numbers are not
+known yet.
