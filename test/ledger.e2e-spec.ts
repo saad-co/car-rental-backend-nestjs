@@ -16,7 +16,6 @@ import {
   ReverseLedgerEntryDto,
 } from "../src/ledger/dto/ledger-entry.dto.js";
 import {
-  LedgerCategory,
   LedgerDirection,
   LedgerEntry,
 } from "../src/ledger/ledger-entry.entity.js";
@@ -39,7 +38,7 @@ describe("Driver ledger: manual entries and reversals (B77, test database)", () 
 
   /** A valid manual entry; override any field. */
   const entry = (overrides: Partial<EntryBody> = {}): EntryBody => ({
-    category: LedgerCategory.late_fee,
+    direction: LedgerDirection.debit,
     amountCents: 2500,
     effectiveDate: today(),
     reason: "Late fee",
@@ -83,12 +82,16 @@ describe("Driver ledger: manual entries and reversals (B77, test database)", () 
     await ledger.addManualEntry(pat, entry({ amountCents: 2500 }), admin);
     await ledger.addManualEntry(
       pat,
-      entry({ category: LedgerCategory.repair, amountCents: 12_000 }),
+      entry({ amountCents: 12_000, reason: "Flat tire" }),
       admin,
     );
     const credit = await ledger.addManualEntry(
       pat,
-      entry({ category: LedgerCategory.discount, amountCents: 1000 }),
+      entry({
+        direction: LedgerDirection.credit,
+        amountCents: 1000,
+        reason: "Discount",
+      }),
       admin,
     );
     expect(credit).toMatchObject({
@@ -183,51 +186,15 @@ describe("Driver ledger: manual entries and reversals (B77, test database)", () 
     }
   });
 
-  it("direction: fixed by the category; required and one only for an opening balance", async () => {
-    await expect(
-      ledger.addManualEntry(
-        pat,
-        entry({ direction: LedgerDirection.credit }),
-        admin,
-      ),
-    ).rejects.toThrow(BadRequestException);
-    await expect(
-      ledger.addManualEntry(
-        pat,
-        entry({ category: LedgerCategory.opening_balance }),
-        admin,
-      ),
-    ).rejects.toThrow(BadRequestException);
-
-    const opening = await ledger.addManualEntry(
+  it("direction decides the sign: a charge makes the driver owe, a credit owe less", async () => {
+    await ledger.addManualEntry(pat, entry({ amountCents: 4000 }), admin);
+    const credit = await ledger.addManualEntry(
       pat,
-      entry({
-        category: LedgerCategory.opening_balance,
-        direction: LedgerDirection.debit,
-        amountCents: 30_000,
-      }),
+      entry({ direction: LedgerDirection.credit, amountCents: 1500 }),
       admin,
     );
-    expect(opening.direction).toBe(LedgerDirection.debit);
-    await expect(
-      ledger.addManualEntry(
-        pat,
-        entry({
-          category: LedgerCategory.opening_balance,
-          direction: LedgerDirection.credit,
-        }),
-        admin,
-      ),
-    ).rejects.toThrow(ConflictException);
-    // Another driver has their own.
-    await ledger.addManualEntry(
-      sam,
-      entry({
-        category: LedgerCategory.opening_balance,
-        direction: LedgerDirection.credit,
-      }),
-      admin,
-    );
+    expect(credit.direction).toBe(LedgerDirection.credit);
+    expect(await ledger.balanceCents(pat)).toBe(-2500);
   });
 
   it("the database itself refuses UPDATE and DELETE (append-only)", async () => {
@@ -256,7 +223,8 @@ describe("Driver ledger: manual entries and reversals (B77, test database)", () 
       { reason: "   " },
       { reason: "x".repeat(501) },
       { effectiveDate: "17/10/2026" },
-      { category: "parking" },
+      { direction: "refund" },
+      { direction: undefined },
       { requestKey: "abc" },
     ]) {
       expect(errorsFor({ ...good, ...bad })).not.toHaveLength(0);

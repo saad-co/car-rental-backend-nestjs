@@ -18,8 +18,6 @@ import {
   PaymentStatus,
 } from "../payments/payment.entity.js";
 import {
-  CHARGE_CATEGORIES,
-  LedgerCategory,
   LedgerDirection,
   LedgerEntry,
   LedgerEntryKind,
@@ -37,9 +35,6 @@ import {
   LedgerEntryDto,
   MAX_BACKDATE_DAYS,
 } from "./dto/ledger-entry.dto.js";
-
-/** The partial unique index that allows one opening balance per driver (see the entity). */
-const ONE_OPENING_BALANCE = "ledger_entries_one_opening_balance_key";
 
 /** Most periods one summary request may cover (two years of weeks). */
 const MAX_SUMMARY_PERIODS = 104;
@@ -73,8 +68,8 @@ export class LedgerService {
    * Adds a charge or credit entered by an admin. Sending the same `requestKey` again returns the entry already
    * made (a double click makes one entry); the same key with different details is refused.
    * @throws NotFoundException unknown driver.
-   * @throws BadRequestException date in the future, more than 90 days back, not a real day, or a wrong direction.
-   * @throws ConflictException the driver already has an opening balance, or the key was used for something else.
+   * @throws BadRequestException date in the future, more than 90 days back, or not a real day.
+   * @throws ConflictException the key was already used for a different entry.
    */
   async addManualEntry(
     driverId: string,
@@ -82,7 +77,7 @@ export class LedgerService {
     adminId: string,
   ): Promise<LedgerEntryDto> {
     await this.assertDriverExists(driverId);
-    const direction = this.directionFor(input.category, input.direction);
+    const direction = input.direction;
     this.assertManualDate(input.effectiveDate);
 
     const values = {
@@ -90,47 +85,33 @@ export class LedgerService {
       direction,
       amountCents: input.amountCents,
       kind: LedgerEntryKind.adjustment,
-      category: input.category,
       description: input.reason,
       effectiveDate: input.effectiveDate,
       createdById: adminId,
       idempotencyKey: `manual:${input.requestKey}`,
     };
 
-    let insertedId: string | undefined;
-    try {
-      // ON CONFLICT DO NOTHING on the key only: a repeat of the same request inserts nothing and no error, while
-      // every other constraint (e.g. a second opening balance) still raises.
-      // Plain SQL: TypeORM's insert builder cannot limit ON CONFLICT to one column. Values are parameters ($1…).
-      const rows = (await this.dataSource.query(
-        `INSERT INTO ledger_entries
-           (driver_id, direction, amount_cents, kind, category, description, effective_date, created_by_id,
-            idempotency_key)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-         ON CONFLICT (idempotency_key) DO NOTHING
-         RETURNING id`,
-        [
-          values.driverId,
-          values.direction,
-          values.amountCents,
-          values.kind,
-          values.category,
-          values.description,
-          values.effectiveDate,
-          values.createdById,
-          values.idempotencyKey,
-        ],
-      )) as { id: string }[];
-      insertedId = rows[0]?.id;
-    } catch (error) {
-      // A reversed opening balance still counts (the row stays): fix the amount with another entry instead.
-      if (isUniqueViolation(error, ONE_OPENING_BALANCE)) {
-        throw new ConflictException(
-          "This driver already has an opening balance. Correct it with a charge or credit entry.",
-        );
-      }
-      throw error;
-    }
+    // ON CONFLICT DO NOTHING on the key only: a repeat of the same request inserts nothing and raises no error,
+    // while every other constraint still raises. Plain SQL: TypeORM's insert builder cannot limit ON CONFLICT to one
+    // column. Values are parameters ($1…), never pasted into the SQL.
+    const rows = (await this.dataSource.query(
+      `INSERT INTO ledger_entries
+         (driver_id, direction, amount_cents, kind, description, effective_date, created_by_id, idempotency_key)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       ON CONFLICT (idempotency_key) DO NOTHING
+       RETURNING id`,
+      [
+        values.driverId,
+        values.direction,
+        values.amountCents,
+        values.kind,
+        values.description,
+        values.effectiveDate,
+        values.createdById,
+        values.idempotencyKey,
+      ],
+    )) as { id: string }[];
+    const insertedId = rows[0]?.id;
 
     if (insertedId) return this.findDto(insertedId);
 
@@ -142,7 +123,6 @@ export class LedgerService {
       existing.driverId === driverId &&
       existing.direction === direction &&
       existing.amountCents === input.amountCents &&
-      existing.category === input.category &&
       existing.effectiveDate === input.effectiveDate &&
       existing.description === input.reason;
     if (!same) {
@@ -217,7 +197,6 @@ export class LedgerService {
               : LedgerDirection.debit,
           amountCents: original.amountCents,
           kind: LedgerEntryKind.reversal,
-          category: null,
           description,
           effectiveDate: chicagoDate(new Date()),
           paymentId: original.paymentId,
@@ -296,7 +275,6 @@ export class LedgerService {
       direction: LedgerDirection.credit,
       amountCents: payment.amountCents,
       kind: LedgerEntryKind.payment,
-      category: null,
       description:
         `${SOURCE_LABEL[payment.source]} payment from ${payment.senderName}`.slice(
           0,
@@ -369,7 +347,7 @@ export class LedgerService {
              ORDER BY effective_date, created_at, (kind = 'reversal') DESC, id
              ROWS UNBOUNDED PRECEDING)::bigint AS running
          FROM ledger_entries e WHERE e.driver_id = $1)
-       SELECT h.id, h.driver_id, h.direction, h.amount_cents, h.kind, h.category, h.description,
+       SELECT h.id, h.driver_id, h.direction, h.amount_cents, h.kind, h.description,
               h.effective_date::text AS effective_date, h.payment_id, h.reversal_of_id, h.created_by_id,
               h.created_at, h.running, u.email AS created_by_email, r.id AS reversed_by_id
        FROM history h
@@ -395,7 +373,6 @@ export class LedgerService {
               direction: row.direction,
               amountCents: row.amount_cents,
               kind: row.kind,
-              category: row.category,
               description: row.description,
               effectiveDate: row.effective_date,
               paymentId: row.payment_id,
@@ -552,7 +529,6 @@ export class LedgerService {
       direction: entry.direction,
       amountCents: entry.amountCents,
       kind: entry.kind,
-      category: entry.category,
       description: entry.description,
       effectiveDate: entry.effectiveDate,
       paymentId: entry.paymentId,
@@ -566,32 +542,6 @@ export class LedgerService {
       createdByEmail: entry.createdBy?.email ?? null,
       createdAt: entry.createdAt,
     };
-  }
-
-  /**
-   * The direction of a manual entry: fixed by the category, chosen by the admin only for an opening balance.
-   * @throws BadRequestException a direction sent for another category, or missing for an opening balance.
-   */
-  private directionFor(
-    category: LedgerCategory,
-    requested: LedgerDirection | undefined,
-  ): LedgerDirection {
-    if (category === LedgerCategory.opening_balance) {
-      if (!requested) {
-        throw new BadRequestException(
-          "Say whether the opening balance is owed (debit) or in credit (credit).",
-        );
-      }
-      return requested;
-    }
-    if (requested) {
-      throw new BadRequestException(
-        "The direction is set by the category; leave it out.",
-      );
-    }
-    return CHARGE_CATEGORIES.includes(category)
-      ? LedgerDirection.debit
-      : LedgerDirection.credit;
   }
 
   /**
@@ -627,7 +577,6 @@ interface RawLedgerRow {
   direction: LedgerDirection;
   amount_cents: number;
   kind: LedgerEntryKind;
-  category: LedgerCategory | null;
   description: string;
   effective_date: string;
   payment_id: string | null;

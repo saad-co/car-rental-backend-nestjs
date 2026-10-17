@@ -24,21 +24,16 @@ describe("Driver ledger: history and summaries (B77, test database)", () => {
    * Writes an entry straight into the table, so tests can use any date (the API limits manual entries to the last
    * 90 days). `cents` > 0 is a credit, < 0 a debit.
    */
-  async function put(
-    effectiveDate: string,
-    cents: number,
-    category = cents > 0 ? "discount" : "late_fee",
-  ): Promise<string> {
+  async function put(effectiveDate: string, cents: number): Promise<string> {
     seq++;
     const [{ id }] = (await db.query(
-      `INSERT INTO ledger_entries (driver_id, direction, amount_cents, kind, category, description,
+      `INSERT INTO ledger_entries (driver_id, direction, amount_cents, kind, description,
          effective_date, created_by_id, idempotency_key)
-       VALUES ($1, $2, $3, 'adjustment', $4, 'test', $5, $6, $7) RETURNING id`,
+       VALUES ($1, $2, $3, 'adjustment', 'test', $4, $5, $6) RETURNING id`,
       [
         pat,
         cents > 0 ? "credit" : "debit",
         Math.abs(cents),
-        category,
         effectiveDate,
         admin,
         `test:${seq}`,
@@ -154,7 +149,7 @@ describe("Driver ledger: history and summaries (B77, test database)", () => {
 
   it("months split on the 1st; reversals are a signed column of their own", async () => {
     const fee = await put("2026-09-30", -2500);
-    await put("2026-10-31", -1000, "toll");
+    await put("2026-10-31", -1000);
     // Reversal of the September fee, made "today" but backdated here by hand to land in November.
     await db.query(
       `INSERT INTO ledger_entries (driver_id, direction, amount_cents, kind, description, effective_date,

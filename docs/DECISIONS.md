@@ -640,3 +640,14 @@ work off staging and never disturbs a working folder.
 - No separate audit log: each manual entry and reversal stores who made it and why.
 **Why:** spec 3–4 and D6; these are standard ledger practice (immutable journal, reversals, posting date vs record
 date, idempotency keys) and avoid the edge cases listed for B77.
+
+### D61 — 2026-10-17 — Manual ledger entries: no categories; charge or credit, amount, date, reason (Abulkalam)
+- Replaces the categories of D60: a manual entry is **charge or credit**, an **amount**, the **date it belongs to** and a
+  **reason** (free text, e.g. "Late fee, 3 days", "Flat tire, rear left"). No category enum, no opening-balance
+  category (an opening balance is a charge or credit with that reason).
+- The rest of D60 stands: append-only with database triggers, reversals, request key, today to 90 days back, $10,000
+  per entry, payment credits, running balance, weekly/monthly summaries.
+- Done before the branch was pushed: the ledger migration was regenerated without the category instead of adding a
+  second migration (it had only run on local copies).
+**Why:** Abulkalam: the type list adds a step without adding information the reason does not already give.
+

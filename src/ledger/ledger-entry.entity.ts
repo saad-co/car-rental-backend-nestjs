@@ -24,56 +24,17 @@ export enum LedgerEntryKind {
   rent = "rent",
   /** A confirmed payment credited to its driver. */
   payment = "payment",
-  /** A charge or credit an admin entered by hand, always with a category. */
+  /** A charge or credit an admin entered by hand, with a reason and the date it belongs to. */
   adjustment = "adjustment",
   /** Cancels another entry by the same amount in the opposite direction. */
   reversal = "reversal",
 }
-
-/** The type an admin picks for a manual entry (D60). The direction follows from it. */
-export enum LedgerCategory {
-  late_fee = "late_fee",
-  /** Repairs such as a flat tire. */
-  repair = "repair",
-  damage = "damage",
-  toll = "toll",
-  ticket = "ticket",
-  cleaning = "cleaning",
-  other_charge = "other_charge",
-  discount = "discount",
-  goodwill = "goodwill",
-  other_credit = "other_credit",
-  /** What the driver owed (debit) or had in credit (credit) when the ledger started. At most one per driver. */
-  opening_balance = "opening_balance",
-}
-
-/** Categories that are always a debit (the driver owes more). */
-export const CHARGE_CATEGORIES: readonly LedgerCategory[] = [
-  LedgerCategory.late_fee,
-  LedgerCategory.repair,
-  LedgerCategory.damage,
-  LedgerCategory.toll,
-  LedgerCategory.ticket,
-  LedgerCategory.cleaning,
-  LedgerCategory.other_charge,
-];
-
-/** Categories that are always a credit (the driver owes less). */
-export const CREDIT_CATEGORIES: readonly LedgerCategory[] = [
-  LedgerCategory.discount,
-  LedgerCategory.goodwill,
-  LedgerCategory.other_credit,
-];
 
 /** Longest description or reason. */
 export const MAX_DESCRIPTION_LENGTH = 500;
 
 /** $1,000,000 in cents: a sanity cap far above any real entry, so a typo of extra zeros is refused. */
 export const MAX_ENTRY_CENTS = 100_000_000;
-
-/** SQL list of category names, for the CHECK constraints below. */
-const sqlList = (values: readonly string[]) =>
-  values.map((v) => `'${v}'`).join(", ");
 
 /**
  * One line of a driver's ledger (spec section 4, D6, D60). Maps to the `ledger_entries` table.
@@ -93,11 +54,6 @@ const sqlList = (values: readonly string[]) =>
   "createdAt",
 ])
 @Index("ledger_entries_payment_idx", ["paymentId"])
-// At most one opening balance per driver: a partial unique index only covers rows with that category.
-@Index("ledger_entries_one_opening_balance_key", ["driverId"], {
-  unique: true,
-  where: `"category" = 'opening_balance'`,
-})
 @Check(
   "ledger_entries_amount_range",
   `"amount_cents" > 0 AND "amount_cents" <= ${MAX_ENTRY_CENTS}`,
@@ -116,15 +72,10 @@ const sqlList = (values: readonly string[]) =>
   "ledger_entries_reversal_shape",
   `("kind" = 'reversal') = ("reversal_of_id" IS NOT NULL) AND ("reversal_of_id" IS NULL OR "reversal_of_id" <> "id")`,
 )
-// A manual entry always has a category and the admin who entered it; nothing else has a category.
+// A manual entry always names the admin who entered it.
 @Check(
   "ledger_entries_adjustment_shape",
-  `("kind" = 'adjustment') = ("category" IS NOT NULL) AND ("kind" <> 'adjustment' OR "created_by_id" IS NOT NULL)`,
-)
-// The category decides the direction, so a "late fee" can never be a credit.
-@Check(
-  "ledger_entries_category_direction",
-  `"category" IS NULL OR "category" = 'opening_balance' OR ("category" IN (${sqlList(CHARGE_CATEGORIES)}) AND "direction" = 'debit') OR ("category" IN (${sqlList(CREDIT_CATEGORIES)}) AND "direction" = 'credit')`,
+  `"kind" <> 'adjustment' OR "created_by_id" IS NOT NULL`,
 )
 export class LedgerEntry {
   @PrimaryGeneratedColumn("uuid")
@@ -151,15 +102,6 @@ export class LedgerEntry {
     enumName: "ledger_entry_kind",
   })
   kind: LedgerEntryKind;
-
-  /** Only for `adjustment` entries. */
-  @Column({
-    type: "enum",
-    enum: LedgerCategory,
-    enumName: "ledger_category",
-    nullable: true,
-  })
-  category: LedgerCategory | null;
 
   /** What it is and why, e.g. "Venmo payment from J. Smith" or the admin's reason. */
   @Column({ type: "varchar", length: MAX_DESCRIPTION_LENGTH })

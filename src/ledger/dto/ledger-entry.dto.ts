@@ -3,7 +3,6 @@ import { Transform } from "class-transformer";
 import {
   IsEnum,
   IsInt,
-  IsOptional,
   IsString,
   IsUUID,
   Matches,
@@ -13,7 +12,6 @@ import {
   MinLength,
 } from "class-validator";
 import {
-  LedgerCategory,
   LedgerDirection,
   LedgerEntryKind,
   MAX_DESCRIPTION_LENGTH,
@@ -31,25 +29,15 @@ const trim = ({ value }: { value: unknown }) =>
 
 /** Body of `POST /drivers/:id/ledger/entries`: a charge or credit entered by an admin. */
 export class CreateLedgerEntryDto {
-  /** What it is. The direction follows from it, except for `opening_balance`. */
-  @ApiProperty({ enum: LedgerCategory, enumName: "LedgerCategory" })
-  @IsEnum(LedgerCategory)
-  category: LedgerCategory;
-
   /**
-   * Only for `opening_balance`: `debit` when the driver owed money when the ledger started, `credit` when they were
-   * in credit. Must be left out for every other category.
+   * `debit`: a charge, the driver owes more (late fee, flat tire, damage, toll…). `credit`: the driver owes less
+   * (a discount, money handed back…). What it was for goes in `reason` (D61).
    */
-  @ApiProperty({
-    enum: LedgerDirection,
-    enumName: "LedgerDirection",
-    required: false,
-  })
-  @IsOptional()
-  @IsEnum(LedgerDirection)
-  direction?: LedgerDirection;
+  @ApiProperty({ enum: LedgerDirection, enumName: "LedgerDirection" })
+  @IsEnum(LedgerDirection, { message: "Choose charge or credit." })
+  direction: LedgerDirection;
 
-  /** Whole cents, 1 to 1,000,000 ($10,000). Always positive: the category says which way it goes. */
+  /** Whole cents, 1 to 1,000,000 ($10,000). Always positive: `direction` says which way it goes. */
   @IsInt({ message: "The amount must be a whole number of cents." })
   @Min(1, { message: "The amount must be more than $0." })
   @Max(MAX_MANUAL_ENTRY_CENTS, {
@@ -96,12 +84,6 @@ export class LedgerEntryDto {
   amountCents: number;
   @ApiProperty({ enum: LedgerEntryKind, enumName: "LedgerEntryKind" })
   kind: LedgerEntryKind;
-  @ApiProperty({
-    enum: LedgerCategory,
-    enumName: "LedgerCategory",
-    nullable: true,
-  })
-  category: LedgerCategory | null;
   description: string;
   /** The Chicago day it belongs to, `YYYY-MM-DD`. */
   effectiveDate: string;

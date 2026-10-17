@@ -2893,22 +2893,6 @@
           "reversal"
         ]
       },
-      "LedgerCategory": {
-        "type": "string",
-        "enum": [
-          "late_fee",
-          "repair",
-          "damage",
-          "toll",
-          "ticket",
-          "cleaning",
-          "other_charge",
-          "discount",
-          "goodwill",
-          "other_credit",
-          "opening_balance"
-        ]
-      },
       "LedgerRowDto": {
         "type": "object",
         "properties": {
@@ -2923,14 +2907,6 @@
             "allOf": [
               {
                 "$ref": "#/components/schemas/LedgerEntryKind"
-              }
-            ]
-          },
-          "category": {
-            "nullable": true,
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/LedgerCategory"
               }
             ]
           },
@@ -2991,7 +2967,6 @@
         "required": [
           "direction",
           "kind",
-          "category",
           "runningBalanceCents",
           "id",
           "driverId",
@@ -3122,16 +3097,8 @@
       "CreateLedgerEntryDto": {
         "type": "object",
         "properties": {
-          "category": {
-            "description": "What it is. The direction follows from it, except for `opening_balance`.",
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/LedgerCategory"
-              }
-            ]
-          },
           "direction": {
-            "description": "Only for `opening_balance`: `debit` when the driver owed money when the ledger started, `credit` when they were\nin credit. Must be left out for every other category.",
+            "description": "`debit`: a charge, the driver owes more (late fee, flat tire, damage, toll…). `credit`: the driver owes less\n(a discount, money handed back…). What it was for goes in `reason` (D61).",
             "allOf": [
               {
                 "$ref": "#/components/schemas/LedgerDirection"
@@ -3140,7 +3107,7 @@
           },
           "amountCents": {
             "type": "number",
-            "description": "Whole cents, 1 to 1,000,000 ($10,000). Always positive: the category says which way it goes.",
+            "description": "Whole cents, 1 to 1,000,000 ($10,000). Always positive: `direction` says which way it goes.",
             "minimum": 1,
             "maximum": 1000000
           },
@@ -3162,7 +3129,7 @@
           }
         },
         "required": [
-          "category",
+          "direction",
           "amountCents",
           "effectiveDate",
           "reason",
@@ -3183,14 +3150,6 @@
             "allOf": [
               {
                 "$ref": "#/components/schemas/LedgerEntryKind"
-              }
-            ]
-          },
-          "category": {
-            "nullable": true,
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/LedgerCategory"
               }
             ]
           },
@@ -3247,7 +3206,6 @@
         "required": [
           "direction",
           "kind",
-          "category",
           "id",
           "driverId",
           "amountCents",

@@ -4,25 +4,25 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
-### 2026-10-17 — Driver ledger (B77, D60)
+### 2026-10-17 — Driver ledger (B77, D60, D61)
 - **Done (backend):** migration `CreateLedgerEntries`: `ledger_entries` (direction, cents, kind `rent | payment |
-  adjustment | reversal`, category enum, `effective_date` as a Chicago day, unique `idempotency_key`, unique
-  `reversal_of_id`, CHECKs for shapes, amount range and category direction, one opening balance per driver) plus two
+  adjustment | reversal`, reason, `effective_date` as a Chicago day, unique `idempotency_key`, unique
+  `reversal_of_id`, CHECKs for shapes and amount range) plus two
   triggers: `ledger_entries_append_only` (refuses UPDATE/DELETE) and `ledger_entries_check_reversal` (same driver and
   amount, opposite direction, never a reversal of a reversal). `LedgerModule`: `POST /drivers/:id/ledger/entries`
-  (manual charge/credit, request key, today to 90 days back, $10,000 max), `POST …/entries/:entryId/reverse`,
+  (charge or credit, amount, date, reason; request key; today to 90 days back; $10,000 max; no categories, D61), `POST …/entries/:entryId/reverse`,
   `GET /drivers/:id/ledger` (newest first, running balance), `GET …/ledger/summary?period=week|month` (Monday weeks,
   calendar months, empty periods, opening/closing chain). `syncPaymentCredit` runs inside the payment's transaction in
   `PaymentsService.assign` and `MatchingService` (reassignment = reversal + new credit). `DriverDto.balanceCents`.
   `npm run ledger:backfill` (dry run; `-- --apply` writes) credits payments confirmed before the ledger existed.
-- **Done (frontend):** Ledger card on the driver page (balance "Owes / In credit / Settled", Add entry dialog with
-  category groups and a summary line, Entries tab with running balance and Reverse dialog, Weekly and Monthly tabs);
-  Balance column on the Drivers list; shared `Select`, `BalanceText`; assigning a payment refreshes the ledger.
+- **Done (frontend):** Ledger card on the driver page (balance "Owes / In credit / Settled", Add entry dialog: charge
+  or credit, amount, date, reason, summary line; Entries tab with running balance and Reverse dialog, Weekly and Monthly tabs);
+  Balance column on the Drivers list; shared `BalanceText`; assigning a payment refreshes the ledger.
 - **Verified:** migration run, revert, re-run and no drift on a separate local database (`car_rental_ledger`); SQL
   checks of the triggers and constraints; backend lint, 118 unit + 140 e2e (22 ledger tests: reversals incl. two at
-  once, append-only, request key, dates, opening balance, payment credit A → B → A, matching, backfill twice, running
-  balance, week/month/daylight-saving boundaries); frontend lint + build. Backfill on the local copy: 19 payments,
-  $2,414.00, second run 0. Browser walkthrough on a fake driver in the local copy (2026-10-17, after merging `dev`): empty ledger, form
+  once, append-only, request key, dates, charge/credit sign, payment credit A → B → A, matching, backfill twice, running
+  balance, week/month/daylight-saving boundaries); frontend lint + build. Backfill on a fresh local copy: 31 payments,
+  $4,251.00 (= all confirmed payments), second run 0. Browser walkthrough on a fake driver in the local copy (2026-10-17, after merging `dev`): empty ledger, form
   validation, late fee, a repair backdated to Oct 12 (sorted by date, "recorded Oct 17", later running balances
   shifted), a discount, Reverse cancelled then confirmed (reversal dated today, original marked "Reversed", no second
   Reverse), Weekly (Mon–Sun, empty weeks, charges $195.50 / credits $10 / reversals +$75 / closing "Owes $110.50"),
