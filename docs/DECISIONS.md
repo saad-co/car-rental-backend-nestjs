@@ -597,3 +597,16 @@ contact texts in shown in a separate Files tab. Chosen by Abulkalam on 2026-10-1
   text already sent stays in the chat (it really went out). SMS_MODE applies (`dry_run` on staging).
 **Why:** the client wants to word these texts themselves; the real wording and the other companies' numbers are not
 known yet.
+
+### D59 — 2026-10-17 — Staging deploys from `dev` through two deploy worktrees (Abulkalam)
+- Until GitHub can deploy to Railway (repos on Saad's GitHub, Railway on the client's account), staging is deployed by
+  hand from **`dev`**, not `main` (`main` still holds the initial commit). Exception recorded under "Branches" in the
+  workspace `CLAUDE.md`.
+- `deploy-backend/` and `deploy-frontend/` are git worktrees used **only** to deploy: each is moved to
+  `origin/dev` (detached HEAD, `git checkout --detach origin/dev`) and `railway up --service <name>` runs there. Never
+  from the main checkout or a `wt-*` worktree: `railway up` uploads the folder it runs in, uncommitted files included.
+- Order: PRs into `dev` and merges backend first, then deploy backend, then frontend; record both commit hashes in
+  `WORKLOG.md`. The full steps are the "Deployment" section of the workspace `CLAUDE.md`.
+- Claude gives the commands; it runs push, PR, merge or `railway` only when the developer explicitly asks.
+**Why:** several sessions now work in parallel (worktrees); deploying from a clean, pushed commit keeps half-finished
+work off staging and never disturbs a working folder.
