@@ -28,6 +28,8 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
   Reverse), Weekly (Mon–Sun, empty weeks, charges $195.50 / credits $10 / reversals +$75 / closing "Owes $110.50"),
   Monthly, Drivers list balance; every request 2xx, no console errors. The fake driver stays in the local copy only
   (append-only rows cannot be deleted).
+  After D61 (no categories, fresh local copy): the dialog shows Charge / Credit, amount, date, reason; a $25 charge
+  and a $10 credit show as "Charge" and "Credit" with their reasons, balance "Owes $15.00".
 - **Not done:** rent billing (M2); driver portal view (B78); manual cash payments (B79); old ledger import (B80).
 - **On staging after the deploy:** run the backfill once (`npm run ledger:backfill`, then `-- --apply`) so payments
   confirmed before the ledger are credited.
