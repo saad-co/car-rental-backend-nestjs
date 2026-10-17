@@ -21,13 +21,30 @@ export interface LlmJsonClient {
 }
 
 /**
- * Thrown by an adapter when the provider refuses because of a rate limit or quota (HTTP 429). Nothing is
- * wrong with the email: the same request works once the limit resets. The intake therefore retries these
- * on every run WITHOUT counting them toward giving up on the email (B49).
+ * Thrown by an adapter when the AI could not answer for a reason that is NOT about the email and goes away by
+ * itself: a rate limit or quota (HTTP 429) or the provider being overloaded or down (HTTP 500/502/503/504).
+ * The same request works later, so the intake retries it on every run WITHOUT counting a strike toward giving
+ * up on the email, and without moving past it (B49, and the 503 spike seen on 2026-10-13).
  */
-export class LlmRateLimitError extends Error {
+export class LlmTemporaryError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "LlmTemporaryError";
+  }
+}
+
+/** The provider refused because of a rate limit or quota (HTTP 429). */
+export class LlmRateLimitError extends LlmTemporaryError {
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);
     this.name = "LlmRateLimitError";
+  }
+}
+
+/** The provider was overloaded or down (HTTP 500, 502, 503 or 504): "high demand", try again later. */
+export class LlmUnavailableError extends LlmTemporaryError {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "LlmUnavailableError";
   }
 }

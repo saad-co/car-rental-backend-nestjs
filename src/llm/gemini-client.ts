@@ -1,6 +1,7 @@
 import { ApiError, GoogleGenAI } from "@google/genai";
 import {
   LlmRateLimitError,
+  LlmUnavailableError,
   type LlmJsonClient,
   type LlmJsonRequest,
 } from "./llm-client.js";
@@ -19,7 +20,8 @@ export interface GeminiClientOptions {
  * follows the request's schema (`responseMimeType` + `responseJsonSchema`) and parses it.
  *
  * It never guesses: no answer, or an answer that is not JSON, is an error. A rate limit or quota
- * refusal (HTTP 429) becomes `LlmRateLimitError`; any other API error is passed on unchanged.
+ * refusal (HTTP 429) becomes `LlmRateLimitError`, an overloaded or unavailable model (HTTP 500/502/503/504)
+ * becomes `LlmUnavailableError`; any other API error is passed on unchanged.
  */
 export class GeminiJsonClient implements LlmJsonClient {
   private readonly ai: GoogleGenAI;
@@ -57,6 +59,15 @@ export class GeminiJsonClient implements LlmJsonClient {
         if (error instanceof ApiError && error.status === 429) {
           throw new LlmRateLimitError(
             `Gemini rate limit or quota reached (429): ${error.message}`,
+            { cause: error },
+          );
+        }
+        if (
+          error instanceof ApiError &&
+          [500, 502, 503, 504].includes(error.status)
+        ) {
+          throw new LlmUnavailableError(
+            `Gemini is overloaded or unavailable (${error.status}): ${error.message}`,
             { cause: error },
           );
         }

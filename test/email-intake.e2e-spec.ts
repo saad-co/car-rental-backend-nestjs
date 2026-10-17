@@ -16,7 +16,10 @@ import type {
   ExtractionInput,
   PaymentExtractor,
 } from "../src/email-intake/extraction/payment-extraction.js";
-import { LlmRateLimitError } from "../src/llm/llm-client.js";
+import {
+  LlmRateLimitError,
+  LlmUnavailableError,
+} from "../src/llm/llm-client.js";
 import { Payment, PaymentStatus } from "../src/payments/payment.entity.js";
 import { openTestDatabase } from "./test-database.js";
 
@@ -83,10 +86,14 @@ class FakeExtractor implements PaymentExtractor {
   calls = 0;
   failing = false;
   rateLimited = false;
+  unavailable = false;
   extract(input: ExtractionInput): Promise<unknown> {
     this.calls++;
     if (this.rateLimited) {
       return Promise.reject(new LlmRateLimitError("429 quota exceeded"));
+    }
+    if (this.unavailable) {
+      return Promise.reject(new LlmUnavailableError("503 high demand"));
     }
     if (this.failing) return Promise.reject(new Error("503 model overloaded"));
     const id = /Transaction ID (\S+)/.exec(input.bodyText)?.[1] ?? null;
@@ -250,6 +257,21 @@ describe("EmailIntakeService.syncNewMessages (test database)", () => {
     expect(await emails()).toHaveLength(0);
 
     extractor.rateLimited = false;
+    expect(await intake.syncNewMessages()).toEqual({ ran: true, stored: 1 });
+    expect((await emails())[0].status).toBe(InboundEmailStatus.processed);
+  });
+
+  it("waits out a Google overload (503) without ever giving up on the email", async () => {
+    mailbox.messages = [message(101, venmoRaw("TX1001"))];
+    extractor.unavailable = true;
+    const intake = service();
+
+    for (let run = 0; run < 5; run++) {
+      await expect(intake.syncNewMessages()).rejects.toThrow(/unavailable/);
+    }
+    expect(await emails()).toHaveLength(0);
+
+    extractor.unavailable = false;
     expect(await intake.syncNewMessages()).toEqual({ ran: true, stored: 1 });
     expect((await emails())[0].status).toBe(InboundEmailStatus.processed);
   });

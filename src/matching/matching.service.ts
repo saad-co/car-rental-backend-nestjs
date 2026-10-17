@@ -3,7 +3,7 @@ import { DataSource, IsNull } from "typeorm";
 import { normalizeAliasValue } from "../aliases/normalize-alias.js";
 import { AliasSource, PaymentAlias } from "../aliases/payment-alias.entity.js";
 import { Driver } from "../drivers/driver.entity.js";
-import { LlmRateLimitError } from "../llm/llm-client.js";
+import { LlmTemporaryError } from "../llm/llm-client.js";
 import {
   MatchMethod,
   Payment,
@@ -139,7 +139,7 @@ export class MatchingService {
       );
       return "review";
     } catch (error) {
-      if (error instanceof LlmRateLimitError) throw error;
+      if (error instanceof LlmTemporaryError) throw error;
       const message = error instanceof Error ? error.message : String(error);
       this.logger.warn(`Payment ${payment.id}: AI matching failed: ${message}`);
       await this.toReview(

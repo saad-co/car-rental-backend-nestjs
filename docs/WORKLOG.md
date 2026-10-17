@@ -4,6 +4,19 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-17 — Google overload (HTTP 5xx) is a temporary AI error (B76, extends B49)
+- **Done (backend):** branch `fix/llm-temporary-errors` (commit `e05774e`, written 2026-10-13 after a 503 spike,
+  pushed but never PR'd) brought up to date with `dev` by a merge. `LlmTemporaryError` is the parent of
+  `LlmRateLimitError` (429) and the new `LlmUnavailableError` (500/502/503/504, from the Gemini adapter). The intake
+  retries both every run in order, with no strike (so 3 overloaded runs no longer mark real payments
+  `extraction_failed`); matching leaves the payment for the next run instead of sending it to review.
+- **Verified:** typecheck, lint, 114 unit + 118 e2e (new: five overloaded runs, then processed).
+- **Trade-off:** like the rate limit, an overload that never ends stalls the intake at that email; it shows only as a
+  warning in the server log, not in the admin UI.
+- **Branch:** `fix/llm-temporary-errors` (backend only). Next: push, PR into `dev`, merge, deploy.
+
+---
+
 ### 2026-10-17 — Editable approve / decline texts (B71–B73, D58)
 - **Done (backend):** migration `CreateMessageTemplates` (table + placeholder default texts); `MessageTemplatesModule`
   (`GET /message-templates`, `PUT /message-templates/:key`, unknown placeholders refused, `render`); approval sends the
