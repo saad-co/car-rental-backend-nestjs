@@ -203,7 +203,7 @@ export class DriversService {
       .groupBy("payment.driverId")
       .getRawMany<{ driverId: string; count: string; last: Date }>();
     const summaryByDriver = new Map(summaries.map((s) => [s.driverId, s]));
-    // Ledger balances for the whole page in one grouped query (credits minus debits, D58), not one per driver.
+    // Ledger balances for the whole page in one grouped query (credits minus debits, D60), not one per driver.
     const balances = (await this.payments.manager.query(
       `SELECT driver_id AS "driverId",
               SUM(CASE WHEN direction = 'credit' THEN amount_cents ELSE -amount_cents END)::bigint AS "balance"

@@ -3,7 +3,7 @@ import { AppModule } from "../app.module.js";
 import { LedgerService } from "./ledger.service.js";
 
 /**
- * Credits the ledger for payments confirmed before the ledger existed (D58). Run once per database after the
+ * Credits the ledger for payments confirmed before the ledger existed (D60). Run once per database after the
  * `CreateLedgerEntries` migration; running it again does nothing new.
  *
  * Dry run by default (counts only): `npm run ledger:backfill`. To write: `npm run ledger:backfill -- --apply`.

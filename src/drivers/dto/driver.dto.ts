@@ -40,7 +40,7 @@ export class DriverDto {
   paymentCount: number;
   /** When the driver's most recent payment happened; null if none. */
   lastPaymentAt: Date | null;
-  /** Ledger balance in cents: credits minus debits (D58). Negative = the driver owes money; 0 with no entries. */
+  /** Ledger balance in cents: credits minus debits (D60). Negative = the driver owes money; 0 with no entries. */
   balanceCents: number;
 }
 

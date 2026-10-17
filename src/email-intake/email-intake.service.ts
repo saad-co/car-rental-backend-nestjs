@@ -2,7 +2,7 @@ import { Inject, Injectable, Logger } from "@nestjs/common";
 import { DataSource, type EntityManager } from "typeorm";
 import { Payment, PaymentStatus } from "../payments/payment.entity.js";
 import { InboundEmail, InboundEmailStatus } from "./inbound-email.entity.js";
-import { LlmRateLimitError } from "../llm/llm-client.js";
+import { LlmTemporaryError } from "../llm/llm-client.js";
 import type {
   MailboxMessage,
   MailboxReader,
@@ -194,10 +194,10 @@ export class EmailIntakeService {
       return result;
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
-      if (error instanceof LlmRateLimitError) {
+      if (error instanceof LlmTemporaryError) {
         // Not this email's fault: wait for the limit to reset, in order, without a strike (B49).
         throw new Error(
-          `UID ${message.uid}: AI rate-limited, retried next run (not counted): ${reason}`,
+          `UID ${message.uid}: AI temporarily unavailable or rate-limited, retried next run (not counted): ${reason}`,
           { cause: error },
         );
       }

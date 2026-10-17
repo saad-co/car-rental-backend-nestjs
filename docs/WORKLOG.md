@@ -5,11 +5,11 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 ---
 
 ### 2026-10-17 — Staging: one failed Cash App email fixed by hand (one-off exception to D37)
-- **Why:** before the 5xx fix (B76, PR #13) was deployed, Gemini 503s made the intake give up on one real payment
-  email: `inbound_emails` `6924d0bb-7f1c-441f-9d19-41de09391723` (Cash App, UID 22200, received 2026-10-16 16:00 UTC,
+- **Why:** before the 5xx fix (B76) reached staging, Gemini 503s made the intake give up on one real payment email:
+  `inbound_emails` `6924d0bb-7f1c-441f-9d19-41de09391723` (Cash App, UID 22200, received 2026-10-16 16:00 UTC,
   "You were sent $59 by Nicholas Olivera"), stored `extraction_failed`. It was the only `extraction_failed` row.
-- **Done (staging database, by Abulkalam through a Railway tunnel, SQL written by Claude):** in one statement, that email
-  was set to `processed` (reason cleared) and its payment inserted as the intake would have: `email_cashapp`,
+- **Done (staging database, run by Abulkalam through a Railway tunnel, SQL written by Claude):** in one statement, that
+  email was set to `processed` (reason cleared) and its payment inserted as the intake would have: `email_cashapp`,
   `external_id` = the email id, 5900 cents, sender "Nicholas Olivera", `occurred_at` = received time (no time in the
   text, B50), no transaction id, status `unmatched`, so matching assigns it on its next run. New payment
   `2e83b6da-3f0a-4c0e-875a-33df2eed6534`.
@@ -19,7 +19,52 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
   id::text, NULL, 5900, 'Nicholas Olivera', NULL, received_at, NULL, 'unmatched' FROM fixed`
 - **Exception to D37 (rows never updated), Abulkalam:** staging only, this one row, so the Email log looks clean. The
   proper tools for such cases are still open: B38 (correct or re-read an email), B79 (manual payment).
-- **Not checked yet:** which driver matching assigned it to.
+- **Not checked yet:** which driver matching assigned it to (the Payments page showed "Matching..." right after).
+
+---
+
+### 2026-10-17 — Staging deploy: last night's revisions and the 5xx fix
+- **Deployed** with the new Deployment steps (workspace `CLAUDE.md`, D59), from the `deploy-*` worktrees on
+  `origin/dev`: backend `a928d71` (2026-10-17 06:33 UTC) and frontend `c1e9411` (06:41 UTC). Includes backend PRs #11,
+  #12, #13 and frontend #10, #11 (B55, B76).
+- **Verified:** both Railway deployments `SUCCESS`; the backend log shows the migrations ran (`AddDriverOnboarding`,
+  `CreateApplicationNotes`, `CreateMessageTemplates`) and the app started.
+- **For the client on staging:** edit both texts in Settings → Message templates; replace "[add company names and phone
+  numbers here]" in the decline text before SMS goes live (B71, B72).
+
+---
+
+### 2026-10-17 — Google overload (HTTP 5xx) is a temporary AI error (B76, extends B49)
+- **Done (backend):** branch `fix/llm-temporary-errors` (commit `e05774e`, written 2026-10-13 after a 503 spike,
+  pushed but never PR'd) brought up to date with `dev` by a merge. `LlmTemporaryError` is the parent of
+  `LlmRateLimitError` (429) and the new `LlmUnavailableError` (500/502/503/504, from the Gemini adapter). The intake
+  retries both every run in order, with no strike (so 3 overloaded runs no longer mark real payments
+  `extraction_failed`); matching leaves the payment for the next run instead of sending it to review.
+- **Verified:** typecheck, lint, 114 unit + 118 e2e (new: five overloaded runs, then processed).
+- **Trade-off:** like the rate limit, an overload that never ends stalls the intake at that email; it shows only as a
+  warning in the server log, not in the admin UI.
+- **Branch:** `fix/llm-temporary-errors` (backend only). Next: push, PR into `dev`, merge, deploy.
+
+---
+
+### 2026-10-17 — Editable approve / decline texts (B71–B73, D58)
+- **Done (backend):** migration `CreateMessageTemplates` (table + placeholder default texts); `MessageTemplatesModule`
+  (`GET /message-templates`, `PUT /message-templates/:key`, unknown placeholders refused, `render`); approval sends the
+  approved template then the login text; `POST /applications/:id/reject` takes `{ sendText }`; shared `sendOrFail`
+  (failure rolls the review back with the reason). Test helper `seedTestTemplates` (a `TRUNCATE users CASCADE` also
+  empties `message_templates`).
+- **Done (frontend):** Settings page (new sidebar item, `PlugInIcon` from TailAdmin): one editor per template with
+  placeholders, character / SMS count, live preview, Save / Undo, last editor. Decline dialog with preview and two
+  ways to go ahead (`ConfirmDialog.secondary`). Review actions refresh the chat.
+- **Verified:** migration locally (defaults inserted, blank refused, revert + re-run, no drift); backend lint, 114 unit
+  + 117 e2e (13 new); route 401 without token; frontend lint + build. Browser walkthrough in `dry_run` on three fake
+  applications (all removed after, default texts restored): Settings defaults and preview, `{name}` refused with a
+  plain message, edit saved with editor, decline without text (no text stored), decline with text (filled-in edited
+  text stored as dry run), approve (two texts in order, shown in the chat at once).
+- **Fixed during the walkthrough:** the chat did not show texts sent by approve/decline until a reload; the decline
+  dialog's third button wrapped (dialog wider with a second action).
+- **For the client on staging:** edit both texts in Settings; replace "[add company names and phone numbers here]".
+- **Branch:** `feature/delete-applications` (both repos).
 
 ---
 

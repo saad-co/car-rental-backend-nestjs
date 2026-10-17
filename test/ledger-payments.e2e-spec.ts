@@ -21,7 +21,7 @@ import {
 import { PaymentsService } from "../src/payments/payments.service.js";
 import { openTestDatabase } from "./test-database.js";
 
-describe("Driver ledger: payment credits (B77, D58, test database)", () => {
+describe("Driver ledger: payment credits (B77, D60, test database)", () => {
   let db: DataSource;
   let ledger: LedgerService;
   let payments: PaymentsService;

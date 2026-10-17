@@ -30,7 +30,7 @@ export enum LedgerEntryKind {
   reversal = "reversal",
 }
 
-/** The type an admin picks for a manual entry (D58). The direction follows from it. */
+/** The type an admin picks for a manual entry (D60). The direction follows from it. */
 export enum LedgerCategory {
   late_fee = "late_fee",
   /** Repairs such as a flat tire. */
@@ -76,7 +76,7 @@ const sqlList = (values: readonly string[]) =>
   values.map((v) => `'${v}'`).join(", ");
 
 /**
- * One line of a driver's ledger (spec section 4, D6, D58). Maps to the `ledger_entries` table.
+ * One line of a driver's ledger (spec section 4, D6, D60). Maps to the `ledger_entries` table.
  *
  * Append-only: a database trigger (added in the migration) refuses every UPDATE and DELETE, so a row can never
  * change after it is written. A mistake is cancelled by a `reversal` entry instead. The balance is never stored:

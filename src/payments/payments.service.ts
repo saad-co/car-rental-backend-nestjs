@@ -98,7 +98,7 @@ export class PaymentsService {
    * status `confirmed` (one stage for every method, B56). The payer's name is saved as the driver's
    * alias so the next payment from them matches by itself, unless that alias already belongs to another
    * driver: it is then left alone and reported back (one alias, one driver; the admin decides).
-   * The ledger credit follows the payment in the same transaction (D58).
+   * The ledger credit follows the payment in the same transaction (D60).
    *
    * @throws NotFoundException unknown payment.
    * @throws BadRequestException unknown driver.
@@ -135,7 +135,7 @@ export class PaymentsService {
         status: PaymentStatus.confirmed,
       });
       // Same transaction: the payment and its ledger credit change together or not at all. A reassignment
-      // reverses the old driver's credit and credits the new one (D58).
+      // reverses the old driver's credit and credits the new one (D60).
       await this.ledger.syncPaymentCredit(manager, payment.id, adminId);
 
       let aliasSaved = false;

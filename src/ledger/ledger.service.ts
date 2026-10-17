@@ -59,7 +59,7 @@ const SOURCE_LABEL: Record<PaymentSource, string> = {
 };
 
 /**
- * The driver ledger (D58): writes entries and reads balances. Every write is append-only (the database trigger
+ * The driver ledger (D60): writes entries and reads balances. Every write is append-only (the database trigger
  * refuses UPDATE and DELETE) and idempotent (a unique `idempotency_key`).
  *
  * Express comparison: this is the "model layer" you would call from a route handler; Nest creates one instance and
@@ -314,7 +314,7 @@ export class LedgerService {
 
   /**
    * Credits every `confirmed` payment that has no active credit on its driver: the payments confirmed before the
-   * ledger existed (D58). Each payment in its own transaction with the payment row locked, through
+   * ledger existed (D60). Each payment in its own transaction with the payment row locked, through
    * `syncPaymentCredit`, so running it twice, or while matching runs, never credits twice.
    *
    * @param apply false = dry run: count only, write nothing.

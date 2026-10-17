@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
-import { LlmRateLimitError } from "../llm/llm-client.js";
+import { LlmTemporaryError } from "../llm/llm-client.js";
 import { MatchingService } from "../matching/matching.service.js";
 import { EmailIntakeService } from "./email-intake.service.js";
 
@@ -56,16 +56,16 @@ export class EmailIntakeScheduler {
   }
 
   /**
-   * A rate limit is expected on the free AI key (15 requests a minute) and fixes itself on the next tick: one
+   * A rate limit (free key: 15 requests a minute) or a Google overload (503) fixes itself on a later tick: one
    * warning line, no stack trace. Anything else is a real error and is logged in full.
    */
   private logError(what: string, error: unknown): void {
     const rateLimited = [error, error instanceof Error && error.cause].some(
-      (candidate) => candidate instanceof LlmRateLimitError,
+      (candidate) => candidate instanceof LlmTemporaryError,
     );
     if (rateLimited) {
       this.logger.warn(
-        `${what}: the AI rate limit was reached, the rest continues on the next run (nothing is lost).`,
+        `${what}: the AI is rate-limited or temporarily unavailable, the rest continues on the next run (nothing is lost).`,
       );
       return;
     }

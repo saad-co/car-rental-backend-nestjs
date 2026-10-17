@@ -1,7 +1,7 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
- * The driver ledger (D58). Generated from `LedgerEntry`, then edited by hand: the two triggers at the end of `up`
+ * The driver ledger (D60). Generated from `LedgerEntry`, then edited by hand: the two triggers at the end of `up`
  * (and their removal at the start of `down`) are not something TypeORM generates.
  *
  * - `ledger_entries_append_only`: refuses every UPDATE and DELETE, so the ledger stays append-only even if the

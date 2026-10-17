@@ -582,7 +582,36 @@ contact texts in shown in a separate Files tab. Chosen by Abulkalam on 2026-10-1
 - Notes stay on the application after approval; not shown on the driver page yet.
 **Why:** client request; a list with authors is the honest record of who decided what.
 
-### D58 — 2026-10-17 — Driver ledger: scope and rules (B77; Abulkalam: "go with the recommendations")
+### D58 — 2026-10-17 — Editable approve / decline texts; approval sends two texts; decline asks (B71–B73, Abulkalam)
+- **Templates in the database** (`message_templates`, key = primary key), edited by admins in **Settings → Message
+  templates** (spec 4 `MessageTemplate`). Placeholders `{firstName}`, `{lastName}`; any other `{word}` is refused on
+  save (a typo would be texted word for word). Body 1–1000 characters (DTO + CHECK). Last editor and time kept, no
+  version history. Payment reminders (M6) will add their keys and placeholders to the same table.
+- **Default wording is placeholder text by Claude** (inserted by the migration) for the client to edit on staging; the
+  decline text contains "[add company names and phone numbers here]" so the other companies' numbers are not missed.
+- **Approve (B71):** sends the "approved" template, then the login text (D52) as a **second, fixed** text: an edit can
+  never break the credentials.
+- **Decline (B72):** the Decline button opens a dialog with the filled-in decline text and "Decline and send text" /
+  "Decline without text". API: `POST /applications/:id/reject` with optional `{ sendText }` (default false).
+- Every text is sent inside the review transaction: a failure rolls the approval or decline back with the reason. A
+  text already sent stays in the chat (it really went out). SMS_MODE applies (`dry_run` on staging).
+**Why:** the client wants to word these texts themselves; the real wording and the other companies' numbers are not
+known yet.
+
+### D59 — 2026-10-17 — Staging deploys from `dev` through two deploy worktrees (Abulkalam)
+- Until GitHub can deploy to Railway (repos on Saad's GitHub, Railway on the client's account), staging is deployed by
+  hand from **`dev`**, not `main` (`main` still holds the initial commit). Exception recorded under "Branches" in the
+  workspace `CLAUDE.md`.
+- `deploy-backend/` and `deploy-frontend/` are git worktrees used **only** to deploy: each is moved to
+  `origin/dev` (detached HEAD, `git checkout --detach origin/dev`) and `railway up --service <name>` runs there. Never
+  from the main checkout or a `wt-*` worktree: `railway up` uploads the folder it runs in, uncommitted files included.
+- Order: PRs into `dev` and merges backend first, then deploy backend, then frontend; record both commit hashes in
+  `WORKLOG.md`. The full steps are the "Deployment" section of the workspace `CLAUDE.md`.
+- Claude gives the commands; it runs push, PR, merge or `railway` only when the developer explicitly asks.
+**Why:** several sessions now work in parallel (worktrees); deploying from a clean, pushed commit keeps half-finished
+work off staging and never disturbs a working folder.
+
+### D60 — 2026-10-17 — Driver ledger: scope and rules (B77; Abulkalam: "go with the recommendations")
 - **Scope now (M1):** ledger entries, payment credits (incl. reassignment), manual charges/credits with a category,
   reversals, balance with running balance, weekly and monthly summaries; admin only. Rent billing (M2), driver portal
   view (B78), manual cash payments (B79) and the old ledger import (B80) come after.

@@ -19,10 +19,10 @@ import {
   MAX_DESCRIPTION_LENGTH,
 } from "../ledger-entry.entity.js";
 
-/** Largest manual entry an admin can type: $10,000 (D58). Larger amounts are almost certainly a typo. */
+/** Largest manual entry an admin can type: $10,000 (D60). Larger amounts are almost certainly a typo. */
 export const MAX_MANUAL_ENTRY_CENTS = 1_000_000;
 
-/** How far back a manual entry may be dated (D58). */
+/** How far back a manual entry may be dated (D60). */
 export const MAX_BACKDATE_DAYS = 90;
 
 /** Trims strings before validation, so "   " is refused as empty. */

@@ -19,7 +19,7 @@ export class LedgerPageDto {
   balanceCents: number;
 }
 
-/** How the summary groups entries. Weeks run Monday to Sunday; both in Chicago days (D58). */
+/** How the summary groups entries. Weeks run Monday to Sunday; both in Chicago days (D60). */
 export enum LedgerPeriod {
   week = "week",
   month = "month",

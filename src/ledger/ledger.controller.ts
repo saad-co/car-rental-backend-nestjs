@@ -23,7 +23,7 @@ import {
 import { LedgerService } from "./ledger.service.js";
 
 /**
- * A driver's ledger (D58), under `/drivers/:id/ledger`. Admin only (the global guard; no decorator needed).
+ * A driver's ledger (D60), under `/drivers/:id/ledger`. Admin only (the global guard; no decorator needed).
  * Express equivalent: a router mounted at `/drivers/:id/ledger` behind the app-wide auth middleware; the DTO classes
  * replace a validation middleware (the global ValidationPipe checks the body before the handler runs).
  */

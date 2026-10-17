@@ -8,7 +8,7 @@ import { LedgerController } from "./ledger.controller.js";
 import { LedgerService } from "./ledger.service.js";
 
 /**
- * The driver ledger (D58). Exports `LedgerService` so payments and matching can credit payments inside their own
+ * The driver ledger (D60). Exports `LedgerService` so payments and matching can credit payments inside their own
  * transactions. `forFeature` lists every entity the ledger touches, including relation targets (autoLoadEntities).
  */
 @Module({
