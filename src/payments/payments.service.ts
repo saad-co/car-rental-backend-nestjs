@@ -9,6 +9,7 @@ import { normalizeAliasValue } from "../aliases/normalize-alias.js";
 import { likePattern } from "../common/search.js";
 import { AliasSource, PaymentAlias } from "../aliases/payment-alias.entity.js";
 import { Driver } from "../drivers/driver.entity.js";
+import { LedgerService } from "../ledger/ledger.service.js";
 import { ALIAS_TYPE_BY_SOURCE } from "../matching/alias-index.js";
 import { ListPaymentsQueryDto } from "./dto/list-payments-query.dto.js";
 import {
@@ -29,7 +30,10 @@ const ASSIGNABLE = [
 /** Reads payments for the admin screens, and lets an admin assign one to a driver. */
 @Injectable()
 export class PaymentsService {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(
+    private readonly dataSource: DataSource,
+    private readonly ledger: LedgerService,
+  ) {}
 
   /**
    * One page of payments, most recent first, filtered by status, source, driver and match state, and by a search
@@ -94,6 +98,7 @@ export class PaymentsService {
    * status `confirmed` (one stage for every method, B56). The payer's name is saved as the driver's
    * alias so the next payment from them matches by itself, unless that alias already belongs to another
    * driver: it is then left alone and reported back (one alias, one driver; the admin decides).
+   * The ledger credit follows the payment in the same transaction (D60).
    *
    * @throws NotFoundException unknown payment.
    * @throws BadRequestException unknown driver.
@@ -129,6 +134,9 @@ export class PaymentsService {
         matchAttemptedAt: new Date(),
         status: PaymentStatus.confirmed,
       });
+      // Same transaction: the payment and its ledger credit change together or not at all. A reassignment
+      // reverses the old driver's credit and credits the new one (D60).
+      await this.ledger.syncPaymentCredit(manager, payment.id, adminId);
 
       let aliasSaved = false;
       let aliasOwnedBy: PaymentDriverDto | null = null;

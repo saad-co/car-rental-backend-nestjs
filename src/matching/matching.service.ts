@@ -3,6 +3,7 @@ import { DataSource, IsNull } from "typeorm";
 import { normalizeAliasValue } from "../aliases/normalize-alias.js";
 import { AliasSource, PaymentAlias } from "../aliases/payment-alias.entity.js";
 import { Driver } from "../drivers/driver.entity.js";
+import { LedgerService } from "../ledger/ledger.service.js";
 import { LlmTemporaryError } from "../llm/llm-client.js";
 import {
   MatchMethod,
@@ -36,6 +37,7 @@ export class MatchingService {
 
   constructor(
     private readonly dataSource: DataSource,
+    private readonly ledger: LedgerService,
     @Optional()
     @Inject(AI_DRIVER_MATCHER)
     private readonly ai: AiDriverMatcher | null = null,
@@ -152,7 +154,11 @@ export class MatchingService {
     }
   }
 
-  /** Sets the driver. Only while still unmatched: an admin's assignment made meanwhile is never overwritten. */
+  /**
+   * Sets the driver and credits the ledger, in one transaction. Only while still unmatched: an admin's assignment
+   * made meanwhile is never overwritten. The conditional UPDATE also locks the payment row until the end of the
+   * transaction, so an admin assigning the same payment waits for it.
+   */
   private async assign(
     payment: Payment,
     driverId: string,
@@ -160,18 +166,23 @@ export class MatchingService {
     confidence: number,
     explanation: string,
   ): Promise<void> {
-    await this.dataSource.getRepository(Payment).update(
-      { id: payment.id, status: PaymentStatus.unmatched, driverId: IsNull() },
-      {
-        driverId,
-        suggestedDriverId: null,
-        matchMethod: method,
-        matchConfidence: confidence,
-        matchExplanation: explanation,
-        matchAttemptedAt: new Date(),
-        status: PaymentStatus.confirmed,
-      },
-    );
+    await this.dataSource.transaction(async (manager) => {
+      const result = await manager.getRepository(Payment).update(
+        { id: payment.id, status: PaymentStatus.unmatched, driverId: IsNull() },
+        {
+          driverId,
+          suggestedDriverId: null,
+          matchMethod: method,
+          matchConfidence: confidence,
+          matchExplanation: explanation,
+          matchAttemptedAt: new Date(),
+          status: PaymentStatus.confirmed,
+        },
+      );
+      // 0 rows: someone else assigned it meanwhile, and their assignment already credited the ledger.
+      if (result.affected !== 1) return;
+      await this.ledger.syncPaymentCredit(manager, payment.id, null);
+    });
   }
 
   /** Leaves the payment unmatched, with the AI's best guess (if any) for the admin. */

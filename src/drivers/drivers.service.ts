@@ -203,6 +203,16 @@ export class DriversService {
       .groupBy("payment.driverId")
       .getRawMany<{ driverId: string; count: string; last: Date }>();
     const summaryByDriver = new Map(summaries.map((s) => [s.driverId, s]));
+    // Ledger balances for the whole page in one grouped query (credits minus debits, D60), not one per driver.
+    const balances = (await this.payments.manager.query(
+      `SELECT driver_id AS "driverId",
+              SUM(CASE WHEN direction = 'credit' THEN amount_cents ELSE -amount_cents END)::bigint AS "balance"
+       FROM ledger_entries WHERE driver_id = ANY($1::uuid[]) GROUP BY driver_id`,
+      [ids],
+    )) as { driverId: string; balance: string }[];
+    const balanceByDriver = new Map(
+      balances.map((b) => [b.driverId, Number(b.balance)]),
+    );
 
     return rows.map((row) => {
       const summary = summaryByDriver.get(row.id);
@@ -217,6 +227,7 @@ export class DriversService {
           })),
         paymentCount: summary ? Number(summary.count) : 0,
         lastPaymentAt: summary ? new Date(summary.last) : null,
+        balanceCents: balanceByDriver.get(row.id) ?? 0,
       };
     });
   }
@@ -224,7 +235,10 @@ export class DriversService {
   /** Copies the driver's own fields from the entity, field by field. */
   private toDto(
     driver: Driver,
-  ): Omit<DriverDto, "aliases" | "paymentCount" | "lastPaymentAt"> {
+  ): Omit<
+    DriverDto,
+    "aliases" | "paymentCount" | "lastPaymentAt" | "balanceCents"
+  > {
     return {
       id: driver.id,
       firstName: driver.firstName,

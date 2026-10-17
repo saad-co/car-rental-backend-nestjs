@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { LedgerModule } from "../ledger/ledger.module.js";
 import { GeminiJsonClient } from "../llm/gemini-client.js";
 import { AiDriverMatcher } from "./ai-driver-matcher.js";
 import { AI_DRIVER_MATCHER, MatchingService } from "./matching.service.js";
@@ -9,6 +10,7 @@ import { AI_DRIVER_MATCHER, MatchingService } from "./matching.service.js";
  * matching uses aliases only (everything else goes to review).
  */
 @Module({
+  imports: [LedgerModule],
   providers: [
     {
       provide: AI_DRIVER_MATCHER,

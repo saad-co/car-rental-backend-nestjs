@@ -18,6 +18,7 @@ import {
 } from "../src/payments/payment.entity.js";
 import { PaymentsService } from "../src/payments/payments.service.js";
 import { Role, User } from "../src/users/user.entity.js";
+import { LedgerService } from "../src/ledger/ledger.service.js";
 import { openTestDatabase } from "./test-database.js";
 
 describe("Payments: review filter and manual assign (test database)", () => {
@@ -48,7 +49,7 @@ describe("Payments: review filter and manual assign (test database)", () => {
 
   beforeAll(async () => {
     db = await openTestDatabase();
-    payments = new PaymentsService(db);
+    payments = new PaymentsService(db, new LedgerService(db));
   });
 
   beforeEach(async () => {

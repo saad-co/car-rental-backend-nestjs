@@ -16,6 +16,7 @@ import {
   PaymentStatus,
 } from "../src/payments/payment.entity.js";
 import { PaymentsService } from "../src/payments/payments.service.js";
+import { LedgerService } from "../src/ledger/ledger.service.js";
 import { openTestDatabase } from "./test-database.js";
 
 /** A query DTO as the ValidationPipe builds it from the query string (text in, defaults applied). */
@@ -84,7 +85,7 @@ describe("Admin lists: payments and the email log (test database)", () => {
 
   beforeAll(async () => {
     db = await openTestDatabase();
-    payments = new PaymentsService(db);
+    payments = new PaymentsService(db, new LedgerService(db));
     emails = new InboundEmailsService(
       db.getRepository(InboundEmail),
       db.getRepository(Payment),
