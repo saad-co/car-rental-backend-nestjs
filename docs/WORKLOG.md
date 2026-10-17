@@ -4,6 +4,25 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-17 — Staging: one failed Cash App email fixed by hand (one-off exception to D37)
+- **Why:** before the 5xx fix (B76, PR #13) was deployed, Gemini 503s made the intake give up on one real payment
+  email: `inbound_emails` `6924d0bb-7f1c-441f-9d19-41de09391723` (Cash App, UID 22200, received 2026-10-16 16:00 UTC,
+  "You were sent $59 by Nicholas Olivera"), stored `extraction_failed`. It was the only `extraction_failed` row.
+- **Done (staging database, by Abulkalam through a Railway tunnel, SQL written by Claude):** in one statement, that email
+  was set to `processed` (reason cleared) and its payment inserted as the intake would have: `email_cashapp`,
+  `external_id` = the email id, 5900 cents, sender "Nicholas Olivera", `occurred_at` = received time (no time in the
+  text, B50), no transaction id, status `unmatched`, so matching assigns it on its next run. New payment
+  `2e83b6da-3f0a-4c0e-875a-33df2eed6534`.
+  `WITH fixed AS (UPDATE inbound_emails SET status = 'processed', status_reason = NULL WHERE id = '6924d0bb-…' AND
+  status = 'extraction_failed' RETURNING id, received_at) INSERT INTO payments (source, external_id, transaction_id,
+  amount_cents, sender_name, sender_handle, occurred_at, extraction_confidence, status) SELECT 'email_cashapp',
+  id::text, NULL, 5900, 'Nicholas Olivera', NULL, received_at, NULL, 'unmatched' FROM fixed`
+- **Exception to D37 (rows never updated), Abulkalam:** staging only, this one row, so the Email log looks clean. The
+  proper tools for such cases are still open: B38 (correct or re-read an email), B79 (manual payment).
+- **Not checked yet:** which driver matching assigned it to.
+
+---
+
 ### 2026-10-17 — Internal notes on applications (B74, D57)
 - **Done (backend):** migration `CreateApplicationNotes` (`application_notes`: application CASCADE, author SET NULL,
   CHECK body 1–2000 not blank, index (application_id, created_at)); `ApplicationNotesService` +
