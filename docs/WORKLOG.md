@@ -22,9 +22,13 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
   checks of the triggers and constraints; backend lint, 118 unit + 140 e2e (22 ledger tests: reversals incl. two at
   once, append-only, request key, dates, opening balance, payment credit A → B → A, matching, backfill twice, running
   balance, week/month/daylight-saving boundaries); frontend lint + build. Backfill on the local copy: 19 payments,
-  $2,414.00, second run 0. Browser: empty ledger, form validation, a $25 late fee (balance "Owes $25.00").
-- **Not done:** rest of the browser walkthrough (backdated entry, reversal, Weekly/Monthly, list balance); rent
-  billing (M2); driver portal view (B78); manual cash payments (B79); old ledger import (B80).
+  $2,414.00, second run 0. Browser walkthrough on a fake driver in the local copy (2026-10-17, after merging `dev`): empty ledger, form
+  validation, late fee, a repair backdated to Oct 12 (sorted by date, "recorded Oct 17", later running balances
+  shifted), a discount, Reverse cancelled then confirmed (reversal dated today, original marked "Reversed", no second
+  Reverse), Weekly (Mon–Sun, empty weeks, charges $195.50 / credits $10 / reversals +$75 / closing "Owes $110.50"),
+  Monthly, Drivers list balance; every request 2xx, no console errors. The fake driver stays in the local copy only
+  (append-only rows cannot be deleted).
+- **Not done:** rent billing (M2); driver portal view (B78); manual cash payments (B79); old ledger import (B80).
 - **On staging after the deploy:** run the backfill once (`npm run ledger:backfill`, then `-- --apply`) so payments
   confirmed before the ledger are credited.
 - **Branch:** `feature/driver-ledger` (both repos), `dev` merged in.
