@@ -1,3 +1,4 @@
+import { addDateRange } from "../common/date-range.js";
 import {
   BadRequestException,
   ConflictException,
@@ -64,6 +65,8 @@ export class PaymentsService {
     if (query.driverId) {
       builder.andWhere("p.driverId = :driverId", { driverId: query.driverId });
     }
+    // The day the money was paid (B82).
+    addDateRange(builder, "p.occurredAt", query);
     if (query.match === "assigned") {
       builder.andWhere("p.driverId IS NOT NULL");
     }

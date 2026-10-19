@@ -1,3 +1,4 @@
+import { addDateRange } from "../common/date-range.js";
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Brackets, In, Repository } from "typeorm";
@@ -37,6 +38,8 @@ export class InboundEmailsService {
     if (query.provider) {
       builder.andWhere("e.provider = :provider", { provider: query.provider });
     }
+    // The day the mail arrived (B82).
+    addDateRange(builder, "e.receivedAt", query);
     if (query.search) {
       builder.andWhere(
         new Brackets((match) => {
