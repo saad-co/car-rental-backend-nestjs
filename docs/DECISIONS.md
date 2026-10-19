@@ -651,3 +651,29 @@ date, idempotency keys) and avoid the edge cases listed for B77.
   second migration (it had only run on local copies).
 **Why:** Abulkalam: the type list adds a step without adding information the reason does not already give.
 
+### D62 — 2026-10-19 — Message templates become a list: many per kind, edited when sending (B81; Abulkalam)
+- `message_templates` now has `id` (primary key), `kind` (`application_approved` | `application_declined`) and
+  `name`, unique per (kind, name). The old `key` column became `kind`; the one text each kind had is kept and named
+  "Default" (so a text the client already edited on staging survives).
+- Admins add, edit, rename and delete texts in Settings. The **last** text of a kind cannot be deleted (409), so there is
+  always something to send.
+- `POST /applications/:id/approve` and `/reject` take an optional `{ message }`: the text the admin picked and edited
+  in the dialog. The API fills in `{firstName}` / `{lastName}` and refuses unknown placeholders (400). **Decline**
+  without a message sends nothing (replaces `sendText`). **Approve** without a message sends the oldest approved text, so
+  approval still always texts (D52). The login text stays fixed in code.
+- Edits made in the dialog are for that applicant only; the saved template is not changed.
+**Why:** the client asked for several decline texts and for editing before sending, and Abulkalam wanted both for
+approved and declined. One table with a `kind` also suits the payment reminders (M6). A separate decline-only table
+was planned first and dropped when approve needed the same.
+
+### D63 — 2026-10-19 — Date range filter on the lists; days counted in Chicago time (B82; Abulkalam)
+- `?from=YYYY-MM-DD&to=YYYY-MM-DD` (either optional, inclusive) on `GET /applications`, `/drivers`, `/payments`,
+  `/inbound-emails`. Filters: applications and email log by received, drivers by created ("Since"), payments by paid.
+  `from` after `to` or a day that does not exist is 400.
+- A day is a **Chicago day**: from midnight in `America/Chicago` to the next midnight, worked out in SQL
+  (`AT TIME ZONE`), so daylight saving is right and it matches the times shown on screen. UTC days would put an evening
+  payment on the wrong day.
+- The shared `TableCard` shows a range picker (TailAdmin's flatpickr calendar) next to Filter and an "applied filters"
+  bar above the table (chips for search, filters and dates, each removable, plus Clear all). The view stays in the URL.
+- No presets ("Last 7 days") for now; the driver ledger table has no date filter (it has its own period summary).
+**Why:** client revision, batch 2. Chicago days because every time in the app is shown in Chicago (spec 3, rule 4).

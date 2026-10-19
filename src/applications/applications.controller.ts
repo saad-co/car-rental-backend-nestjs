@@ -21,7 +21,7 @@ import {
   ApplicationListDto,
 } from "./dto/application.dto.js";
 import { ApplicationReceivedDto } from "./dto/application-received.dto.js";
-import { DeclineApplicationDto } from "./dto/decline-application.dto.js";
+import { ReviewMessageDto } from "./dto/review-message.dto.js";
 import {
   DeleteApplicationsDto,
   DeleteApplicationsResultDto,
@@ -104,7 +104,9 @@ export class ApplicationsController {
   }
 
   /**
-   * `POST /applications/:id/approve`: creates the driver and marks the application approved.
+   * `POST /applications/:id/approve`: creates the driver and marks the application approved, and texts the
+   * applicant. Optional body `{ "message": "..." }` is the approval text the admin picked and edited (B81); without
+   * it the first approved template is sent. `400` for an unknown placeholder in it.
    *
    * POST because it is an action with side effects, not an edit of a field. `@HttpCode(200)`
    * because it returns the updated application rather than creating a resource at this URL.
@@ -113,28 +115,29 @@ export class ApplicationsController {
   @HttpCode(HttpStatus.OK)
   approve(
     @Param("id", ParseUUIDPipe) id: string,
+    @Body() body: ReviewMessageDto,
     @CurrentUser() admin: AuthenticatedUser,
   ): Promise<ApplicationDetailDto> {
-    return this.applications.approve(id, admin.id);
+    return this.applications.approve(id, admin.id, { message: body.message });
   }
 
   /**
    * `POST /applications/:id/reject`: declines the application (shown as "Declined", B69). No driver is created.
-   * Optional body `{ "sendText": true }` also texts the applicant the "declined" template (B72); without a body
-   * nothing is sent. `503` if the text could not be sent (then nothing is declined).
+   * Optional body `{ "message": "..." }` texts the applicant that declined text, as the admin picked and edited
+   * it (B72, B81); without a message nothing is sent. `503` if the text could not be sent (then nothing is declined).
    */
   @Post(":id/reject")
   @HttpCode(HttpStatus.OK)
   reject(
     @Param("id", ParseUUIDPipe) id: string,
-    @Body() body: DeclineApplicationDto,
+    @Body() body: ReviewMessageDto,
     @CurrentUser() admin: AuthenticatedUser,
   ): Promise<ApplicationDetailDto> {
     return this.applications.setStatus(
       id,
       ApplicationStatus.rejected,
       admin.id,
-      { sendText: body.sendText },
+      { message: body.message },
     );
   }
 

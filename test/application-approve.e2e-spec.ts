@@ -1,4 +1,7 @@
-import { ServiceUnavailableException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ServiceUnavailableException,
+} from "@nestjs/common";
 import type { ConfigService } from "@nestjs/config";
 import type { DataSource } from "typeorm";
 import {
@@ -163,10 +166,37 @@ describe("Approve and decline send texts (test database)", () => {
 
     it("uses the template as edited in Settings", async () => {
       await db.query(
-        `UPDATE message_templates SET body = 'Welcome aboard {firstName}!' WHERE key = 'application_approved'`,
+        `UPDATE message_templates SET body = 'Welcome aboard {firstName}!' WHERE kind = 'application_approved'`,
       );
       await service("dry_run").approve(applicationId, adminId);
       expect((await texts())[0].body).toBe("Welcome aboard Pat!");
+    });
+
+    it("with no message, uses the oldest approved template, not a newer one", async () => {
+      await db.query(
+        `INSERT INTO message_templates (kind, name, body, created_at) VALUES ('application_approved', 'Newer', 'Newer {firstName}', now() + interval '1 hour')`,
+      );
+      await service("dry_run").approve(applicationId, adminId);
+      expect((await texts())[0].body).toBe("Approved: Pat Applicant");
+    });
+
+    it("with a message: sends exactly the admin's edited text, placeholders filled in, then the login", async () => {
+      await service("dry_run").approve(applicationId, adminId, {
+        message: "Welcome {firstName}!\nCall us at 555-0100.",
+      });
+      const [approvedText, loginText] = await texts();
+      expect(approvedText.body).toBe("Welcome Pat!\nCall us at 555-0100.");
+      expect(loginText.body).toContain("Temporary password:");
+    });
+
+    it("a message with an unknown placeholder is refused and nothing is approved", async () => {
+      const error = await service("dry_run")
+        .approve(applicationId, adminId, { message: "Hi {firstname}" })
+        .catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(BadRequestException);
+      expect(await count("drivers")).toBe(0);
+      expect(await statusOf()).toBe("pending");
+      expect(await count("sms_messages")).toBe(0);
     });
 
     it("live: sends both texts through Quo to the application's phone", async () => {
@@ -221,23 +251,33 @@ describe("Approve and decline send texts (test database)", () => {
   });
 
   describe("decline (B72)", () => {
-    it("with sendText: declines and sends the declined template filled in", async () => {
+    it("with a message: declines and sends exactly that text, placeholders filled in", async () => {
       const declined = await service("dry_run").setStatus(
         applicationId,
         ApplicationStatus.rejected,
         adminId,
-        { sendText: true },
+        { message: "Sorry {firstName} {lastName}, try ABC Rentals." },
       );
 
       expect(declined.status).toBe("rejected");
       const [text] = await texts();
       expect(text).toMatchObject({
-        body: "Declined: Pat",
+        body: "Sorry Pat Applicant, try ABC Rentals.",
         status: "composed",
       });
     });
 
-    it("without sendText: declines and sends nothing", async () => {
+    it("a message with an unknown placeholder is refused and nothing is declined", async () => {
+      const error = await service("dry_run")
+        .setStatus(applicationId, ApplicationStatus.rejected, adminId, {
+          message: "Sorry {name}",
+        })
+        .catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(BadRequestException);
+      expect(await statusOf()).toBe("pending");
+    });
+
+    it("without a message: declines and sends nothing", async () => {
       await service("live").setStatus(
         applicationId,
         ApplicationStatus.rejected,
@@ -253,7 +293,7 @@ describe("Approve and decline send texts (test database)", () => {
 
       const error = await service("live")
         .setStatus(applicationId, ApplicationStatus.rejected, adminId, {
-          sendText: true,
+          message: "Sorry {firstName}.",
         })
         .catch((e: unknown) => e);
 
@@ -262,14 +302,12 @@ describe("Approve and decline send texts (test database)", () => {
       expect(await statusOf()).toBe("pending");
     });
 
-    it("sendText is ignored for on hold", async () => {
+    it("a message is ignored for on hold", async () => {
       await service("live").setStatus(
         applicationId,
         ApplicationStatus.on_hold,
         adminId,
-        {
-          sendText: true,
-        },
+        { message: "Sorry {firstName}." },
       );
       expect(await statusOf()).toBe("on_hold");
       expect(quo.sent).toEqual([]);

@@ -1,3 +1,4 @@
+import { addDateRange } from "../common/date-range.js";
 import {
   ConflictException,
   Injectable,
@@ -45,6 +46,8 @@ export class DriversService {
     if (query.status) {
       builder.andWhere("d.status = :status", { status: query.status });
     }
+    // The "Since" day: when the driver was created (B82).
+    addDateRange(builder, "d.createdAt", query);
     if (query.search) {
       const digits = phoneDigits(query.search);
       builder.andWhere(

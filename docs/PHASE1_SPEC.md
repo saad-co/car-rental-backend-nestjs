@@ -120,9 +120,10 @@ Balance = sum(credits) − sum(debits). Never stored.
 `templateKey` and `reminderTier` come with the reminders (M6). A separate `sms_attachments` table holds the files.
 
 **MessageTemplate** — `key`, `body` with placeholders `{firstName}`, `{balance}`, `{daysLate}`, `{rate}`.
-*As built (D58):* table `message_templates`, `key` is the primary key, plus `updatedAt` and `updatedById`. Keys so far:
-`application_approved`, `application_declined` (placeholders `{firstName}`, `{lastName}`), edited in Settings; the
-reminder keys and their placeholders come with M6.
+*As built (D58, D62):* table `message_templates` is a list: `id` (primary key), `kind` and `name` (unique together), `body`,
+`createdAt`, `updatedAt`, `updatedById`. Kinds so far: `application_approved`, `application_declined` (placeholders
+`{firstName}`, `{lastName}`), several texts per kind, managed in Settings and picked and edited in the Approve / Decline
+dialogs; the reminder kinds and their placeholders come with M6.
 
 **Setting** — key/value for switches, thresholds, tier timings, SMS mode.
 

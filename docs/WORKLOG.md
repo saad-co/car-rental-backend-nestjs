@@ -4,11 +4,42 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
-### 2026-10-19 — Chat: "Live" badge removed (B81); attachments not possible (B82)
+### 2026-10-19 — Chat: "Live" badge removed (B84); attachments not possible with Quo (B83)
 - **Done (frontend):** `ConversationCard` shows no badge in `live`; the dry-run and off warnings stay.
-- **Not done:** sending files from the chat (B82): Quo's API cannot send media.
+- **Not done:** sending files from the chat (B83): Quo's API cannot send media.
 - **Verified:** frontend lint and build. Browser walkthrough 2026-10-19 (frontend on port 5175/5176, local backend in `dry_run`, signed in by Abulkalam): application and driver pages show the yellow "Dry run: texts are saved, not sent" badge in `dry_run`; with `/sms/status` reported as `live` (a throwaway local proxy, the backend never ran live) the chat header shows only avatar, name and phone, no badge; no console errors from the app. Not deployed.
 - **Branch:** `fix/chat-live-badge` (frontend code, backend docs), worktrees `wt-chat-live-badge-*` (no database or ports needed).
+
+---
+
+### 2026-10-19 — Staging deploy: client revisions batch 2 (B81, B82, D62, D63)
+- **Merged:** backend PR #18 (`0a22c82`) and frontend PR #13 (`2245c58`) into `dev`.
+- **Deployed** with the Deployment steps from the `deploy-*` worktrees (detached at `origin/dev`, clean): backend
+  `0a22c82` (2026-10-19 09:16 UTC), frontend `2245c58` (09:18 UTC). Railway `car-rental-staging`: both `SUCCESS`.
+- **Checked:** backend log shows `MessageTemplatesList` executed and the app started, no errors; both sites answer 200;
+  `GET /message-templates` without a token is 401. Not checked by hand: the Settings and dialogs on staging (the client
+  edits the texts there).
+- **Open:** B83, B84 (Quo chat), B85 (add driver with aliases); the client still has to write the real texts.
+
+---
+
+### 2026-10-19 — Client revisions batch 2: several approve/decline texts, date filters (B81, B82, D62, D63)
+- **Branch** `feature/revisions-templates-filters` in both repos, worktrees `wt-revisions-templates-filters-backend` /
+  `-frontend` (slot 1: backend :5001, frontend :5174, databases `car_rental_revisions_templates_filters` / `_test`).
+- **Backend:** `message_templates` is a list (migration `MessageTemplatesList`, data kept as "Default"); routes
+  `POST /message-templates`, `PUT`/`DELETE /message-templates/:id`; approve and reject take `{ message }` (`sendText`
+  removed); `?from&to` on the four lists (`src/common/date-range.ts`, `DateRangeQueryDto`).
+- **Frontend:** Settings with a list of texts per kind; shared `ReviewTextDialog` for Approve and Decline (pick, edit,
+  send); `DateRangePicker` (flatpickr, TailAdmin calendar styles), `ActiveFilters` bar, `useListParams` with
+  `from`/`to`/`clearAll`; TailAdmin `Select` copied in.
+- **Verified:** backend 118 unit + 159 e2e pass (new: template list, approve/decline with message, date ranges around
+  Chicago midnight in summer and winter), lint and build clean; browser walkthrough on :5174 (Settings add, duplicate
+  name 409, Approve and Decline dialogs, a decline with an edited text shown in the chat, date picker, chips and Clear
+  all on all four lists).
+- **Not done:** not committed beyond the first backend step, not pushed, no PRs. Revisions 3-5 (B83 attachments, B84
+  remove "Live", B85 add driver with aliases) go to other chats. Client still has to write the real texts on staging.
+- **Merge order:** this branch before B85 (both touch the Drivers list). New migration `MessageTemplatesList` runs on
+  deploy.
 
 ---
 
