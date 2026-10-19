@@ -82,6 +82,8 @@ Ad-hoc requests, feedback, open questions and follow-ups. Mark done with a date;
 | B78 | Driver portal: show the driver their own ledger (D26) | 2026-10-17 | After B77. Read-only; no lifetime total paid (D26). |
 | B79 | Record a cash payment by hand | 2026-10-17 | A `manual` payment (source exists), so it shows on the Payments page and credits the ledger like any payment. After B77. |
 | B80 | Import the old system's ledger or opening balances (B42) | 2026-10-17 | 2,250 old rows. Until decided, an admin can enter the opening balance as a charge or credit with that reason (D61). |
+| B81 | **Done 2026-10-19 (branch `fix/chat-live-badge`).** Client revision: remove the "Live" status from the text message area | 2026-10-19 | The chat card header no longer shows the green "Live" badge. The "Dry run" and "Texting is off" warnings stay, since they mean texts are not really sent. |
+| B82 | **Left (Abulkalam, 2026-10-19): not possible with Quo.** Client revision: send attachments (PDF, images) to drivers from the chat | 2026-10-19 | Quo's API sends text only: `POST /v1/messages` takes `content`, `from`, `to`, no media field; the 2026-03-30 API has no send endpoint (checked 2026-10-19). Only the Quo app can send MMS. Revisit if Quo adds media sending. A link to a file in our bucket inside a text would work, but was not asked for. |
 | B25 | Security hardening (deferred) | 2026-10-08 | After the features: rate limiting on `POST /applications`, `/auth/login`, `/auth/verify-email`; Swagger `/docs` exposure (B20); token storage (B21); strong production secrets and `MAIL_MODE=smtp` on staging; Turnstile (B16). |
 
 ## Done

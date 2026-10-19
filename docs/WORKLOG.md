@@ -4,6 +4,14 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-19 — Chat: "Live" badge removed (B81); attachments not possible (B82)
+- **Done (frontend):** `ConversationCard` shows no badge in `live`; the dry-run and off warnings stay.
+- **Not done:** sending files from the chat (B82): Quo's API cannot send media.
+- **Verified:** frontend lint and build. Not deployed.
+- **Branch:** `fix/chat-live-badge` (frontend code, backend docs), worktrees `wt-chat-live-badge-*` (no database or ports needed).
+
+---
+
 ### 2026-10-18 — Driver ledger wrapped up; next: rent billing (M2)
 - **Cleanup:** the `wt-backend` / `wt-frontend` worktrees and their local branches removed (all merged into `dev`);
   their local databases `car_rental_ledger` / `_test` dropped. The main local database `car_rental_db` was migrated
