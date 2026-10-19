@@ -4,6 +4,13 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-19 — Staging deploy: "Live" badge removed (B84)
+- **Merged:** backend PR #20 (`53598d8`, docs only) and frontend PR #14 (`5e68eee`) into `dev`.
+- **Deployed** with the Deployment steps from the `deploy-*` worktrees: backend `53598d8` (2026-10-19 10:44 UTC), frontend `5e68eee` (10:49 UTC). Railway: both `SUCCESS`; backend log: no pending migrations, app started.
+- **Verified:** staging site loads (200); the deployed bundle returns nothing for `live` in the chat card header and still has the "Dry run" badge. Not checked in a signed-in browser on staging.
+
+---
+
 ### 2026-10-19 — Chat: "Live" badge removed (B84); attachments not possible with Quo (B83)
 - **Done (frontend):** `ConversationCard` shows no badge in `live`; the dry-run and off warnings stay.
 - **Not done:** sending files from the chat (B83): Quo's API cannot send media.
