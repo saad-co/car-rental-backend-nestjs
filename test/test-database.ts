@@ -40,9 +40,9 @@ export async function openTestDatabase(): Promise<DataSource> {
  */
 export async function seedTestTemplates(db: DataSource): Promise<void> {
   await db.query(
-    `INSERT INTO message_templates (key, body) VALUES
-       ('application_approved', 'Approved: {firstName} {lastName}'),
-       ('application_declined', 'Declined: {firstName}')
-     ON CONFLICT (key) DO UPDATE SET body = EXCLUDED.body, updated_by_id = NULL`,
+    `INSERT INTO message_templates (kind, name, body) VALUES
+       ('application_approved', 'Default', 'Approved: {firstName} {lastName}'),
+       ('application_declined', 'Default', 'Declined: {firstName}')
+     ON CONFLICT (kind, name) DO UPDATE SET body = EXCLUDED.body, updated_by_id = NULL`,
   );
 }

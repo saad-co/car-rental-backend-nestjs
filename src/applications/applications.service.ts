@@ -25,7 +25,7 @@ import { isUniqueViolation } from "../database/postgres-errors.js";
 import { driverWelcomeText } from "../drivers/driver-welcome.text.js";
 import { Driver } from "../drivers/driver.entity.js";
 import { toUsE164 } from "../drivers/us-phone.js";
-import { TemplateKey } from "../message-templates/message-template.entity.js";
+import { TemplateKind } from "../message-templates/message-template.entity.js";
 import { MessageTemplatesService } from "../message-templates/message-templates.service.js";
 import { SmsContactKind } from "../sms/sms-contact.js";
 import { SmsService } from "../sms/sms.service.js";
@@ -253,7 +253,8 @@ export class ApplicationsService {
    *    gets the login by text, which proves the phone, so there is no confirmation link (D52);
    * 2. creates the Driver, linked to that login;
    * 3. marks the application approved;
-   * 4. texts the applicant the "approved" template from Settings (B71, D58), then their email and
+   * 4. texts the applicant the approval text (B71, B81: the one the admin picked and edited, or the first "approved"
+   *    template from Settings), then their email and
    *    temporary password (D52), as two texts through the same chat as every other text: sent when
    *    SMS_MODE is `live`, saved as "Dry run: not sent" when `dry_run` (the admin can read them in
    *    the chat and pass them on), refused when `off`. The login text is fixed in code, never a
@@ -266,13 +267,18 @@ export class ApplicationsService {
    * a new one.)
    *
    * @param adminId the admin approving it (stored as the reviewer).
+   * @param options.message the approval text to send; the first approved template when missing.
    * @throws NotFoundException if there is no application with this id.
    * @throws ConflictException if it is already approved, if a driver or login already has
    *   this email, or a driver has this phone.
    * @throws BadRequestException if the phone is not a valid US number.
    * @throws ServiceUnavailableException if a text could not be sent (nothing approved).
    */
-  async approve(id: string, adminId: string): Promise<ApplicationDetailDto> {
+  async approve(
+    id: string,
+    adminId: string,
+    options: { message?: string } = {},
+  ): Promise<ApplicationDetailDto> {
     // Prepared before the transaction: hashing is deliberately slow, and the row lock taken
     // inside should be held as briefly as possible.
     const temporaryPassword = this.passwords.generate();
@@ -341,8 +347,9 @@ export class ApplicationsService {
         await this.sendOrFail(
           application,
           await this.templates.render(
-            TemplateKey.application_approved,
+            TemplateKind.application_approved,
             this.templateValues(application),
+            options.message,
           ),
           adminId,
           "The approval text",
@@ -419,9 +426,9 @@ export class ApplicationsService {
    * Declines an application (stored as `rejected`, B69) or puts it on hold. No driver is created. Can be changed
    * again later, unless the application has been approved.
    *
-   * Declining with `sendText` also texts the applicant the "declined" template from Settings (B72, D58), inside
-   * the same transaction: if the text fails, nothing is declined, and the admin can retry or decline without a
-   * text. `sendText` is ignored for "on hold".
+   * Declining with a `message` also texts the applicant that text (B72, B81): the admin picks a "declined" template
+   * from Settings and may edit it in the dialog. It is sent inside the same transaction: if the text fails, nothing
+   * is declined, and the admin can retry or decline without a text. `message` is ignored for "on hold".
    *
    * @throws NotFoundException if there is no application with this id.
    * @throws ConflictException if it is already approved.
@@ -431,7 +438,7 @@ export class ApplicationsService {
     id: string,
     status: ApplicationStatus.rejected | ApplicationStatus.on_hold,
     adminId: string,
-    options: { sendText?: boolean } = {},
+    options: { message?: string } = {},
   ): Promise<ApplicationDetailDto> {
     const updated = await this.dataSource.transaction(async (manager) => {
       const application = await this.loadForReview(manager, id);
@@ -439,12 +446,16 @@ export class ApplicationsService {
       application.reviewedById = adminId;
       application.reviewedAt = new Date();
       const saved = await manager.save(application);
-      if (status === ApplicationStatus.rejected && options.sendText) {
+      if (
+        status === ApplicationStatus.rejected &&
+        options.message !== undefined
+      ) {
         await this.sendOrFail(
           application,
           await this.templates.render(
-            TemplateKey.application_declined,
+            TemplateKind.application_declined,
             this.templateValues(application),
+            options.message,
           ),
           adminId,
           "The decline text",
