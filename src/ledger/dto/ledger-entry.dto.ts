@@ -3,6 +3,7 @@ import { Transform } from "class-transformer";
 import {
   IsEnum,
   IsInt,
+  IsOptional,
   IsString,
   IsUUID,
   Matches,
@@ -22,6 +23,10 @@ export const MAX_MANUAL_ENTRY_CENTS = 1_000_000;
 
 /** How far back a manual entry may be dated (D60). */
 export const MAX_BACKDATE_DAYS = 90;
+
+/** Trims strings before validation; a blank string becomes undefined (= left out). */
+const blankToUndefined = ({ value }: { value: unknown }) =>
+  typeof value === "string" ? value.trim() || undefined : value;
 
 /** Trims strings before validation, so "   " is refused as empty. */
 const trim = ({ value }: { value: unknown }) =>
@@ -62,6 +67,23 @@ export class CreateLedgerEntryDto {
    */
   @IsUUID()
   requestKey: string;
+
+  /**
+   * "Credit against this charge": the charge this credit reduces (e.g. a waived late fee). Only a credit can name
+   * one, the charge must be on this driver and not reversed, and the amount can be at most what is left on it.
+   */
+  @IsOptional()
+  @IsUUID()
+  appliesToId?: string;
+
+  /**
+   * A note for staff only (optional, up to 500 characters). Typed once, never changed, never printed on a statement.
+   */
+  @IsOptional()
+  @Transform(blankToUndefined)
+  @IsString()
+  @MaxLength(MAX_DESCRIPTION_LENGTH)
+  internalNote?: string;
 }
 
 /** Body of `POST /drivers/:id/ledger/entries/:entryId/reverse`. */
@@ -77,6 +99,10 @@ export class ReverseLedgerEntryDto {
 /** One ledger entry, as the driver page shows it. */
 export class LedgerEntryDto {
   id: string;
+  /** The short number people use, e.g. 1042 in "CH-1042". */
+  entryNo: number;
+  /** The reference shown on screen: `CH-1042` (charge), `CR-…` (credit), `PM-…` (payment), `RV-…` (reversal). */
+  ref: string;
   driverId: string;
   @ApiProperty({ enum: LedgerDirection, enumName: "LedgerDirection" })
   direction: LedgerDirection;
@@ -90,6 +116,10 @@ export class LedgerEntryDto {
   paymentId: string | null;
   /** The entry this one cancels (reversals only). */
   reversalOfId: string | null;
+  /** The charge this credit is applied against, if any. */
+  appliesToId: string | null;
+  /** The staff-only note typed with the entry, if any. */
+  internalNote: string | null;
   /** The reversal that cancelled this entry, if any. */
   reversedById: string | null;
   /** True when an admin may reverse it here: not a reversal, not a payment credit, not reversed already. */

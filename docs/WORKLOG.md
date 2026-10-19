@@ -4,6 +4,66 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-19 — Configurable ledger presets (B86, D66)
+- **Branch** `feature/ledger-page` (same worktrees, slot 2). **Not committed, not merged, not deployed.**
+- **Backend:** new `src/ledger-presets/` (entity, service, controller `/ledger-presets`, DTOs); migration
+  `CreateLedgerPresets` with the client's starting list (18 rows; reverts cleanly); 11 new e2e tests.
+- **Frontend:** Settings card "Ledger presets" (add, edit, delete, up/down arrows) and the preset cards (name and amount) in
+  the New ledger entry window, replacing the text chips; clicking a card fills the description and, when set, the amount.
+- **Verified:** backend e2e 217 passed, unit 131, lint and build clean; frontend lint, prettier and build clean. Browser:
+  Settings shows 12 charge and 6 credit presets; added "Test fee" $12.50, moved it up twice, changed it to $20, deleted it;
+  window cards in the new order; "Late fee" fills 25.00 and "Late payment fee", "Toll" (no amount) leaves the amount;
+  the credit tab shows only credit presets; "credit against a charge" shows no cards; no console errors.
+- **Not done:** "Weekly rent" and "Day credit - vehicle down" presets (need the rate: M2, B88).
+
+---
+
+### 2026-10-19 — Ledger entry window aligned with the client's mockup (B86, D65)
+- **Branch** `feature/ledger-page` (same worktrees, slot 2). **Not committed, not merged, not deployed.**
+- **Backend:** migration `LedgerNotes` (`ledger_entries.internal_note`, `payments.description`, `payments.internal_note`, CHECKs);
+  `internalNote` on manual entries and payments, `description` on payments; the payment credit copies the note and uses the
+  description; search also finds notes; list, details and payment DTOs return them.
+- **Frontend:** one `NewEntryDialog` (three tabs, mockup field order, Method chips, balance preview in the footer) replaces
+  `AddLedgerEntryDialog` and `RecordPaymentDialog`; ✎ and the note in the table and details; the statement shows no note.
+- **Verified:** backend e2e 206 passed, unit 131, lint and build clean; frontend lint, prettier and build clean. Browser:
+  payment tab opens prefilled with $257.14 and "Owes $257.14 → Settled"; a charge with a chip, description and note shows
+  ✎ and the note in the details; a cash payment with its own description and note; the statement has no note; the driver
+  page's "Add entry" opens the same window; no console errors.
+- **Demo data:** the slot-2 copy database now has extra entries on Andre Whitfield (a $85 flat tire and a $100 cash payment
+  with notes) from this walkthrough.
+- **Not done:** "Text the driver" checkbox (M6).
+
+---
+
+### 2026-10-19 — Driver ledger page and payments by hand (B86, B79, D64)
+- **Branch** `feature/ledger-page` in both repos, worktrees `wt-ledger-page-backend` / `-frontend` (slot 2: backend :5002,
+  frontend :5175, databases `car_rental_ledger_page` / `_test`). **Not committed, not merged, not deployed.**
+- **Backend:** migration `LedgerPageRefsAndManualPayments` (`ledger_entries.entry_no` identity, `applies_to_id` + CHECK,
+  `payments.manual_method` + CHECK; existing rows numbered in the order written, the append-only trigger did not block it).
+  `GET /drivers/:id/ledger` with filters, refs, totals; `/overview` (aging, last payment); `/entries/:entryId`
+  (details); credit against a charge (`appliesToId`, locked, limited); `POST /payments/manual`, `POST /payments/:id/void`.
+  New: `aging.ts`, `ledger-ref.ts`, `common/money.ts`, `common/recent-day.ts`.
+- **Frontend:** page `/admin/drivers/:id/ledger` (header, aging tiles, register with filters, details window, dialogs),
+  statement page, ⋯ menu on the Drivers list (`RowActionsMenu`, portal), reason chips, payment dialogs, "Manual · Cash" on
+  the Payments page. Layout fix: `min-w-0` on the content column (a wide table stretched the page); table card controls wrap.
+- **Verified:** backend `npm run test:e2e` 198 passed (3 runs), `npm test` 131, lint and build clean; frontend lint, prettier
+  and build clean. Browser walkthrough (built-in browser, local copy of the dev database, Abulkalam signed in): menu and
+  row click, aging tiles ($25 / $85 / $300 at 40 days), search and URL, charge with a chip and a backdated running balance,
+  credit against a charge (prefilled, over-limit refused, partial), reversing a charge with a credit refused, entry
+  details and links, Zelle warning and the duplicate prompt, cash payment (on the Payments page as "Manual · Cash"), void
+  (balance back), statement, sort toggle; no console errors. A real print preview was not tried (print rules checked in
+  the stylesheet only).
+- **Found and fixed on the way:** two simultaneous requests with the same key could answer "possible duplicate" instead of
+  returning the one payment (the duplicate check now ignores the request's own payment); two sibling dialogs had the same
+  React key.
+- **Not done:** the mockup's billing parts (B88, with M2); manual-first, email-later double credit (B87); the table needs
+  about 1,450 px before it stops scrolling sideways inside its card.
+- **Shared files for the merge order:** `DriversList.tsx`, `App.tsx`, `src/api/schema.d.ts`, `openapi.json`,
+  `payment.dto.ts` (B85 add-driver chat touches the first two). The branch merged second merges `dev` first and runs
+  `npm run openapi:export` + `npm run api:generate`.
+
+---
+
 ### 2026-10-19 — Staging deploy: "Live" badge removed (B84)
 - **Merged:** backend PR #20 (`53598d8`, docs only) and frontend PR #14 (`5e68eee`) into `dev`.
 - **Deployed** with the Deployment steps from the `deploy-*` worktrees: backend `53598d8` (2026-10-19 10:44 UTC), frontend `5e68eee` (10:49 UTC). Railway: both `SUCCESS`; backend log: no pending migrations, app started.

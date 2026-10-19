@@ -12,8 +12,13 @@ import {
 import { CurrentUser } from "../auth/current-user.decorator.js";
 import type { AuthenticatedUser } from "../auth/jwt-auth.guard.js";
 import { AssignPaymentDto } from "./dto/assign-payment.dto.js";
+import { RecordPaymentDto, VoidPaymentDto } from "./dto/record-payment.dto.js";
 import { ListPaymentsQueryDto } from "./dto/list-payments-query.dto.js";
-import { AssignPaymentResultDto, PaymentListDto } from "./dto/payment.dto.js";
+import {
+  AssignPaymentResultDto,
+  PaymentDto,
+  PaymentListDto,
+} from "./dto/payment.dto.js";
 import { PaymentsService } from "./payments.service.js";
 
 /** Admin payment routes under `/payments`. All need a logged-in admin (global JwtAuthGuard). */
@@ -25,6 +30,33 @@ export class PaymentsController {
   @Get()
   list(@Query() query: ListPaymentsQueryDto): Promise<PaymentListDto> {
     return this.payments.list(query);
+  }
+
+  /**
+   * `POST /payments/manual`: records a payment an admin received by hand (cash, check, card, or any method) and
+   * credits the driver's ledger. `201` the payment (also when the same `requestKey` is sent again); `400` bad
+   * amount or date, unknown driver; `409` a possible duplicate (body has `code: "possible_duplicate"` and the
+   * payment found; send `confirmDuplicate: true` to record anyway), the key reused, or the reference used before.
+   */
+  @Post("manual")
+  recordManual(
+    @Body() body: RecordPaymentDto,
+    @CurrentUser() admin: AuthenticatedUser,
+  ): Promise<PaymentDto> {
+    return this.payments.recordManual(body, admin.id);
+  }
+
+  /**
+   * `POST /payments/:id/void`: voids a payment recorded by hand and reverses its ledger credit. `201` the payment;
+   * `404` unknown payment; `409` not a manual payment, or already voided.
+   */
+  @Post(":id/void")
+  voidManual(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() body: VoidPaymentDto,
+    @CurrentUser() admin: AuthenticatedUser,
+  ): Promise<PaymentDto> {
+    return this.payments.voidManual(id, body.reason, admin.id);
   }
 
   /**
