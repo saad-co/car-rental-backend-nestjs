@@ -677,3 +677,78 @@ was planned first and dropped when approve needed the same.
   bar above the table (chips for search, filters and dates, each removable, plus Clear all). The view stays in the URL.
 - No presets ("Last 7 days") for now; the driver ledger table has no date filter (it has its own period summary).
 **Why:** client revision, batch 2. Chicago days because every time in the app is shown in Chicago (spec 3, rule 4).
+
+### D64 — 2026-10-19 — Driver ledger page: references, filters, aging, credit against a charge, payments by hand (B86, B79; Abulkalam)
+- **Page:** `/admin/drivers/:id/ledger`, opened from a "⋯" menu (View ledger, View driver) at the end of each row of the
+  Drivers list, and from "Open full ledger" on the driver page. Built from the client's mockup (`gonzocar-ledger.html`),
+  in our own TailAdmin look. The old ledger card on the driver page stays as a short view.
+- **References:** each entry gets a short number from the database (`entry_no`, an identity column: never repeats, never
+  changes). Shown as `CH-1042` (charge), `CR-…` (credit), `PM-…` (payment), `RV-…` (reversal); the search box finds them.
+  The number is the entry; the letters are only for reading.
+- **List:** `GET /drivers/:id/ledger` takes `type` (charges, credits, payments, reversals), `from`/`to` (the days the
+  entries belong to), `search`, `order`. The running balance is worked out over the whole history *before* filtering, so a
+  filter never changes a row's balance. The response has totals of the filtered entries and the balance before `from`
+  (the opening balance of a statement).
+- **Aging** (`GET /drivers/:id/ledger/overview`): what is owed by how old the charges are (0–6, 7–13, 14–29, 30+ days),
+  **first in, first out**: all credits form one pool that pays the oldest charges first, by the day each charge belongs
+  to (`effective_date`). A reversed entry and its reversal are left out (together they are zero). The four buckets add up
+  to what the driver owes; a driver who paid ahead shows none.
+- **Credit against a charge** (`appliesToId` on a manual credit): links a credit to the charge it reduces (a waived late
+  fee). The charge is locked while the credit is checked, so two admins can never credit more than the charge was; the
+  amount is at most what is left. A charge that still has credits cannot be reversed until they are (409), or the driver
+  would get the charge back and keep the credit.
+- **Payments by hand** (`POST /payments/manual`, B79): a `manual` payment, confirmed at once, credited in the same
+  transaction, so it shows on the Payments page. All methods are allowed (cash, check, card, money order, Zelle, Cash
+  App, Venmo, Stripe, Chime, other; `payments.manual_method`). A reference is unique among manual payments. A payment
+  of the same amount on the driver within three Chicago days is a warning (409 `possible_duplicate`) the admin can
+  confirm ("Record anyway"), because Zelle, Cash App and Venmo payments normally arrive by email and are credited by
+  themselves. **Void** (`POST /payments/:id/void`): the payment becomes `rejected` and its credit is reversed (a reversal
+  entry with the reason); only for manual payments (email payments are reassigned on the Payments page).
+- **Statement:** a printable page `/admin/drivers/:id/ledger/statement` (period in the URL, 90 days by default).
+- **Left out on purpose (not in the mockup's scope for now):** the AI agent, "Acting as", the Approvals queue and its
+  $50 limit (no ledger agent exists); Fleet Balances (belongs to the dashboard, M7); texting the driver about an entry
+  (M6); market, vehicle, plate and deposit (not in our data); editable internal notes (entries never change); an
+  automatic $25 late fee (spec section 12: no late-fee logic in Phase 1); item presets with default amounts (D61: reason
+  only; the form has reason chips that only type text). The billing parts (rate, Pause billing, Run weekly billing, rent
+  rows, day credit by rate) come with M2 (B88).
+**Why:** the client wants the ledger to work like an account register with a driver's aging at the top. The database
+keeps the numbers, the order and the limits (identity, unique keys, CHECKs, the row lock); the screen only shows them.
+Allowing every payment method was Abulkalam's choice; the warning and the three-day check are the guard against a double
+credit, which is only caught when the manual payment is recorded **after** the email one (B87).
+
+### D65 — 2026-10-19 — "New ledger entry" follows the client's mockup: one window, three tabs, description and internal note (B86; Abulkalam)
+- Abulkalam compared our dialogs with the client's mockup and decided to **follow the client's layout and fields**, in our
+  TailAdmin look, and to **deviate from D61 where the client's fields need it**. No side drawer: the entry details stay a
+  centred window.
+- **One window** with three tabs (+ Charge, + Credit, + Payment), opened by the three buttons or the driver page's "Add
+  entry". Fields in the mockup's order: reason chips (charge, credit) or **Method** chips (payment); amount (a payment starts at
+  what the driver owes); the date; **Description** (shows on the driver statement); **Reference / confirmation #** (payment);
+  **Internal note** (staff only); footer "Balance X → Y" and "Post charge / Post credit / Record payment". Method order is
+  the client's (Stripe, Zelle, Cash App, Cash, Card (in office), Check) plus Other for anything unusual (Venmo, Chime and
+  Money order are not offered; the API still accepts them); the default stays Cash, because the email methods trigger the
+  duplicate warning.
+- **Description:** for a charge or credit it is the old `reason` (API name kept). For a payment it is optional; empty keeps the
+  automatic text. Stored on `payments.description`, used for the ledger credit.
+- **Internal note:** `ledger_entries.internal_note` and, for payments recorded by hand, `payments.internal_note` (copied to the
+  credit). **Written once, with the entry, never changed** (the ledger stays append-only). Up to 500 characters, not blank
+  (database CHECKs). Shown in the entry details and as ✎ in the table, found by the search box, **never on the statement**.
+- The footer's "Balance X → Y" adds or subtracts whole cents on the screen for display only (a small exception to "no
+  money maths in the UI"); the server decides the real balance.
+- **Still left out:** "Text the driver a notice" (needs M6), item presets with default amounts, an automatic late fee.
+**Why:** the client's mockup is what they expect to see; the database keeps the limits and the order, the screen only shows
+them.
+
+### D66 — 2026-10-19 — Charge and credit presets, configurable in Settings (B86; Abulkalam)
+- The client's mockup has preset cards (name and default amount) in the "New ledger entry" window. Abulkalam decided to follow
+  it and to make the list **configurable by admins in Settings**. This brings back default amounts, which D61 had removed;
+  D61's other rule stays: **no stored category**. A preset only fills in the description and the amount while an entry is
+  being made; nothing about it is stored on the entry, so editing or deleting a preset never changes an old entry.
+- Table `ledger_presets`: `kind` (charge or credit), `name` (unique per kind), optional `amount_cents` (1 to $10,000, the
+  manual-entry cap), `description` (what the Description box is filled with), `position`. Routes `/ledger-presets` (list, add,
+  edit, delete, `PUT /order` for the arrows). Settings has a "Ledger presets" card (Charges and Credits) like the message
+  templates. No "keep one" rule: with none, the window shows no cards.
+- **Starting list** (migration): the client's, from their mockup, plus "Opening balance" (B80). **Not seeded:** "Weekly rent" and
+  "Day credit - vehicle down", which need the driver's rate; they come with rent billing (M2, B88).
+- Payment methods are **not** configurable: the form offers the client's six plus Other (D65).
+**Why:** the client expects the mockup's cards, and the list will change over time (new fee types); admins can now do that
+without a code change.

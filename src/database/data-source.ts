@@ -4,6 +4,7 @@ import { PaymentAlias } from "../aliases/payment-alias.entity.js";
 import { Application } from "../applications/application.entity.js";
 import { ApplicationDocument } from "../applications/documents/application-document.entity.js";
 import { ApplicationNote } from "../applications/notes/application-note.entity.js";
+import { LedgerPreset } from "../ledger-presets/ledger-preset.entity.js";
 import { MessageTemplate } from "../message-templates/message-template.entity.js";
 import { Driver } from "../drivers/driver.entity.js";
 import { LedgerEntry } from "../ledger/ledger-entry.entity.js";
@@ -35,6 +36,7 @@ export default new DataSource({
     SmsAttachment,
     ApplicationDocument,
     ApplicationNote,
+    LedgerPreset,
     MessageTemplate,
     LedgerEntry,
   ],

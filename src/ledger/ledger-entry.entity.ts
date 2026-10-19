@@ -54,6 +54,8 @@ export const MAX_ENTRY_CENTS = 100_000_000;
   "createdAt",
 ])
 @Index("ledger_entries_payment_idx", ["paymentId"])
+// Finds the credits applied against one charge.
+@Index("ledger_entries_applies_to_idx", ["appliesToId"])
 @Check(
   "ledger_entries_amount_range",
   `"amount_cents" > 0 AND "amount_cents" <= ${MAX_ENTRY_CENTS}`,
@@ -77,9 +79,39 @@ export const MAX_ENTRY_CENTS = 100_000_000;
   "ledger_entries_adjustment_shape",
   `"kind" <> 'adjustment' OR "created_by_id" IS NOT NULL`,
 )
+// A staff note, when there is one, is not blank and not longer than a description.
+@Check(
+  "ledger_entries_internal_note_shape",
+  `"internal_note" IS NULL OR length(btrim("internal_note")) BETWEEN 1 AND ${MAX_DESCRIPTION_LENGTH}`,
+)
+// Only a credit entered by an admin can be applied against a charge, never against itself.
+@Check(
+  "ledger_entries_applies_to_shape",
+  `"applies_to_id" IS NULL OR ("kind" = 'adjustment' AND "direction" = 'credit' AND "applies_to_id" <> "id")`,
+)
 export class LedgerEntry {
   @PrimaryGeneratedColumn("uuid")
   id: string;
+
+  /**
+   * A short number for people ("CH-1042" on screen). Made by the database (an identity column), so it never repeats
+   * and, because rows never change, never changes. `insert: false`: the code never sends it, Postgres fills it in.
+   * bigint comes back from the driver as a string, hence the transformer.
+   */
+  @Column({
+    name: "entry_no",
+    type: "bigint",
+    generated: "identity",
+    generatedIdentity: "ALWAYS",
+    insert: false,
+    update: false,
+    unique: true,
+    transformer: {
+      to: (value: number) => value,
+      from: (value: string) => Number(value),
+    },
+  })
+  entryNo: number;
 
   @Column({ name: "driver_id", type: "uuid" })
   driverId: string;
@@ -106,6 +138,18 @@ export class LedgerEntry {
   /** What it is and why, e.g. "Venmo payment from J. Smith" or the admin's reason. */
   @Column({ type: "varchar", length: MAX_DESCRIPTION_LENGTH })
   description: string;
+
+  /**
+   * A note for staff only (the client's "Internal note"), typed when the entry is made and never changed: entries are
+   * append-only. Never printed on a driver's statement.
+   */
+  @Column({
+    name: "internal_note",
+    type: "varchar",
+    length: MAX_DESCRIPTION_LENGTH,
+    nullable: true,
+  })
+  internalNote: string | null;
 
   /**
    * The calendar day the money belongs to, in America/Chicago ("YYYY-MM-DD"). Weekly and monthly summaries group by
@@ -135,6 +179,17 @@ export class LedgerEntry {
   @ManyToOne(() => LedgerEntry, { onDelete: "RESTRICT" })
   @JoinColumn({ name: "reversal_of_id" })
   reversalOf?: LedgerEntry | null;
+
+  /**
+   * The charge this credit is applied against ("credit against this charge", e.g. a waived late fee). The charge
+   * keeps its row; its "left to credit" is its amount minus the active credits pointing at it.
+   */
+  @Column({ name: "applies_to_id", type: "uuid", nullable: true })
+  appliesToId: string | null;
+
+  @ManyToOne(() => LedgerEntry, { onDelete: "RESTRICT" })
+  @JoinColumn({ name: "applies_to_id" })
+  appliesTo?: LedgerEntry | null;
 
   /**
    * The admin who made it; null for the system (matching). RESTRICT, not SET NULL: SET NULL would be an UPDATE of
