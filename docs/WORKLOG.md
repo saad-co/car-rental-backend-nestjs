@@ -7,7 +7,7 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 ### 2026-10-19 — Chat: "Live" badge removed (B81); attachments not possible (B82)
 - **Done (frontend):** `ConversationCard` shows no badge in `live`; the dry-run and off warnings stay.
 - **Not done:** sending files from the chat (B82): Quo's API cannot send media.
-- **Verified:** frontend lint and build. Not deployed.
+- **Verified:** frontend lint and build. Browser walkthrough 2026-10-19 (frontend on port 5175/5176, local backend in `dry_run`, signed in by Abulkalam): application and driver pages show the yellow "Dry run: texts are saved, not sent" badge in `dry_run`; with `/sms/status` reported as `live` (a throwaway local proxy, the backend never ran live) the chat header shows only avatar, name and phone, no badge; no console errors from the app. Not deployed.
 - **Branch:** `fix/chat-live-badge` (frontend code, backend docs), worktrees `wt-chat-live-badge-*` (no database or ports needed).
 
 ---
