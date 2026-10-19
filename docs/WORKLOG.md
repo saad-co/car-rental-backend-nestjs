@@ -4,6 +4,33 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-19 — One ledger, no Weekly/Monthly tabs, amount search (B86, D67)
+- **Branches:** backend `fix/ledger-amount-search`, frontend `fix/one-ledger` (from `origin/dev`). Not merged, not deployed. The
+  modal height fix is a separate frontend PR (#16, `fix/modal-max-height`).
+- **Backend:** the ledger search also matches an amount (`parseAmountToCents` in `src/common/money.ts`; exact cents, no floats);
+  one new e2e test, unit tests for the parser; e2e 218, unit 134, lint and build clean; `openapi.json` (one comment) exported.
+- **Frontend:** removed the ledger card from the driver detail page (a "View ledger" button replaces it) and the Weekly / Monthly
+  tabs from the ledger page; deleted `LedgerCard`, `LedgerSummaryTab` and the old paged-list and summary hooks; search hint now
+  says "Search text, amount ($85) or CH-1042". Prettier, lint, build clean; checked in the browser (local copy database).
+- **Not done:** the backend `/ledger/summary` route is kept, unused.
+
+---
+
+### 2026-10-19 — Staging deploy: driver ledger page (B79, B86, D64–D66)
+- **Merged into `dev`:** backend PR #22 (`ebfdd18`), frontend PR #15 (`e13a38b`), branch `feature/ledger-page`. The three
+  entries below (ledger page, dialog alignment, presets) say "not committed / not deployed": that is now out of date, they
+  are merged and on staging.
+- **Deployed** to Railway staging by hand: backend `ebfdd18`, frontend `e13a38b` (deploy folders on those commits, clean).
+- **Migrations run by the pre-deploy step** (all three confirmed in `railway logs`): `LedgerPageRefsAndManualPayments`,
+  `LedgerNotes`, `CreateLedgerPresets` (18 preset rows seeded).
+- **Checked on staging, read only:** `/admin/drivers` has the "⋯" column (View ledger, View driver); a driver's ledger page
+  loads real data (refs, running balance, aging tiles, totals); the + Charge window shows the 12 seeded charge cards; Settings
+  lists 18 presets; no console errors; backend logs show no errors.
+- **Not done:** nothing was written on staging (no charge, payment or preset change). The demo drivers exist only in the
+  local copy database. Next feature: rent billing (M2, B88).
+
+---
+
 ### 2026-10-19 — Configurable ledger presets (B86, D66)
 - **Branch** `feature/ledger-page` (same worktrees, slot 2). **Not committed, not merged, not deployed.**
 - **Backend:** new `src/ledger-presets/` (entity, service, controller `/ledger-presets`, DTOs); migration

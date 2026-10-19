@@ -752,3 +752,15 @@ them.
 - Payment methods are **not** configurable: the form offers the client's six plus Other (D65).
 **Why:** the client expects the mockup's cards, and the list will change over time (new fee types); admins can now do that
 without a code change.
+
+### D67 — 2026-10-19 — One ledger: the page only, no Weekly / Monthly tabs; the search finds amounts (B86; Saad, Abulkalam)
+- **Context:** after the ledger page shipped, Saad asked that the small ledger on the driver's detail page be removed ("only one
+  detailed ledger"), and Abulkalam that the Weekly and Monthly tabs are not required. Saad also asked that the search can
+  find an amount and show the entries of exactly that amount.
+- **Decision:** the driver detail page no longer has a ledger card; it has a "View ledger" button next to Deactivate. The ledger
+  page has only the register (no Weekly / Monthly tabs). This supersedes the card and the weekly / monthly summaries of D58.
+  The backend route `GET /drivers/:id/ledger/summary` stays (unused by the UI for now); the UI code for it was deleted.
+- The ledger search (`?search=`) also matches an amount: `85`, `85.5`, `$85.00` and `1,250` find the entries whose amount is
+  **exactly** that (in cents, integer maths), in addition to the existing text matches. Not "contains": `85` does not find $850.
+**Why:** one place for the ledger avoids two screens that must be kept in step; the weekly and monthly views were not asked for
+by the client's mockup flow in use.

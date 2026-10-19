@@ -29,7 +29,8 @@ export enum LedgerOrder {
 /**
  * Query of `GET /drivers/:id/ledger`: paging, a text search, a date range and a type filter. The dates are the days
  * the entries belong to (`effectiveDate`, plain Chicago calendar days), both included. The search finds a reference
- * (`CH-1042`) or text in the description and in the email of the admin who entered it.
+ * (`CH-1042`), an amount (`85`, `$85.00`: entries of exactly that amount) or text in the description, the internal
+ * note and the email of the admin who entered it.
  */
 export class LedgerListQueryDto extends DateRangeQueryDto {
   /** Only this type of entry. Omit for all. */
