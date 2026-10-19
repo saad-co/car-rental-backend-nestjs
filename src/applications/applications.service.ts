@@ -1,3 +1,4 @@
+import { addDateRange } from "../common/date-range.js";
 import {
   BadRequestException,
   ConflictException,
@@ -205,6 +206,8 @@ export class ApplicationsService {
     if (query.status) {
       builder.andWhere("a.status = :status", { status: query.status });
     }
+    // The "received" day: when the application came in (B82).
+    addDateRange(builder, "a.createdAt", query);
     if (query.search) {
       const digits = phoneDigits(query.search);
       builder.andWhere(
