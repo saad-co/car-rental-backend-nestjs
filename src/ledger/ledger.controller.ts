@@ -35,7 +35,7 @@ export class LedgerController {
 
   /**
    * `GET /drivers/:id/ledger`: one page of entries, each with the balance after it, plus the balance now and the
-   * totals of the filtered entries. Filters: `type`, `from`, `to`, `search` (text or a reference like `CH-1042`);
+   * totals of the filtered entries. Filters: `type`, `from`, `to`, `search` (text, an amount like `$85.00`, or a reference like `CH-1042`);
    * `order=asc|desc` (default newest first). `400` bad dates or `from` after `to`; `404` unknown driver.
    */
   @Get()

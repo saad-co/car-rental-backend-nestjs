@@ -24,7 +24,7 @@ import {
   LedgerEntryKind,
   MAX_DESCRIPTION_LENGTH,
 } from "./ledger-entry.entity.js";
-import { formatCents } from "../common/money.js";
+import { formatCents, parseAmountToCents } from "../common/money.js";
 import { assertRecentDay } from "../common/recent-day.js";
 import { likePattern } from "../common/search.js";
 import { ageBalance } from "./aging.js";
@@ -479,8 +479,8 @@ export class LedgerService {
    * `order=asc` flips every part of that order.
    *
    * Filters (all optional, all in the database): the type of entry, the days the entries belong to (`from`, `to`,
-   * plain calendar days), and a search: a reference like `CH-1042`, or text in the description or the email of the
-   * admin who entered it.
+   * plain calendar days), and a search: a reference like `CH-1042`, an amount like `85` or `$85.00` (the entries of
+   * exactly that amount), or text in the description, the internal note or the email of the admin who entered it.
    * @throws NotFoundException unknown driver.
    * @throws BadRequestException `from` after `to`.
    */
@@ -602,9 +602,15 @@ export class LedgerService {
         conditions.push(`h.entry_no = ${param(entryNo)}`);
       } else {
         const pattern = param(likePattern(query.search));
-        conditions.push(
-          `(h.description ILIKE ${pattern} OR h.internal_note ILIKE ${pattern} OR u.email ILIKE ${pattern})`,
-        );
+        const matches = [
+          `h.description ILIKE ${pattern}`,
+          `h.internal_note ILIKE ${pattern}`,
+          `u.email ILIKE ${pattern}`,
+        ];
+        // An amount (`85`, `$85.00`) also finds the entries of exactly that amount, not "contains 85".
+        const cents = parseAmountToCents(query.search);
+        if (cents !== null) matches.push(`h.amount_cents = ${param(cents)}`);
+        conditions.push(`(${matches.join(" OR ")})`);
       }
     }
     return { where: conditions.join(" AND "), params };

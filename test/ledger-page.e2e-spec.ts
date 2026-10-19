@@ -150,6 +150,28 @@ describe("Driver ledger page: filters, refs, credit against a charge (B86, test 
       expect(await ids("nothing like this")).toEqual([]);
     });
 
+    it("finds the entries of exactly the amount typed, with or without $ and cents, not ones that merely contain it", async () => {
+      const { flat, reversal } = await seed();
+      const found = async (text: string) =>
+        (await list({ search: text })).items.map((i) => i.description);
+      // The $85 charge and the reversal that cancels it.
+      expect(
+        (await list({ search: "85" })).items.map((i) => i.id).sort(),
+      ).toEqual([flat.id, reversal.id].sort());
+      expect((await list({ search: "$85.00" })).total).toBe(2);
+      expect(await found("25")).toEqual(["Late fee"]);
+      expect(await found("40.00")).toEqual(["Referral discount"]);
+      expect((await list({ search: "30" })).items.map((i) => i.kind)).toEqual([
+        "payment",
+      ]);
+      // $8.50, $850 and $8 are other amounts than $85: no "contains" matching on the number.
+      expect(await found("8.50")).toEqual([]);
+      expect(await found("850")).toEqual([]);
+      expect(await found("8")).toEqual([]);
+      // An amount past the database's integer is just text, not an error.
+      expect(await found("99999999999")).toEqual([]);
+    });
+
     it("finds an entry by its reference", async () => {
       const { flat, reversal } = await seed();
       const byRef = async (text: string) =>
