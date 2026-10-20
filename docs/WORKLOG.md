@@ -4,6 +4,25 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-20 — Staging deploy: add an application by hand, payment aliases (B85, B52, D68, D69)
+- **Merged:** backend PR #24 (`14128c4`) and frontend PR #18 (`fe5021c`) into `dev`.
+- **Deployed** by Abulkalam with the Deployment steps from the `deploy-*` worktrees (detached at `origin/dev`): backend
+  `14128c4`, frontend `fe5021c`. The deploy also carried the ledger page work already on `dev` (D64-D67; migrations
+  `LedgerPageRefsAndManualPayments`, `LedgerNotes`, `CreateLedgerPresets`) together with `AddManualApplications`.
+- **Checked on staging (read-only, signed in as `admin@admin.com`):** the Applications list has "Add application"; the form
+  page has the three sections and no vehicle field; the API returns `origin` / `uploadedByEmail` on documents,
+  `createdBy` on an application and `id` on aliases (so the migration ran); an empty `POST /applications/manual` and an
+  empty `POST /drivers/:id/aliases` answer 400 and create nothing; a real driver's page shows its Zelle alias with a remove
+  button and the add form with the seven methods. `GET /sms/status`: `live`, Quo and the file bucket configured.
+- **Not checked on staging:** a real save. Staging texts are `live`, so a test application sends a real alert text to the
+  staff number (D53), and approving one texts its phone; the client tests it by hand. Locally the whole flow (save, files,
+  replace, approve, aliases) was walked through (see the two entries below).
+- **Local clean-up still to do (only when asked):** worktrees `wt-manual-add-driver-backend` / `-frontend` and the
+  databases `car_rental_manual_add_driver` / `_test`.
+- **Next:** rent billing (M2).
+
+---
+
 ### 2026-10-20 — Payment aliases on the driver page: add and remove (B52, D69; part 2 of B85)
 - **Branch** `feature/manual-add-driver` (same PRs as part 1: backend #24, frontend #18), as separate commits.
 - **Backend:** `POST /drivers/:id/aliases` ({ type, value }) and `DELETE /drivers/:id/aliases/:aliasId`, both return the
