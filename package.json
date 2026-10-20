@@ -78,6 +78,7 @@
     "@types/express": "^5.0.0",
     "@types/html-to-text": "^9.0.4",
     "@types/mailparser": "^3.9.0",
+    "@types/multer": "^2.3.0",
     "@types/node": "^24.0.0",
     "@types/nodemailer": "^8.0.2",
     "@types/pg": "^8.23.1",

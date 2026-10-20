@@ -5,6 +5,7 @@ import { DataSource } from "typeorm";
 import type { FileStorage } from "../../sms/storage/file-storage.js";
 import {
   ApplicationDocument,
+  ApplicationDocumentOrigin,
   ApplicationDocumentStatus,
 } from "./application-document.entity.js";
 import { DocumentSourceError, type DocumentSource } from "./document-source.js";
@@ -143,18 +144,31 @@ export class ApplicationDocumentCopier {
   ): Promise<CopySummary> {
     const documents = this.dataSource.getRepository(ApplicationDocument);
     const pending = await documents.find({
-      where: { status: ApplicationDocumentStatus.pending },
+      where: {
+        status: ApplicationDocumentStatus.pending,
+        origin: ApplicationDocumentOrigin.website,
+      },
       order: { createdAt: "DESC" }, // newest applications first: they are the ones staff are opening
       take: BATCH_SIZE,
     });
 
     const summary: CopySummary = { stored: 0, retryLater: 0, failed: 0 };
     for (const document of pending) {
+      // An admin may upload into this slot while the (slow) copy below is running. Both updates therefore only apply
+      // if the row is still the pending website copy it was when we started; otherwise the admin's file wins (D64).
+      const stillOurs = {
+        id: document.id,
+        status: ApplicationDocumentStatus.pending,
+        origin: ApplicationDocumentOrigin.website,
+      };
       try {
-        const file = await source.fetch(document.sourcePath);
-        const extension = /\.([A-Za-z0-9]{1,5})$/.exec(
-          document.sourcePath,
-        )?.[1];
+        // The database CHECK guarantees a website copy has its path; this only tells TypeScript.
+        const sourcePath = document.sourcePath;
+        if (sourcePath === null) {
+          throw new Error("A website copy has no source path.");
+        }
+        const file = await source.fetch(sourcePath);
+        const extension = /\.([A-Za-z0-9]{1,5})$/.exec(sourcePath)?.[1];
         const key = `applications/${document.applicationId}/${document.kind}-${document.id}${extension ? `.${extension.toLowerCase()}` : ""}`;
         const contentType =
           file.contentType ??
@@ -162,13 +176,21 @@ export class ApplicationDocumentCopier {
             ? (TYPE_BY_EXTENSION[extension.toLowerCase()] ?? null)
             : null);
         await storage.put(key, file.body, contentType);
-        await documents.update(document.id, {
+        const result = await documents.update(stillOurs, {
           status: ApplicationDocumentStatus.stored,
           storageKey: key,
           sizeBytes: file.body.length,
           contentType,
           lastError: null,
         });
+        if (result.affected === 0) {
+          // An admin uploaded into this slot meanwhile. Their file stays; remove the copy we just made.
+          this.logger.warn(
+            `Document ${document.id} was replaced by an admin during its copy; the copy was dropped.`,
+          );
+          await storage.delete(key);
+          continue;
+        }
         summary.stored++;
       } catch (error) {
         if (error instanceof DocumentSourceError && error.blocksAll) {
@@ -185,7 +207,7 @@ export class ApplicationDocumentCopier {
         const giveUp =
           (error instanceof DocumentSourceError && error.permanent) ||
           attempts >= MAX_DOCUMENT_ATTEMPTS;
-        await documents.update(document.id, {
+        await documents.update(stillOurs, {
           attempts,
           lastError: reason,
           status: giveUp

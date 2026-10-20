@@ -4,6 +4,52 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-19 — Add an application by hand, with documents (B85 part 1, D64)
+- **Branch** `feature/manual-add-driver` in both repos, worktrees `wt-manual-add-driver-backend` / `-frontend` (slot 1:
+  backend :5001, frontend :5174, databases `car_rental_manual_add_driver` / `_test`; the main `.env` copied with intake
+  off and `MAIL_MODE=log`). **Not committed, not pushed, no PRs** (waiting for the go-ahead).
+- **Backend:** migration `AddManualApplications` (`applications.created_by_id`; `application_documents.origin` /
+  `uploaded_by_id`, `source_path` nullable, CHECK `application_documents_origin_shape`; `down()` refuses while admin
+  uploads exist). `POST /applications/manual` (admin only, multipart: the website form's fields plus `license_file`,
+  `rating_file`, `earnings_file`; same `request_id` twice = one application). `PUT /applications/:id/documents/:kind`
+  fills or replaces a slot, a website copy included. File type by the first bytes (JPG/PNG/PDF), 10 MB, one plain error
+  sentence (multer's 413 turned into 400). The document copier's updates are now conditional, so a slow copy never
+  overwrites an admin upload. `ApplicationDetailDto.createdBy`; `ApplicationDocumentDto.origin` / `uploadedByEmail`;
+  `@types/multer` added and `"multer"` in `tsconfig.json` `types`. Approve/reject return the detail through `findOne`
+  (so `createdBy` is there).
+- **Frontend:** page `/admin/applications/new` (one form, four cards, the website's questions and rules; "Add
+  application" button on the list); Documents tab shows all three slots with Upload / Replace (replace asks first) and
+  "Uploaded by"; "Added by" in the Submission card; lease length shows the words for `mediano` / `largo`. TailAdmin
+  pieces copied: FileInput, Radio, DatePicker (single day), plus.svg.
+- **Verified:** backend lint, build, 120 unit + 201 e2e (new: 36 in `application-manual`, 6 upload cases and the CHECK in
+  `application-documents`, `sniff-file-type`); migration run, revert, run, no drift. Real HTTP on :5001 with curl:
+  valid submit, repeat, no licence, text-as-PNG, 11 MB, replace, 401 without a login. Frontend lint (2 old warnings),
+  build. **Browser walkthrough** (signed in with a throwaway local test admin `qa-admin@test.local` that exists only in
+  the worktree database, not Abulkalam's account): list button; empty Save marks 18 answers and sends nothing; age 24 and
+  ZIP 123 marked; a text file named .png refused with the server's sentence; a fake applicant with a real PNG and a PDF
+  saved and opened ("Added by", Driving / Rental tabs like a website one, both files open); replace licence (confirm
+  dialog, cancel sends nothing); upload into an empty slot; upload onto an older application; approve → driver
+  `onboarding` with a login and two dry-run texts; mobile width. The walkthrough found one bug (the form's data was not
+  sent: with `body` left out `openapi-fetch` sends nothing), fixed. Console: only the expected 400s and one 401 at sign-in.
+- **2026-10-20 follow-up (Abulkalam: "use only the website's fields"):** walked through the live gonzocar.com form
+  with fake data, stopped before Submit (3 steps, not 4). Changes: vehicle preference removed; violations / accidents
+  are 0, 1, 2, 3+ (backend rule and page); the start-up amount only appears, and is then required, when funds = No
+  (backend `ValidateIf`; dropped from the stored payload when funds = Yes); the page is three numbered sections in the
+  website's order with inline errors (leave a field → error under it; fixes clear it live); labels as on the website.
+  Backend 120 unit + 208 e2e pass, lint and build clean; frontend lint (2 old warnings) and build clean; browser check:
+  age 24 → "Must be 25 or older", phone "Need 10 digits", skipped ZIP "Invalid ZIP code", error clears when fixed, amount
+  field only for No, a `3+` / Long term / capital 400 application saved and shown correctly.
+- **Left in the worktree database only:** the fake applicants `Browser Tester` (approved, a driver) and `Qa Tester`; fake
+  files in the local MinIO bucket under their application ids.
+- **Not done:** aliases on the driver page = **part 2 of this chat** (open part of B52), after part 1 is merged. B86
+  (website earnings files are lists and are not copied). Not deployed. Workspace `CLAUDE.md` "Current focus" to be
+  updated when merged.
+- **Merge order:** backend PR first (the frontend client is generated from it). New migration runs on deploy. Shared
+  files if another branch touches them: `applications.service.ts`, `ApplicationsList.tsx`, `ApplicationDetail.tsx`,
+  `ApplicationDocuments.tsx`, `src/api/schema.d.ts`, `App.tsx` (merge `dev` first, then `npm run api:generate`).
+
+---
+
 ### 2026-10-19 — Chat: "Live" badge removed (B84); attachments not possible with Quo (B83)
 - **Done (frontend):** `ConversationCard` shows no badge in `live`; the dry-run and off warnings stay.
 - **Not done:** sending files from the chat (B83): Quo's API cannot send media.

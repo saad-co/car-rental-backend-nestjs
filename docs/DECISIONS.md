@@ -677,3 +677,39 @@ was planned first and dropped when approve needed the same.
   bar above the table (chips for search, filters and dates, each removable, plus Clear all). The view stays in the URL.
 - No presets ("Last 7 days") for now; the driver ledger table has no date filter (it has its own period summary).
 **Why:** client revision, batch 2. Chicago days because every time in the app is shown in Chicago (spec 3, rule 4).
+
+### D64 — 2026-10-19 — An admin adds a driver by typing in an application; documents can be uploaded (B85; Abulkalam)
+- **No separate "create driver" path.** The admin adds an **application** (`POST /applications/manual`, admin only; the
+  public `POST /applications` stays for the website) and approves it from its page like any other. Approval already
+  makes the login, sends both texts and follows `SMS_MODE` (D52, D56), so a hand-added driver gets all of that, plus the
+  chat, notes and onboarding steps, with no second code path.
+- **Same form as gonzocar.com, one page (no steps), in its three sections** (Basic info, About you, Final verification),
+  with inline errors under each field (shown once the field is visited; Save marks the rest). Same questions and rules,
+  confirmed on 2026-10-20 by walking through the live 3-step form (stopped before Submit) and on 8 real staging
+  applications: phone, ZIP, age 25 or older, years driving, other companies (optional); first and last name, email,
+  street and number, apt (optional), city, start date, at least one platform; violations and accidents (0, 1, 2, 3+),
+  lease length, first week + deposit (yes/no; **only when No, "how much do you have to get started" is asked and
+  required**), insurance now and in the last 45 days, referred by, driver rating and its screenshot (optional),
+  licence photo required, weekly earnings and earnings documents (optional). **No vehicle preference**: on the website
+  it is a hidden value filled by the "I want this one" buttons, not a question, so the admin form does not ask it
+  (the field is accepted on website applications only). Stored in the website's own shape (payload keys and values, e.g. lease length as
+  `corto` / `mediano` / `largo`, `platforms` as a list) plus `source: "admin"`, so every screen shows both alike.
+  Choices are in `src/applications/manual/website-form.ts` and the frontend's `websiteForm.ts` (keep them equal).
+- **`applications.created_by_id`** (nullable FK to `users`, `SET NULL`): which admin added it; null = from the website.
+  The page shows "Added by <email>".
+- **The alert text to the staff phone (D53) is sent** for hand-added applications too (Abulkalam).
+- **Idempotent:** the form makes the `request_id` once; the same id twice stores nothing new (`created: false`).
+- **Documents:** three slots as on the website (licence, rating, earnings), one file each, JPG / PNG / PDF, at most
+  10 MB, **checked by the file's first bytes**, not by its name or the type the browser says. Stored in the same bucket
+  and table as the website copies (`application_documents`): new `origin` (`website` | `admin`), `source_path` may be
+  null for an admin file, `uploaded_by_id`; a CHECK ties them together. `PUT /applications/:id/documents/:kind` fills
+  or **replaces** a slot, a website copy included (the old object is removed after the row points at the new one).
+  The `*_storage_path` columns stay null on a hand-added application so the copier never looks at it.
+- **The copier never overwrites an admin upload:** its two updates apply only while the row is still the pending
+  website copy; if an admin replaced the slot during a slow copy, the copier removes its own file.
+- File fields end in `_file` (`license_file`...) because `earnings` is already a text field (weekly earnings).
+- Files are not covered by a database transaction: check, then store, then insert; if the insert fails the files are
+  removed again (a failed removal is logged as an error).
+- **Not done here:** aliases on the driver page (part 2, B52); several earnings files (B86).
+**Why:** keeps one way to create a driver (approval), so nothing about drivers' logins, texts or onboarding is written
+twice; the client's revision was about being able to add drivers who did not use the website.

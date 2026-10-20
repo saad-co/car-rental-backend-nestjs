@@ -1,13 +1,16 @@
-import { NotFoundException } from "@nestjs/common";
+import { NotFoundException, ServiceUnavailableException } from "@nestjs/common";
 import type { DataSource } from "typeorm";
-import { Application } from "../src/applications/application.entity.js";
 import {
   ApplicationDocumentCopier,
   MAX_DOCUMENT_ATTEMPTS,
   type DocumentCopierDeps,
 } from "../src/applications/documents/application-document-copier.js";
-import { ApplicationDocument } from "../src/applications/documents/application-document.entity.js";
+import {
+  ApplicationDocument,
+  ApplicationDocumentKind,
+} from "../src/applications/documents/application-document.entity.js";
 import { ApplicationDocumentsController } from "../src/applications/documents/application-documents.controller.js";
+import { ApplicationDocumentsService } from "../src/applications/documents/application-documents.service.js";
 import {
   DocumentSourceError,
   type DocumentSource,
@@ -226,9 +229,7 @@ describe("application documents are copied into our storage (test database)", ()
   describe("GET /applications/:id/documents", () => {
     const controller = (overrides: Partial<DocumentCopierDeps> = {}) =>
       new ApplicationDocumentsController(
-        db.getRepository(Application),
-        db.getRepository(ApplicationDocument),
-        deps(overrides),
+        new ApplicationDocumentsService(db, deps(overrides)),
       );
 
     it("lists the documents in order, with a signed link only for copied ones", async () => {
@@ -269,6 +270,203 @@ describe("application documents are copied into our storage (test database)", ()
       await expect(
         controller().list("00000000-0000-0000-0000-000000000000"),
       ).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe("admin uploads into a slot (D64)", () => {
+    const PNG = Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      Buffer.from("admin png"),
+    ]);
+    const asFile = (buffer: Buffer, name = "admin.png") =>
+      ({
+        buffer,
+        size: buffer.length,
+        originalname: name,
+      }) as Express.Multer.File;
+
+    let adminId: string;
+    const documents = (overrides: Partial<DocumentCopierDeps> = {}) =>
+      new ApplicationDocumentsService(db, deps(overrides));
+    const slot = async (kind: string) =>
+      (await db.query(
+        `SELECT origin, status, source_path, storage_key, uploaded_by_id, attempts, last_error
+         FROM application_documents WHERE application_id = $1 AND kind = $2`,
+        [applicationId, kind],
+      )) as {
+        origin: string;
+        status: string;
+        source_path: string | null;
+        storage_key: string | null;
+        uploaded_by_id: string | null;
+        attempts: number;
+        last_error: string | null;
+      }[];
+
+    beforeEach(async () => {
+      [{ id: adminId }] = (await db.query(
+        `INSERT INTO users (email, password_hash, role) VALUES ('up@admin.test', 'x', 'admin')
+         ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email RETURNING id`,
+      )) as [{ id: string }];
+    });
+
+    it("fills an empty slot, with the uploader's email and a link", async () => {
+      await copier().run();
+
+      const dto = await documents().upload(
+        applicationId,
+        ApplicationDocumentKind.earnings,
+        asFile(PNG),
+        adminId,
+      );
+
+      expect(dto).toMatchObject({
+        kind: "earnings",
+        origin: "admin",
+        status: "stored",
+        contentType: "image/png",
+        sizeBytes: PNG.length,
+        uploadedByEmail: "up@admin.test",
+      });
+      expect(dto.url).toMatch(/^https:\/\/bucket\.test\/applications\//);
+      const [row] = await slot("earnings");
+      expect(row).toMatchObject({
+        origin: "admin",
+        source_path: null,
+        uploaded_by_id: adminId,
+      });
+      expect(storage.files.get(row.storage_key!)?.body).toEqual(PNG);
+    });
+
+    it("replaces a copied website file: the old object is removed, the row is now the admin's", async () => {
+      await copier().run();
+      const [before] = await slot("license");
+      expect(before.origin).toBe("website");
+      expect(storage.files.has(before.storage_key!)).toBe(true);
+
+      await documents().upload(
+        applicationId,
+        ApplicationDocumentKind.license,
+        asFile(PNG),
+        adminId,
+      );
+
+      const [after] = await slot("license");
+      expect(after).toMatchObject({
+        origin: "admin",
+        source_path: null,
+        status: "stored",
+      });
+      expect(after.storage_key).not.toBe(before.storage_key);
+      expect(storage.files.has(before.storage_key!)).toBe(false);
+      expect(storage.files.get(after.storage_key!)?.body).toEqual(PNG);
+      // The copier has nothing left to do for it.
+      source.fetched = [];
+      await copier().run();
+      expect(source.fetched).toEqual([]);
+    });
+
+    it("fixes a website copy that failed, and the copier never touches it again", async () => {
+      source.files.delete("2026-10-07/licence.png"); // permanently gone
+      await copier().run();
+      expect((await slot("license"))[0]).toMatchObject({ status: "failed" });
+
+      await documents().upload(
+        applicationId,
+        ApplicationDocumentKind.license,
+        asFile(PNG),
+        adminId,
+      );
+
+      expect((await slot("license"))[0]).toMatchObject({
+        origin: "admin",
+        status: "stored",
+        attempts: 0,
+        last_error: null,
+      });
+      source.fetched = [];
+      await copier().run();
+      expect(source.fetched).toEqual([]);
+    });
+
+    it("an upload during a slow copy wins: the copier's file is dropped, not saved over it", async () => {
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => (release = resolve));
+      const normalFetch = source.fetch.bind(source);
+      source.fetch = async (path: string) => {
+        await gate;
+        return normalFetch(path);
+      };
+
+      const running = copier().run(); // starts copying, waits at the gate
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      await documents().upload(
+        applicationId,
+        ApplicationDocumentKind.license,
+        asFile(PNG),
+        adminId,
+      );
+      release();
+      await running;
+
+      const [row] = await slot("license");
+      expect(row).toMatchObject({ origin: "admin", source_path: null });
+      expect(storage.files.get(row.storage_key!)?.body).toEqual(PNG);
+      // Only the admin's licence file is left: the copy the copier made meanwhile was removed again.
+      const licenceObjects = [...storage.files.keys()].filter((key) =>
+        key.includes("/license-"),
+      );
+      expect(licenceObjects).toEqual([row.storage_key]);
+    });
+
+    it("refuses a wrong file, an unknown application and a missing bucket, changing nothing", async () => {
+      await copier().run();
+      const before = [...storage.files.keys()].sort();
+
+      await expect(
+        documents().upload(
+          applicationId,
+          ApplicationDocumentKind.license,
+          asFile(Buffer.from("text"), "licence.png"),
+          adminId,
+        ),
+      ).rejects.toThrow("Only JPG, PNG or PDF files, at most 10 MB.");
+      await expect(
+        documents().upload(
+          "00000000-0000-0000-0000-000000000000",
+          ApplicationDocumentKind.license,
+          asFile(PNG),
+          adminId,
+        ),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      await expect(
+        documents({ storage: null }).upload(
+          applicationId,
+          ApplicationDocumentKind.license,
+          asFile(PNG),
+          adminId,
+        ),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+
+      expect([...storage.files.keys()].sort()).toEqual(before);
+      expect((await slot("license"))[0].origin).toBe("website");
+    });
+
+    it("the database refuses an admin document that is not stored, and a website one without a path", async () => {
+      await expect(
+        db.query(
+          `INSERT INTO application_documents (application_id, kind, origin, status)
+           VALUES ($1, 'earnings', 'admin', 'pending')`,
+          [applicationId],
+        ),
+      ).rejects.toThrow(/application_documents_origin_shape/);
+      await expect(
+        db.query(
+          `INSERT INTO application_documents (application_id, kind, origin, status, source_path)
+           VALUES ($1, 'earnings', 'website', 'pending', NULL)`,
+          [applicationId],
+        ),
+      ).rejects.toThrow(/application_documents_origin_shape/);
     });
   });
 });
