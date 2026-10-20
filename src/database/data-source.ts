@@ -4,6 +4,7 @@ import { PaymentAlias } from "../aliases/payment-alias.entity.js";
 import { Application } from "../applications/application.entity.js";
 import { ApplicationDocument } from "../applications/documents/application-document.entity.js";
 import { ApplicationNote } from "../applications/notes/application-note.entity.js";
+import { Contract } from "../contracts/contract.entity.js";
 import { LedgerPreset } from "../ledger-presets/ledger-preset.entity.js";
 import { MessageTemplate } from "../message-templates/message-template.entity.js";
 import { Driver } from "../drivers/driver.entity.js";
@@ -39,6 +40,7 @@ export default new DataSource({
     LedgerPreset,
     MessageTemplate,
     LedgerEntry,
+    Contract,
   ],
   // `.ts` when run from the sources (tsx, local), `.js` when run compiled (production). Never
   // both: the build also writes `.d.ts` type files next to each migration, which are not migrations.

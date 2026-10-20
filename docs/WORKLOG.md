@@ -4,6 +4,28 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-20 — Module 2 step 1: contract draft and rate calculator (D71)
+- **Branch** `feature/contracts` in both repos, worktrees `wt-contracts-backend` / `-frontend` (slot 3: backend :5003, frontend
+  :5176, databases `car_rental_contracts` / `_test`). **Not committed, not merged, not deployed.**
+- **Backend:** new `src/contracts/` (entity, `contract-math.ts`, DTOs, service, controller, module); migration `CreateContracts`
+  (table, two enums, CHECKs, partial unique index `contracts_one_draft_per_driver`; reverts cleanly); five routes (calculate, get
+  draft, create, update, delete); `openapi.json` exported. The calculated numbers are not stored.
+- **Frontend:** page `drivers/:id/contract` (inputs left, live "Lease disclosure summary" right, Save / Delete draft), a Contract
+  card on the driver page, `contracts.queries.ts` (numbers debounced 300 ms), `useDebouncedValue`; client regenerated from the
+  worktree's `openapi.json` (the npm script reads the main checkout's).
+- **Verified:** backend unit 147, e2e 240 (22 new: numbers, one draft per driver, two creates at once = one draft, update, delete,
+  404s, DTO limits, database CHECKs), lint and build clean; frontend lint, prettier, build clean. Browser (test driver "Sim Test"):
+  weekly $399 + $200 deposit gives 167.58 / 119.70 / 51.87 / 39.90 / 19.95 and $599 due at pickup; daily $61 gives 25.62 / 18.30 /
+  7.93 / 6.10 / 3.05; bad total shows a hint and clears the summary; save, card line, reopen, edit ($250 gives $649), delete, card
+  back to "Create contract"; no failed requests.
+- **Not done:** company, vehicle and purchase option (step 2); nothing is sent to firma (steps 3 and 4). Totals follow our reading
+  until the client corrects it (B91 question 2).
+- **Merge order / shared files:** `app.module.ts`, `data-source.ts`, `openapi.json`, frontend `schema.d.ts`, `App.tsx`,
+  `DriverDetail.tsx` (the add-driver branch also touches `App.tsx`; the second to merge merges `dev` first and re-runs
+  `openapi:export` + `api:generate`).
+
+---
+
 ### 2026-10-20 — Staging deploy: add an application by hand, payment aliases (B85, B52, D68, D69)
 - **Merged:** backend PR #24 (`14128c4`) and frontend PR #18 (`fe5021c`) into `dev`.
 - **Deployed** by Abulkalam with the Deployment steps from the `deploy-*` worktrees (detached at `origin/dev`): backend
@@ -85,6 +107,18 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 - **Merge order:** backend PR first (the frontend client is generated from it). New migration runs on deploy. Shared
   files if another branch touches them: `applications.service.ts`, `ApplicationsList.tsx`, `ApplicationDetail.tsx`,
   `ApplicationDocuments.tsx`, `src/api/schema.d.ts`, `App.tsx` (merge `dev` first, then `npm run api:generate`).
+
+### 2026-10-20 — Module 2 (contracts) planned: firma.dev, four steps (D70, D71, B91, B92)
+- **Branch** `feature/contracts`, worktree `wt-contracts-backend` (docs only so far). Not committed.
+- **Docs:** new `MODULE2_SPEC.md` (what the client uses today, four steps, three open questions); D70 (firma.dev chosen
+  over DocuSeal, PandaDoc and signNow); D71 (rate calculation from the client's Illinois sheet); B91 (client questions),
+  B92 (confirm firma prefill).
+- **Research inputs:** five sample contracts and the Illinois rate sheet (Google Docs/Drive, real driver data, not stored in
+  the repo); pricing pages of DocuSeal, PandaDoc, signNow, firma.dev.
+- **Next:** step 1, the rate calculator (plan in this chat; slot 3 when built: backend :5003, frontend :5176, databases
+  `car_rental_contracts` / `_test`).
+
+---
 
 ### 2026-10-19 — One ledger, no Weekly/Monthly tabs, amount search (B86, D67)
 - **Branches:** backend `fix/ledger-amount-search`, frontend `fix/one-ledger` (from `origin/dev`). Not merged, not deployed. The

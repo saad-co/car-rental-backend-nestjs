@@ -9,6 +9,7 @@ import { validateEnv } from "./config/env.validation.js";
 import { buildBaseOptions } from "./database/typeorm-options.js";
 import { DriversModule } from "./drivers/drivers.module.js";
 import { ApplicationsModule } from "./applications/applications.module.js";
+import { ContractsModule } from "./contracts/contracts.module.js";
 import { LedgerPresetsModule } from "./ledger-presets/ledger-presets.module.js";
 import { MessageTemplatesModule } from "./message-templates/message-templates.module.js";
 import { AuthModule } from "./auth/auth.module.js";
@@ -37,6 +38,7 @@ import { UsersModule } from "./users/users.module.js";
     AuthModule,
     ApplicationsModule,
     LedgerPresetsModule,
+    ContractsModule,
     MessageTemplatesModule,
     DriversModule,
     EmailIntakeModule,

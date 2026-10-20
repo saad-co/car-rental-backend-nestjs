@@ -815,3 +815,36 @@ twice; the client's revision was about being able to add drivers who did not use
   driver portal.
 - No audit-log table exists yet, so who added or removed what is written to the server log.
 **Why:** the client wants every name or handle a driver pays from recorded (B52), and a wrong alias must be fixable.
+
+### D70 — 2026-10-20 — Module 2 signing provider: firma.dev (client, via Saad; Abulkalam)
+- **Context:** contracts are signed through PandaDoc today. Compared 2026-10-19/20: DocuSeal ($20/month + $0.20 per contract
+  through the API), PandaDoc (contracts made by hand are covered by the seat plan, but contracts our system creates need paid
+  usage credits or the $40/month API plan for 40 a month; webhooks only on Business), signNow (API is a separate paid plan),
+  firma.dev (about €0.049 per envelope, no monthly fee, API, templates and webhooks included, free test mode).
+- **Decision:** firma.dev (the client: "Let's go with this one"). One envelope = one contract, however many signers.
+- **Risks accepted:** a very young company (founded 2026, small team); data hosted in the EU (AWS Paris); compliance
+  (ESIGN, UETA, SOC 2) is the vendor's own claim.
+- **Checked in firma's docs (2026-10-20):**
+  - **Prefilling works:** each field takes a locked `read_only_value`.
+  - **Anchor tags:** firma finds marker text such as `{{LESSEE_NAME}}` in an uploaded PDF and puts a field there, so the
+    client's Google Doc exported as PDF with markers is the template. Use PDF, not DOCX: DOCX is re-laid-out and loses images.
+  - **Organization seal:** an automatic company countersignature, free on all plans (one credit per send covers it).
+  - **Webhooks:** HMAC-SHA256 header `X-Firma-Signature: t=<unix>,v1=<hex>` over `<t>.<raw body>`, 5-second reply limit.
+    Only **3 attempts** (now, +5 min, +1 h), so step 4 also needs a scheduled status check for missed events.
+  - **Other:** reminders and expiry can be set per request; the signed PDF and certificate come through the API; test keys
+    are free and watermark every document.
+- **How we limit the risk:** firma sits behind one service interface (like Quo and the LLM), so a switch to DocuSeal is a
+  contained change; every signed PDF and audit trail is copied into our own storage (step 4), so no record depends on firma.
+**Why:** cheapest per contract with no subscription, and the API covers templates, signing and webhooks.
+
+### D71 — 2026-10-20 — Contract rate calculation follows the client's Illinois rate sheet (Module 2 step 1; Saad)
+- The admin types only the **total rate** (weekly or daily). Five lines are calculated from it as the sheet does: base 42%,
+  insurance 30%, unlimited miles 13%, maintenance 10%, taxes 5%. Cents are integers: insurance, miles, maintenance and taxes
+  are rounded half up from the percentage; **base takes the remainder**, so the five lines always add up to the total
+  (our rule; the sheet only ever had whole-cent results).
+- **Our reading, to confirm (B91 question 2):** the weekly or daily payment equals the total rate; one-time total = the sum of
+  the one-time charges; amount due at pickup = first payment + one-time total; end date = start date + term months (default
+  18, clamped to the month's last day: 2026-08-31 + 6 = 2027-02-28); the recurring Total row = payment + excess mileage + insurance excess + other recurring (the sheet's Total row). The received sheet types these by hand and they disagree with its own total, so we calculate them.
+- The percentages apply to Illinois. California and Tennessee wait for the client (B91 question 3).
+**Why:** one typed number drives everything, as the client asked ("an applet ... others driven by formulas as a % of the
+total rate"), and calculated totals cannot drift like the hand-typed ones in the samples.
