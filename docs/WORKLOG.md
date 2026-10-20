@@ -86,6 +86,18 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
   files if another branch touches them: `applications.service.ts`, `ApplicationsList.tsx`, `ApplicationDetail.tsx`,
   `ApplicationDocuments.tsx`, `src/api/schema.d.ts`, `App.tsx` (merge `dev` first, then `npm run api:generate`).
 
+### 2026-10-20 — Module 2 (contracts) planned: firma.dev, four steps (D70, D71, B91, B92)
+- **Branch** `feature/contracts`, worktree `wt-contracts-backend` (docs only so far). Not committed.
+- **Docs:** new `MODULE2_SPEC.md` (what the client uses today, four steps, three open questions); D70 (firma.dev chosen
+  over DocuSeal, PandaDoc and signNow); D71 (rate calculation from the client's Illinois sheet); B91 (client questions),
+  B92 (confirm firma prefill).
+- **Research inputs:** five sample contracts and the Illinois rate sheet (Google Docs/Drive, real driver data, not stored in
+  the repo); pricing pages of DocuSeal, PandaDoc, signNow, firma.dev.
+- **Next:** step 1, the rate calculator (plan in this chat; slot 3 when built: backend :5003, frontend :5176, databases
+  `car_rental_contracts` / `_test`).
+
+---
+
 ### 2026-10-19 — One ledger, no Weekly/Monthly tabs, amount search (B86, D67)
 - **Branches:** backend `fix/ledger-amount-search`, frontend `fix/one-ledger` (from `origin/dev`). Not merged, not deployed. The
   modal height fix is a separate frontend PR (#16, `fix/modal-max-height`).
