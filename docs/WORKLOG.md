@@ -4,6 +4,16 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-20 — Staging deploy: contract draft and rate calculator (Module 2 step 1, D71)
+- **Merged:** backend PR #26 (`8a823bc`) and frontend PR #19 (`9166de4`) into `dev`, branch `feature/contracts`.
+- **Deployed** to Railway staging by hand from the `deploy-*` worktrees (detached at `origin/dev`, clean): backend `8a823bc`,
+  frontend `9166de4`. The pre-deploy step ran migration `CreateContracts` (confirmed in `railway logs`).
+- **Checked on staging (read only):** frontend `/admin` 200, backend `/docs` 200, `POST /contracts/calculate` without a token 401;
+  the new routes are mapped; the frontend bundle contains the contract page; no errors in the backend logs.
+- **Not done:** nothing was written on staging (no draft created). Next: step 2 (company, vehicle, purchase option, B91).
+
+---
+
 ### 2026-10-20 — Module 2 step 1: contract draft and rate calculator (D71)
 - **Branch** `feature/contracts` in both repos, worktrees `wt-contracts-backend` / `-frontend` (slot 3: backend :5003, frontend
   :5176, databases `car_rental_contracts` / `_test`). **Not committed, not merged, not deployed.**
