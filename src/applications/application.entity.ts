@@ -148,6 +148,17 @@ export class Application {
   @JoinColumn({ name: "driver_id" })
   driver?: Driver | null;
 
+  /**
+   * The admin who typed this application in by hand (D68). Null for applications that came from the website form.
+   * `SET NULL`: removing an admin account never removes the applications they added.
+   */
+  @Column({ name: "created_by_id", type: "uuid", nullable: true })
+  createdById: string | null;
+
+  @ManyToOne(() => User, { nullable: true, onDelete: "SET NULL" })
+  @JoinColumn({ name: "created_by_id" })
+  createdBy?: User | null;
+
   /** When our API received the submission. */
   @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt: Date;

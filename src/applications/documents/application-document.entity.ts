@@ -9,7 +9,16 @@ import {
   Unique,
   UpdateDateColumn,
 } from "typeorm";
+import { User } from "../../users/user.entity.js";
 import { Application } from "../application.entity.js";
+
+/** Where a document came from. */
+export enum ApplicationDocumentOrigin {
+  /** Copied from the website's storage (D54). */
+  website = "website",
+  /** Uploaded by an admin (D68): while adding an application by hand, or later from the Documents tab. */
+  admin = "admin",
+}
 
 /** Which of the three uploads on the application form a document is. */
 export enum ApplicationDocumentKind {
@@ -42,6 +51,11 @@ export enum ApplicationDocumentStatus {
   "application_documents_stored_has_file",
   `"status" <> 'stored' OR ("storage_key" IS NOT NULL AND "size_bytes" IS NOT NULL)`,
 )
+// A website copy always has its website path; an admin upload is always already stored (D68).
+@Check(
+  "application_documents_origin_shape",
+  `("origin" = 'website' AND "source_path" IS NOT NULL) OR ("origin" = 'admin' AND "status" = 'stored')`,
+)
 @Check(
   "application_documents_failed_has_error",
   `"status" <> 'failed' OR "last_error" IS NOT NULL`,
@@ -64,9 +78,26 @@ export class ApplicationDocument {
   })
   kind: ApplicationDocumentKind;
 
-  /** Path in the website's bucket, like `2026-10-07/<uuid>.png`. */
-  @Column({ name: "source_path", type: "text" })
-  sourcePath: string;
+  /** Website copy or admin upload (D68). Never changes by itself, unlike `uploadedById`, which `SET NULL` can clear. */
+  @Column({
+    type: "enum",
+    enum: ApplicationDocumentOrigin,
+    enumName: "application_document_origin",
+    default: ApplicationDocumentOrigin.website,
+  })
+  origin: ApplicationDocumentOrigin;
+
+  /** Path in the website's bucket, like `2026-10-07/<uuid>.png`. Null for an admin upload (it has no website path). */
+  @Column({ name: "source_path", type: "text", nullable: true })
+  sourcePath: string | null;
+
+  /** The admin who uploaded it (admin uploads only). */
+  @Column({ name: "uploaded_by_id", type: "uuid", nullable: true })
+  uploadedById: string | null;
+
+  @ManyToOne(() => User, { nullable: true, onDelete: "SET NULL" })
+  @JoinColumn({ name: "uploaded_by_id" })
+  uploadedBy?: User | null;
 
   @Column({
     name: "content_type",

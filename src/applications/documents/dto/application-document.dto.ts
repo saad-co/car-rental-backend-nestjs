@@ -1,5 +1,6 @@
 import {
   ApplicationDocumentKind,
+  ApplicationDocumentOrigin,
   ApplicationDocumentStatus,
 } from "../application-document.entity.js";
 
@@ -10,6 +11,8 @@ export class ApplicationDocumentDto {
   kind: ApplicationDocumentKind;
   /** `stored`: our copy can be opened; `pending`: still being copied; `failed`: it cannot be copied (see `error`). */
   status: ApplicationDocumentStatus;
+  /** `website`: copied from the website's storage; `admin`: uploaded by an admin (D68). */
+  origin: ApplicationDocumentOrigin;
   /** MIME type, e.g. `image/png`; null if unknown. */
   contentType: string | null;
   sizeBytes: number | null;
@@ -17,6 +20,8 @@ export class ApplicationDocumentDto {
   url: string | null;
   /** Why it could not be copied, in plain words. Null if it did not fail. */
   error: string | null;
+  /** The admin who uploaded it (admin uploads only; also null if that account was removed). */
+  uploadedByEmail: string | null;
 }
 
 /** The documents of one application. */

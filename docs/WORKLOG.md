@@ -4,6 +4,69 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-20 — Payment aliases on the driver page: add and remove (B52, D69; part 2 of B85)
+- **Branch** `feature/manual-add-driver` (same PRs as part 1: backend #24, frontend #18), as separate commits.
+- **Backend:** `POST /drivers/:id/aliases` ({ type, value }) and `DELETE /drivers/:id/aliases/:aliasId`, both return the
+  updated driver; `DriverAliasDto.id`. Saved as `manual`, normalised as matching compares them (case, spaces, `$` / `@`,
+  phone as `+1XXXXXXXXXX`, email lower-case); a US-phone / email format check; `409` when the driver has it already, or
+  when another driver has it (the message names them; an alias belongs to one driver). Removal works on any source.
+  The admin and the change go to the server log (there is no audit-log table yet).
+- **Frontend:** `DriverAliasesCard` on the driver page: chips per payment method with a x (confirm dialog), an "Add an
+  alias" form (method, name or handle) with the API's message shown under it; damaged imported aliases are in a
+  collapsible list and can be removed.
+- **Verified:** 17 new tests (`driver-aliases`), the drivers-list test updated for the new `id`; backend lint, build,
+  all unit + e2e pass; frontend lint (2 old warnings) and build. Browser: add (spaces tidied), same alias again, bad
+  phone and email, empty, another driver's alias (names Browser Tester), same text under another method allowed, remove
+  with cancel and confirm.
+- **Not done:** moving an alias between drivers (B54); re-matching payments already in "Needs review" after adding an
+  alias (matching tries each payment once); driver-added aliases with approval (B53, needs the driver portal).
+
+---
+
+### 2026-10-19 — Add an application by hand, with documents (B85 part 1, D68)
+- **Branch** `feature/manual-add-driver` in both repos, worktrees `wt-manual-add-driver-backend` / `-frontend` (slot 1:
+  backend :5001, frontend :5174, databases `car_rental_manual_add_driver` / `_test`; the main `.env` copied with intake
+  off and `MAIL_MODE=log`). PRs: backend #24, frontend #18 (into `dev`).
+- **Backend:** migration `AddManualApplications` (`applications.created_by_id`; `application_documents.origin` /
+  `uploaded_by_id`, `source_path` nullable, CHECK `application_documents_origin_shape`; `down()` refuses while admin
+  uploads exist). `POST /applications/manual` (admin only, multipart: the website form's fields plus `license_file`,
+  `rating_file`, `earnings_file`; same `request_id` twice = one application). `PUT /applications/:id/documents/:kind`
+  fills or replaces a slot, a website copy included. File type by the first bytes (JPG/PNG/PDF), 10 MB, one plain error
+  sentence (multer's 413 turned into 400). The document copier's updates are now conditional, so a slow copy never
+  overwrites an admin upload. `ApplicationDetailDto.createdBy`; `ApplicationDocumentDto.origin` / `uploadedByEmail`;
+  `@types/multer` added and `"multer"` in `tsconfig.json` `types`. Approve/reject return the detail through `findOne`
+  (so `createdBy` is there).
+- **Frontend:** page `/admin/applications/new` (one form, four cards, the website's questions and rules; "Add
+  application" button on the list); Documents tab shows all three slots with Upload / Replace (replace asks first) and
+  "Uploaded by"; "Added by" in the Submission card; lease length shows the words for `mediano` / `largo`. TailAdmin
+  pieces copied: FileInput, Radio, DatePicker (single day), plus.svg.
+- **Verified:** backend lint, build, 120 unit + 201 e2e (new: 36 in `application-manual`, 6 upload cases and the CHECK in
+  `application-documents`, `sniff-file-type`); migration run, revert, run, no drift. Real HTTP on :5001 with curl:
+  valid submit, repeat, no licence, text-as-PNG, 11 MB, replace, 401 without a login. Frontend lint (2 old warnings),
+  build. **Browser walkthrough** (signed in with a throwaway local test admin `qa-admin@test.local` that exists only in
+  the worktree database, not Abulkalam's account): list button; empty Save marks 18 answers and sends nothing; age 24 and
+  ZIP 123 marked; a text file named .png refused with the server's sentence; a fake applicant with a real PNG and a PDF
+  saved and opened ("Added by", Driving / Rental tabs like a website one, both files open); replace licence (confirm
+  dialog, cancel sends nothing); upload into an empty slot; upload onto an older application; approve → driver
+  `onboarding` with a login and two dry-run texts; mobile width. The walkthrough found one bug (the form's data was not
+  sent: with `body` left out `openapi-fetch` sends nothing), fixed. Console: only the expected 400s and one 401 at sign-in.
+- **2026-10-20 follow-up (Abulkalam: "use only the website's fields"):** walked through the live gonzocar.com form
+  with fake data, stopped before Submit (3 steps, not 4). Changes: vehicle preference removed; violations / accidents
+  are 0, 1, 2, 3+ (backend rule and page); the start-up amount only appears, and is then required, when funds = No
+  (backend `ValidateIf`; dropped from the stored payload when funds = Yes); the page is three numbered sections in the
+  website's order with inline errors (leave a field → error under it; fixes clear it live); labels as on the website.
+  Backend 120 unit + 208 e2e pass, lint and build clean; frontend lint (2 old warnings) and build clean; browser check:
+  age 24 → "Must be 25 or older", phone "Need 10 digits", skipped ZIP "Invalid ZIP code", error clears when fixed, amount
+  field only for No, a `3+` / Long term / capital 400 application saved and shown correctly.
+- **Left in the worktree database only:** the fake applicants `Browser Tester` (approved, a driver) and `Qa Tester`; fake
+  files in the local MinIO bucket under their application ids.
+- **Not done:** B89
+  (website earnings files are lists and are not copied). Not deployed. Workspace `CLAUDE.md` "Current focus" to be
+  updated when merged.
+- **Merge order:** backend PR first (the frontend client is generated from it). New migration runs on deploy. Shared
+  files if another branch touches them: `applications.service.ts`, `ApplicationsList.tsx`, `ApplicationDetail.tsx`,
+  `ApplicationDocuments.tsx`, `src/api/schema.d.ts`, `App.tsx` (merge `dev` first, then `npm run api:generate`).
+
 ### 2026-10-19 — One ledger, no Weekly/Monthly tabs, amount search (B86, D67)
 - **Branches:** backend `fix/ledger-amount-search`, frontend `fix/one-ledger` (from `origin/dev`). Not merged, not deployed. The
   modal height fix is a separate frontend PR (#16, `fix/modal-max-height`).

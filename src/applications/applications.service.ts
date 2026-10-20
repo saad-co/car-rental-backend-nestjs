@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { addDateRange } from "../common/date-range.js";
 import {
   BadRequestException,
@@ -36,7 +37,23 @@ import { PasswordService } from "../users/password.service.js";
 import { Role, User } from "../users/user.entity.js";
 import { ApplicationAlertService } from "./application-alert.service.js";
 import { Application, ApplicationStatus } from "./application.entity.js";
-import { ApplicationDocument } from "./documents/application-document.entity.js";
+import {
+  ApplicationDocument,
+  ApplicationDocumentKind,
+  ApplicationDocumentOrigin,
+  ApplicationDocumentStatus,
+} from "./documents/application-document.entity.js";
+import {
+  DOCUMENT_KINDS,
+  DOCUMENT_LABEL,
+  checkUpload,
+  documentStorageKey,
+} from "./documents/upload-file.js";
+import type { ManualApplicationDto } from "./manual/manual-application.dto.js";
+import {
+  manualPayload,
+  type ManualApplicationFiles,
+} from "./manual/manual-payload.js";
 import {
   ApplicationDetailDto,
   ApplicationListDto,
@@ -180,6 +197,121 @@ export class ApplicationsService {
   }
 
   /**
+   * Stores an application an admin typed in by hand, with its documents (D68). It has the same shape as one from the
+   * website (same payload keys and values), so every admin screen, and approval, treat it the same way.
+   *
+   * Files are not covered by a database transaction, so the order is: check everything → put the files in the
+   * bucket → insert the rows in one transaction → if that fails, remove the files again (a failed removal is logged
+   * as an error). A repeat of the same `request_id` (double click, retry) returns the stored application and stores
+   * nothing; the unique constraint decides if two arrive at the same instant.
+   *
+   * The `*_storage_path` columns stay null: they are paths in the WEBSITE's bucket, and leaving them empty keeps the
+   * document copier away from these rows. The files are `application_documents` rows with `origin = admin`.
+   *
+   * @throws BadRequestException a missing licence, or a file that is not a JPG, PNG or PDF of at most 10 MB.
+   * @throws ServiceUnavailableException no file bucket is set up.
+   */
+  async createManual(
+    fields: ManualApplicationDto,
+    files: ManualApplicationFiles,
+    adminId: string,
+  ): Promise<{ id: string; created: boolean }> {
+    const existing = await this.applications.findOneBy({
+      requestId: fields.request_id,
+    });
+    if (existing) return { id: existing.id, created: false };
+
+    if (!files.license) {
+      throw new BadRequestException(
+        "license is required: add a photo of the driver's licence.",
+      );
+    }
+    const uploads = DOCUMENT_KINDS.flatMap((kind) => {
+      const file = files[kind];
+      return file
+        ? [{ kind, file, type: checkUpload(DOCUMENT_LABEL[kind], file) }]
+        : [];
+    });
+    if (!this.storage) {
+      throw new ServiceUnavailableException(
+        "File storage is not set up, so documents cannot be saved.",
+      );
+    }
+
+    const applicationId = randomUUID();
+    const putKeys: string[] = [];
+    try {
+      const stored: {
+        kind: ApplicationDocumentKind;
+        key: string;
+        size: number;
+        contentType: string;
+      }[] = [];
+      for (const { kind, file, type } of uploads) {
+        const key = documentStorageKey(
+          applicationId,
+          kind,
+          randomUUID(),
+          type.extension,
+        );
+        await this.storage.put(key, file.buffer, type.contentType);
+        putKeys.push(key);
+        stored.push({
+          kind,
+          key,
+          size: file.size,
+          contentType: type.contentType,
+        });
+      }
+
+      const saved = await this.dataSource.transaction(async (manager) => {
+        const application = await manager.save(
+          manager.create(Application, {
+            id: applicationId,
+            requestId: fields.request_id,
+            firstName: fields.first_name,
+            lastName: fields.last_name,
+            email: fields.email,
+            phone: fields.phone,
+            city: fields.city,
+            zip: fields.zip,
+            submittedAt: new Date(),
+            createdById: adminId,
+            payload: manualPayload(fields, files),
+          }),
+        );
+        for (const item of stored) {
+          await manager.insert(ApplicationDocument, {
+            applicationId,
+            kind: item.kind,
+            origin: ApplicationDocumentOrigin.admin,
+            sourcePath: null,
+            status: ApplicationDocumentStatus.stored,
+            storageKey: item.key,
+            sizeBytes: item.size,
+            contentType: item.contentType,
+            uploadedById: adminId,
+          });
+        }
+        return application;
+      });
+      // Staff are told by text, like for a website application (D53). Not waited for; never throws.
+      this.alerts.notifyInBackground(saved);
+      return { id: saved.id, created: true };
+    } catch (error) {
+      await this.removeFiles(putKeys);
+      if (isUniqueViolation(error)) {
+        // `request_id` is the only unique value an admin's form sets, so this is a repeat that raced us.
+        const winner = await this.applications.findOneBy({
+          requestId: fields.request_id,
+        });
+        if (winner) return { id: winner.id, created: false };
+      }
+      throw error;
+    }
+  }
+
+  /**
    * One page of applications, newest first, optionally only one status and only those matching a search.
    *
    * Built with a QueryBuilder because the search is "status = X AND (name OR email OR ...)", which `find()` cannot
@@ -242,7 +374,10 @@ export class ApplicationsService {
    * @throws NotFoundException if there is no application with this id.
    */
   async findOne(id: string): Promise<ApplicationDetailDto> {
-    const application = await this.applications.findOneBy({ id });
+    const application = await this.applications.findOne({
+      where: { id },
+      relations: { createdBy: true },
+    });
     if (!application) {
       throw new NotFoundException("Application not found.");
     }
@@ -372,7 +507,7 @@ export class ApplicationsService {
         );
         return saved;
       });
-      return this.toDetail(approved);
+      return await this.findOne(approved.id);
     } catch (error) {
       if (isUniqueViolation(error)) {
         throw new ConflictException(
@@ -467,7 +602,7 @@ export class ApplicationsService {
       }
       return saved;
     });
-    return this.toDetail(updated);
+    return this.findOne(updated.id);
   }
 
   /**
@@ -669,6 +804,9 @@ export class ApplicationsService {
       driverId: application.driverId,
       alertedAt: application.alertedAt,
       alertError: application.alertError,
+      createdBy: application.createdBy
+        ? { id: application.createdBy.id, email: application.createdBy.email }
+        : null,
     };
   }
 

@@ -35,6 +35,12 @@ export class ApplicationListDto {
   limit: number;
 }
 
+/** The admin who typed an application in by hand (D68). */
+export class ApplicationCreatedByDto {
+  id: string;
+  email: string;
+}
+
 /** Everything about one application, for the detail screen. */
 export class ApplicationDetailDto extends ApplicationListItemDto {
   /** The website's id for the submission. */
@@ -53,4 +59,6 @@ export class ApplicationDetailDto extends ApplicationListItemDto {
   driverId: string | null;
   /** When the alert text to staff was really sent; null if it was not (off, dry run, or failed). */
   alertedAt: Date | null;
+  /** The admin who added it by hand (D68). Null for applications that came from the website form. */
+  createdBy: ApplicationCreatedByDto | null;
 }

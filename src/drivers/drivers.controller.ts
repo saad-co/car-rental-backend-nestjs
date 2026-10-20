@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -12,6 +13,7 @@ import {
 import { CurrentUser } from "../auth/current-user.decorator.js";
 import type { AuthenticatedUser } from "../auth/jwt-auth.guard.js";
 import { DriversService } from "./drivers.service.js";
+import { AddAliasDto } from "./dto/add-alias.dto.js";
 import { DriverDto, DriverListDto } from "./dto/driver.dto.js";
 import { ListDriversQueryDto } from "./dto/list-drivers-query.dto.js";
 import { SetOnboardingStepDto } from "./dto/set-onboarding-step.dto.js";
@@ -46,6 +48,30 @@ export class DriversController {
     @CurrentUser() admin: AuthenticatedUser,
   ): Promise<DriverDto> {
     return this.drivers.setOnboardingStep(id, body.step, body.done, admin.id);
+  }
+
+  /**
+   * `POST /drivers/:id/aliases`: adds a payment alias (a name or handle the driver pays from, per payment method) so
+   * their payments match automatically (D69). `409` with the owner's name when another driver already has it.
+   * Returns the updated driver.
+   */
+  @Post(":id/aliases")
+  addAlias(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() body: AddAliasDto,
+    @CurrentUser() admin: AuthenticatedUser,
+  ): Promise<DriverDto> {
+    return this.drivers.addAlias(id, body, admin.id);
+  }
+
+  /** `DELETE /drivers/:id/aliases/:aliasId`: removes one of the driver's aliases. Returns the updated driver. */
+  @Delete(":id/aliases/:aliasId")
+  removeAlias(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Param("aliasId", ParseUUIDPipe) aliasId: string,
+    @CurrentUser() admin: AuthenticatedUser,
+  ): Promise<DriverDto> {
+    return this.drivers.removeAlias(id, aliasId, admin.id);
   }
 
   /** `POST /drivers/:id/deactivate`: the driver left (B67). Their login stops working at once. */

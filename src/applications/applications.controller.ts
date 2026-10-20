@@ -8,8 +8,12 @@ import {
   ParseUUIDPipe,
   Post,
   Query,
+  UploadedFiles,
+  UseFilters,
+  UseInterceptors,
 } from "@nestjs/common";
-import { ApiBody } from "@nestjs/swagger";
+import { FileFieldsInterceptor } from "@nestjs/platform-express";
+import { ApiBody, ApiConsumes } from "@nestjs/swagger";
 import { CurrentUser } from "../auth/current-user.decorator.js";
 import type { AuthenticatedUser } from "../auth/jwt-auth.guard.js";
 import { Public } from "../auth/public.decorator.js";
@@ -27,6 +31,11 @@ import {
   DeleteApplicationsResultDto,
 } from "./dto/delete-applications.dto.js";
 import { ListApplicationsQueryDto } from "./dto/list-applications-query.dto.js";
+import { UploadTooLargeFilter } from "./documents/upload-errors.filter.js";
+import { MAX_UPLOAD_BYTES } from "./documents/upload-file.js";
+import { ManualApplicationDto } from "./manual/manual-application.dto.js";
+import { ManualApplicationCreatedDto } from "./manual/manual-application-created.dto.js";
+import type { ManualApplicationFiles } from "./manual/manual-payload.js";
 
 /**
  * Driver application routes, all under `/applications`.
@@ -59,6 +68,110 @@ export class ApplicationsController {
     // The applicant's documents are copied into our storage right away, without making the website wait (D54).
     if (created) this.documents.runInBackground();
     return { status: "received", application_id: application.id };
+  }
+
+  /**
+   * `POST /applications/manual`: an admin types in an application by hand, with its documents (D68). Same fields and
+   * rules as the website form; the result is an ordinary application that is then approved like any other. Admin
+   * only (no `@Public`). Multipart form data: the text fields plus the files `license_file` (required),
+   * `rating_file` and `earnings_file` (JPG, PNG or PDF, at most 10 MB each). The file fields end in `_file` because
+   * `earnings` is already a text field (weekly earnings).
+   *
+   * The interceptor is multer, the library you would mount as `upload.fields([...])` in Express: it reads the
+   * multipart body, keeps the files in memory and leaves the text fields in `@Body()`, where the global
+   * ValidationPipe checks them against `ManualApplicationDto`.
+   *
+   * `201` with `created: false` when the same `request_id` was already stored.
+   */
+  @Post("manual")
+  @UseFilters(UploadTooLargeFilter)
+  @UseInterceptors(
+    FileFieldsInterceptor(
+      [
+        { name: "license_file", maxCount: 1 },
+        { name: "rating_file", maxCount: 1 },
+        { name: "earnings_file", maxCount: 1 },
+      ],
+      { limits: { fileSize: MAX_UPLOAD_BYTES } },
+    ),
+  )
+  @ApiConsumes("multipart/form-data")
+  @ApiBody({
+    schema: {
+      type: "object",
+      required: [
+        "request_id",
+        "first_name",
+        "last_name",
+        "email",
+        "phone",
+        "street",
+        "city",
+        "zip",
+        "age",
+        "years_driving",
+        "violations",
+        "accidents",
+        "platforms",
+        "start_date",
+        "duration",
+        "has_startup_funds",
+        "has_insurance",
+        "has_insurance_last_45_days",
+        "license_file",
+      ],
+      properties: {
+        request_id: { type: "string", format: "uuid" },
+        first_name: { type: "string" },
+        last_name: { type: "string" },
+        email: { type: "string" },
+        phone: { type: "string" },
+        street: { type: "string" },
+        apt: { type: "string" },
+        city: { type: "string" },
+        zip: { type: "string" },
+        age: { type: "string" },
+        years_driving: { type: "string" },
+        violations: { type: "string" },
+        accidents: { type: "string" },
+        platforms: { type: "array", items: { type: "string" } },
+        driver_rating: { type: "string" },
+        earnings: { type: "string" },
+        previous_companies: { type: "string" },
+        referred_by: { type: "string" },
+        start_date: { type: "string" },
+        duration: { type: "string" },
+        has_startup_funds: { type: "string" },
+        capital: {
+          type: "string",
+          description:
+            "Required, as an amount in USD, only when has_startup_funds is no",
+        },
+        has_insurance: { type: "string" },
+        has_insurance_last_45_days: { type: "string" },
+        license_file: { type: "string", format: "binary" },
+        rating_file: { type: "string", format: "binary" },
+        earnings_file: { type: "string", format: "binary" },
+      },
+    },
+  })
+  createManual(
+    @Body() body: ManualApplicationDto,
+    @UploadedFiles()
+    files: Partial<
+      Record<
+        "license_file" | "rating_file" | "earnings_file",
+        Express.Multer.File[]
+      >
+    >,
+    @CurrentUser() admin: AuthenticatedUser,
+  ): Promise<ManualApplicationCreatedDto> {
+    const single: ManualApplicationFiles = {
+      license: files.license_file?.[0],
+      rating: files.rating_file?.[0],
+      earnings: files.earnings_file?.[0],
+    };
+    return this.applications.createManual(body, single, admin.id);
   }
 
   /**

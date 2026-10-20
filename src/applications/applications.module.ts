@@ -19,6 +19,7 @@ import { ApplicationNote } from "./notes/application-note.entity.js";
 import { ApplicationNotesController } from "./notes/application-notes.controller.js";
 import { ApplicationNotesService } from "./notes/application-notes.service.js";
 import { ApplicationDocumentsController } from "./documents/application-documents.controller.js";
+import { ApplicationDocumentsService } from "./documents/application-documents.service.js";
 import { SupabaseDocumentSource } from "./documents/supabase-document-source.js";
 import type { FileStorage } from "../sms/storage/file-storage.js";
 import {
@@ -58,6 +59,7 @@ import {
     ApplicationNotesService,
     ApplicationAlertService,
     ApplicationDocumentCopier,
+    ApplicationDocumentsService,
     {
       // The website's read-only document function (D54). Without DOCUMENTS_SOURCE_URL the source is null:
       // documents are listed as pending and nothing is copied.

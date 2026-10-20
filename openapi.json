@@ -257,6 +257,150 @@
         ]
       }
     },
+    "/applications/manual": {
+      "post": {
+        "operationId": "ApplicationsController_createManual",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "request_id",
+                  "first_name",
+                  "last_name",
+                  "email",
+                  "phone",
+                  "street",
+                  "city",
+                  "zip",
+                  "age",
+                  "years_driving",
+                  "violations",
+                  "accidents",
+                  "platforms",
+                  "start_date",
+                  "duration",
+                  "has_startup_funds",
+                  "has_insurance",
+                  "has_insurance_last_45_days",
+                  "license_file"
+                ],
+                "properties": {
+                  "request_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "first_name": {
+                    "type": "string"
+                  },
+                  "last_name": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "type": "string"
+                  },
+                  "phone": {
+                    "type": "string"
+                  },
+                  "street": {
+                    "type": "string"
+                  },
+                  "apt": {
+                    "type": "string"
+                  },
+                  "city": {
+                    "type": "string"
+                  },
+                  "zip": {
+                    "type": "string"
+                  },
+                  "age": {
+                    "type": "string"
+                  },
+                  "years_driving": {
+                    "type": "string"
+                  },
+                  "violations": {
+                    "type": "string"
+                  },
+                  "accidents": {
+                    "type": "string"
+                  },
+                  "platforms": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "driver_rating": {
+                    "type": "string"
+                  },
+                  "earnings": {
+                    "type": "string"
+                  },
+                  "previous_companies": {
+                    "type": "string"
+                  },
+                  "referred_by": {
+                    "type": "string"
+                  },
+                  "start_date": {
+                    "type": "string"
+                  },
+                  "duration": {
+                    "type": "string"
+                  },
+                  "has_startup_funds": {
+                    "type": "string"
+                  },
+                  "capital": {
+                    "type": "string",
+                    "description": "Required, as an amount in USD, only when has_startup_funds is no"
+                  },
+                  "has_insurance": {
+                    "type": "string"
+                  },
+                  "has_insurance_last_45_days": {
+                    "type": "string"
+                  },
+                  "license_file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "rating_file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "earnings_file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManualApplicationCreatedDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`POST /applications/manual`: an admin types in an application by hand, with its documents (D68). Same fields and\nrules as the website form; the result is an ordinary application that is then approved like any other. Admin\nonly (no `@Public`). Multipart form data: the text fields plus the files `license_file` (required),\n`rating_file` and `earnings_file` (JPG, PNG or PDF, at most 10 MB each). The file fields end in `_file` because\n`earnings` is already a text field (weekly earnings).\n\nThe interceptor is multer, the library you would mount as `upload.fields([...])` in Express: it reads the\nmultipart body, keeps the files in memory and leaves the text fields in `@Body()`, where the global\nValidationPipe checks them against `ManualApplicationDto`.\n\n`201` with `created: false` when the same `request_id` was already stored.",
+        "tags": [
+          "Applications"
+        ]
+      }
+    },
     "/applications/bulk-delete": {
       "post": {
         "operationId": "ApplicationsController_bulkDelete",
@@ -458,6 +602,65 @@
             }
           }
         },
+        "summary": "`GET /applications/:id/documents`: the files, as our own copies (D54) or admin uploads (D68).",
+        "tags": [
+          "ApplicationDocuments"
+        ]
+      }
+    },
+    "/applications/{id}/documents/{kind}": {
+      "put": {
+        "operationId": "ApplicationDocumentsController_upload",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "kind",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationDocumentDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`PUT /applications/:id/documents/:kind`: puts one file (multipart field `file`) in the licence, rating or earnings\nslot, replacing what is there, a website copy included (D68). JPG, PNG or PDF, at most 10 MB; `400` otherwise.\nReturns the slot. PUT because the slot ends up holding exactly this file however many times it is sent.",
         "tags": [
           "ApplicationDocuments"
         ]
@@ -1250,6 +1453,86 @@
           }
         },
         "summary": "`POST /drivers/:id/onboarding`: ticks or un-ticks one onboarding step (D56). The driver becomes `active` when\nthe third step is ticked, and goes back to `onboarding` when one is un-ticked. Returns the updated driver.\n`409` if the driver is inactive.",
+        "tags": [
+          "Drivers"
+        ]
+      }
+    },
+    "/drivers/{id}/aliases": {
+      "post": {
+        "operationId": "DriversController_addAlias",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddAliasDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`POST /drivers/:id/aliases`: adds a payment alias (a name or handle the driver pays from, per payment method) so\ntheir payments match automatically (D69). `409` with the owner's name when another driver already has it.\nReturns the updated driver.",
+        "tags": [
+          "Drivers"
+        ]
+      }
+    },
+    "/drivers/{id}/aliases/{aliasId}": {
+      "delete": {
+        "operationId": "DriversController_removeAlias",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "aliasId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`DELETE /drivers/:id/aliases/:aliasId`: removes one of the driver's aliases. Returns the updated driver.",
         "tags": [
           "Drivers"
         ]
@@ -2119,6 +2402,23 @@
           "application_id"
         ]
       },
+      "ManualApplicationCreatedDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The new application's id."
+          },
+          "created": {
+            "type": "boolean",
+            "description": "False when the same `request_id` had already been stored (a double click or a retry): nothing new was made."
+          }
+        },
+        "required": [
+          "id",
+          "created"
+        ]
+      },
       "ApplicationListItemDto": {
         "type": "object",
         "properties": {
@@ -2242,6 +2542,21 @@
           "filesNotRemoved"
         ]
       },
+      "ApplicationCreatedByDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "email"
+        ]
+      },
       "ApplicationDetailDto": {
         "type": "object",
         "properties": {
@@ -2336,6 +2651,16 @@
             "type": "string",
             "nullable": true,
             "description": "When the alert text to staff was really sent; null if it was not (off, dry run, or failed)."
+          },
+          "createdBy": {
+            "nullable": true,
+            "description": "The admin who added it by hand (D68). Null for applications that came from the website form.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ApplicationCreatedByDto"
+              }
+            ]
           }
         },
         "required": [
@@ -2358,7 +2683,8 @@
           "reviewedById",
           "reviewedAt",
           "driverId",
-          "alertedAt"
+          "alertedAt",
+          "createdBy"
         ]
       },
       "ReviewMessageDto": {
@@ -2379,22 +2705,30 @@
             "type": "string"
           },
           "kind": {
-            "type": "string",
             "description": "Which upload on the form: licence, rating screenshot or earnings screenshot.",
             "enum": [
               "license",
               "rating",
               "earnings"
-            ]
+            ],
+            "type": "string"
           },
           "status": {
-            "type": "string",
             "description": "`stored`: our copy can be opened; `pending`: still being copied; `failed`: it cannot be copied (see `error`).",
             "enum": [
               "pending",
               "stored",
               "failed"
-            ]
+            ],
+            "type": "string"
+          },
+          "origin": {
+            "description": "`website`: copied from the website's storage; `admin`: uploaded by an admin (D68).",
+            "enum": [
+              "website",
+              "admin"
+            ],
+            "type": "string"
           },
           "contentType": {
             "type": "string",
@@ -2414,16 +2748,23 @@
             "type": "string",
             "nullable": true,
             "description": "Why it could not be copied, in plain words. Null if it did not fail."
+          },
+          "uploadedByEmail": {
+            "type": "string",
+            "nullable": true,
+            "description": "The admin who uploaded it (admin uploads only; also null if that account was removed)."
           }
         },
         "required": [
           "id",
           "kind",
           "status",
+          "origin",
           "contentType",
           "sizeBytes",
           "url",
-          "error"
+          "error",
+          "uploadedByEmail"
         ]
       },
       "ApplicationDocumentListDto": {
@@ -3068,6 +3409,10 @@
       "DriverAliasDto": {
         "type": "object",
         "properties": {
+          "id": {
+            "type": "string",
+            "description": "Needed to remove it (`DELETE /drivers/:id/aliases/:aliasId`)."
+          },
           "type": {
             "type": "string",
             "enum": [
@@ -3095,6 +3440,7 @@
           }
         },
         "required": [
+          "id",
           "type",
           "value",
           "source"
@@ -3219,6 +3565,33 @@
         "required": [
           "step",
           "done"
+        ]
+      },
+      "AddAliasDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "The payment method the name or handle belongs to; matching only compares aliases of the payment's own method.",
+            "enum": [
+              "zelle",
+              "cashapp",
+              "venmo",
+              "chime",
+              "stripe",
+              "email",
+              "phone"
+            ]
+          },
+          "value": {
+            "type": "string",
+            "description": "The name, handle, company, email or phone as the payer shows it. Extra spaces are trimmed.",
+            "maxLength": 255
+          }
+        },
+        "required": [
+          "type",
+          "value"
         ]
       },
       "InboundEmailProvider": {
