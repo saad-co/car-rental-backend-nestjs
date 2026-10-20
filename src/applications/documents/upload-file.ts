@@ -9,7 +9,7 @@ export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 export const UPLOAD_FILE_MESSAGE = "Only JPG, PNG or PDF files, at most 10 MB.";
 
 /**
- * Checks one uploaded file (D64): not empty, at most 10 MB, and really a JPEG, PNG or PDF by its content.
+ * Checks one uploaded file (D68): not empty, at most 10 MB, and really a JPEG, PNG or PDF by its content.
  * @throws BadRequestException with `UPLOAD_FILE_MESSAGE` (and the field name) if it is not.
  */
 export function checkUpload(

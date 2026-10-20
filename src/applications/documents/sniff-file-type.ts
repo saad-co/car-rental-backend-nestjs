@@ -1,4 +1,4 @@
-/** A file type we accept for application documents (D64): what to store it as, and its file extension. */
+/** A file type we accept for application documents (D68): what to store it as, and its file extension. */
 export interface SniffedFileType {
   contentType: "image/jpeg" | "image/png" | "application/pdf";
   extension: "jpg" | "png" | "pdf";

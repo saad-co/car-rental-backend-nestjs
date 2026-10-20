@@ -16,7 +16,7 @@ import { Application } from "../application.entity.js";
 export enum ApplicationDocumentOrigin {
   /** Copied from the website's storage (D54). */
   website = "website",
-  /** Uploaded by an admin (D64): while adding an application by hand, or later from the Documents tab. */
+  /** Uploaded by an admin (D68): while adding an application by hand, or later from the Documents tab. */
   admin = "admin",
 }
 
@@ -51,7 +51,7 @@ export enum ApplicationDocumentStatus {
   "application_documents_stored_has_file",
   `"status" <> 'stored' OR ("storage_key" IS NOT NULL AND "size_bytes" IS NOT NULL)`,
 )
-// A website copy always has its website path; an admin upload is always already stored (D64).
+// A website copy always has its website path; an admin upload is always already stored (D68).
 @Check(
   "application_documents_origin_shape",
   `("origin" = 'website' AND "source_path" IS NOT NULL) OR ("origin" = 'admin' AND "status" = 'stored')`,
@@ -78,7 +78,7 @@ export class ApplicationDocument {
   })
   kind: ApplicationDocumentKind;
 
-  /** Website copy or admin upload (D64). Never changes by itself, unlike `uploadedById`, which `SET NULL` can clear. */
+  /** Website copy or admin upload (D68). Never changes by itself, unlike `uploadedById`, which `SET NULL` can clear. */
   @Column({
     type: "enum",
     enum: ApplicationDocumentOrigin,

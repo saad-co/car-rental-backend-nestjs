@@ -197,7 +197,7 @@ export class ApplicationsService {
   }
 
   /**
-   * Stores an application an admin typed in by hand, with its documents (D64). It has the same shape as one from the
+   * Stores an application an admin typed in by hand, with its documents (D68). It has the same shape as one from the
    * website (same payload keys and values), so every admin screen, and approval, treat it the same way.
    *
    * Files are not covered by a database transaction, so the order is: check everything → put the files in the

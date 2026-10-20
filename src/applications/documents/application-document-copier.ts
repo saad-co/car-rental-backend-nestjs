@@ -155,7 +155,7 @@ export class ApplicationDocumentCopier {
     const summary: CopySummary = { stored: 0, retryLater: 0, failed: 0 };
     for (const document of pending) {
       // An admin may upload into this slot while the (slow) copy below is running. Both updates therefore only apply
-      // if the row is still the pending website copy it was when we started; otherwise the admin's file wins (D64).
+      // if the row is still the pending website copy it was when we started; otherwise the admin's file wins (D68).
       const stillOurs = {
         id: document.id,
         status: ApplicationDocumentStatus.pending,

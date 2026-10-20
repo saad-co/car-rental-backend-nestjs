@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { DataSource, EntityManager } from "typeorm";
+import { DataSource, EntityManager, FindOptionsWhere, In } from "typeorm";
 import {
   addDays,
   chicagoDate,
@@ -14,6 +14,7 @@ import { isUniqueViolation } from "../database/postgres-errors.js";
 import { Driver } from "../drivers/driver.entity.js";
 import {
   Payment,
+  PaymentManualMethod,
   PaymentSource,
   PaymentStatus,
 } from "../payments/payment.entity.js";
@@ -21,15 +22,28 @@ import {
   LedgerDirection,
   LedgerEntry,
   LedgerEntryKind,
+  MAX_DESCRIPTION_LENGTH,
 } from "./ledger-entry.entity.js";
-import { PaginationQueryDto } from "../common/dto/pagination-query.dto.js";
+import { formatCents, parseAmountToCents } from "../common/money.js";
+import { assertRecentDay } from "../common/recent-day.js";
+import { likePattern } from "../common/search.js";
+import { ageBalance } from "./aging.js";
 import {
+  LedgerAppliedCreditDto,
+  LedgerEntryDetailsDto,
+  LedgerEntryLinkDto,
+  LedgerListQueryDto,
+  LedgerOrder,
+  LedgerOverviewDto,
   LedgerPageDto,
   LedgerPeriod,
   LedgerPeriodDto,
+  LedgerRowDto,
   LedgerSummaryDto,
   LedgerSummaryQueryDto,
+  LedgerTypeFilter,
 } from "./dto/ledger-read.dto.js";
+import { ledgerRef, parseLedgerRef } from "./ledger-ref.js";
 import {
   CreateLedgerEntryDto,
   LedgerEntryDto,
@@ -51,6 +65,20 @@ const SOURCE_LABEL: Record<PaymentSource, string> = {
   [PaymentSource.email_chime]: "Chime",
   [PaymentSource.plaid_zelle]: "Zelle (bank)",
   [PaymentSource.manual]: "Manual",
+};
+
+/** How a payment recorded by hand is named in its credit's description. */
+const MANUAL_METHOD_LABEL: Record<PaymentManualMethod, string> = {
+  [PaymentManualMethod.zelle]: "Zelle",
+  [PaymentManualMethod.cash_app]: "Cash App",
+  [PaymentManualMethod.venmo]: "Venmo",
+  [PaymentManualMethod.stripe]: "Stripe",
+  [PaymentManualMethod.chime]: "Chime",
+  [PaymentManualMethod.cash]: "Cash",
+  [PaymentManualMethod.check]: "Check",
+  [PaymentManualMethod.card]: "Card",
+  [PaymentManualMethod.money_order]: "Money order",
+  [PaymentManualMethod.other]: "Other",
 };
 
 /**
@@ -78,7 +106,13 @@ export class LedgerService {
   ): Promise<LedgerEntryDto> {
     await this.assertDriverExists(driverId);
     const direction = input.direction;
-    this.assertManualDate(input.effectiveDate);
+    assertRecentDay(input.effectiveDate, MAX_BACKDATE_DAYS);
+    const appliesToId = input.appliesToId ?? null;
+    if (appliesToId && direction !== LedgerDirection.credit) {
+      throw new BadRequestException(
+        "Only a credit can be applied against a charge.",
+      );
+    }
 
     const values = {
       driverId,
@@ -87,50 +121,129 @@ export class LedgerService {
       kind: LedgerEntryKind.adjustment,
       description: input.reason,
       effectiveDate: input.effectiveDate,
+      appliesToId,
+      internalNote: input.internalNote ?? null,
       createdById: adminId,
       idempotencyKey: `manual:${input.requestKey}`,
     };
 
-    // ON CONFLICT DO NOTHING on the key only: a repeat of the same request inserts nothing and raises no error,
-    // while every other constraint still raises. Plain SQL: TypeORM's insert builder cannot limit ON CONFLICT to one
-    // column. Values are parameters ($1…), never pasted into the SQL.
-    const rows = (await this.dataSource.query(
-      `INSERT INTO ledger_entries
-         (driver_id, direction, amount_cents, kind, description, effective_date, created_by_id, idempotency_key)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       ON CONFLICT (idempotency_key) DO NOTHING
-       RETURNING id`,
-      [
-        values.driverId,
-        values.direction,
-        values.amountCents,
-        values.kind,
-        values.description,
-        values.effectiveDate,
-        values.createdById,
-        values.idempotencyKey,
-      ],
-    )) as { id: string }[];
-    const insertedId = rows[0]?.id;
+    const entryId = await this.dataSource.transaction(async (manager) => {
+      // A credit against a charge locks the charge first: two admins crediting the same charge then run one after
+      // the other, so together they can never credit more than the charge was.
+      const charge = appliesToId
+        ? await this.lockCharge(manager, driverId, appliesToId)
+        : null;
 
-    if (insertedId) return this.findDto(insertedId);
+      // A repeat of the same request (a double click, a retry): answer with the entry already made, without
+      // checking the limit again (the first request may have used it all).
+      const repeated = await manager.findOneBy(LedgerEntry, {
+        idempotencyKey: values.idempotencyKey,
+      });
+      if (repeated) {
+        const same =
+          repeated.driverId === driverId &&
+          repeated.direction === direction &&
+          repeated.amountCents === input.amountCents &&
+          repeated.effectiveDate === input.effectiveDate &&
+          repeated.description === input.reason &&
+          repeated.appliesToId === appliesToId &&
+          repeated.internalNote === values.internalNote;
+        if (!same) {
+          throw new ConflictException(
+            "This request key was already used for a different entry.",
+          );
+        }
+        return repeated.id;
+      }
 
-    // The key was used before: the same request repeated, or a different entry reusing the key.
-    const existing = await this.dataSource
-      .getRepository(LedgerEntry)
-      .findOneByOrFail({ idempotencyKey: values.idempotencyKey });
-    const same =
-      existing.driverId === driverId &&
-      existing.direction === direction &&
-      existing.amountCents === input.amountCents &&
-      existing.effectiveDate === input.effectiveDate &&
-      existing.description === input.reason;
-    if (!same) {
-      throw new ConflictException(
-        "This request key was already used for a different entry.",
+      if (charge) {
+        const left =
+          charge.amountCents - (await this.appliedCents(manager, charge.id));
+        if (input.amountCents > left) {
+          throw new BadRequestException(
+            `At most ${formatCents(left)} is left to credit on ${ledgerRef(charge.kind, charge.direction, charge.entryNo)}.`,
+          );
+        }
+      }
+
+      // ON CONFLICT DO NOTHING on the key only: if another request with this key slipped in between the check
+      // above and here, this inserts nothing and raises no error (the key is unique in the database), and the
+      // entry that won is read back below. Plain SQL: TypeORM's insert builder cannot limit ON CONFLICT to one
+      // column. Values are parameters ($1…), never pasted into the SQL.
+      const rows = (await manager.query(
+        `INSERT INTO ledger_entries
+           (driver_id, direction, amount_cents, kind, description, effective_date, applies_to_id, internal_note,
+            created_by_id, idempotency_key)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         ON CONFLICT (idempotency_key) DO NOTHING
+         RETURNING id`,
+        [
+          values.driverId,
+          values.direction,
+          values.amountCents,
+          values.kind,
+          values.description,
+          values.effectiveDate,
+          values.appliesToId,
+          values.internalNote,
+          values.createdById,
+          values.idempotencyKey,
+        ],
+      )) as { id: string }[];
+      if (rows[0]) return rows[0].id;
+      return (
+        await manager.findOneByOrFail(LedgerEntry, {
+          idempotencyKey: values.idempotencyKey,
+        })
+      ).id;
+    });
+    return this.findDto(entryId);
+  }
+
+  /**
+   * Locks a charge for a credit against it and checks it can take one: on this driver, a debit (rent or a manual
+   * charge), not reversed.
+   * @throws NotFoundException no such charge on this driver.
+   * @throws BadRequestException not a charge, or reversed.
+   */
+  private async lockCharge(
+    manager: EntityManager,
+    driverId: string,
+    chargeId: string,
+  ): Promise<LedgerEntry> {
+    const charge = await manager.findOne(LedgerEntry, {
+      where: { id: chargeId, driverId },
+      lock: { mode: "pessimistic_write" },
+    });
+    if (!charge) throw new NotFoundException("Charge not found.");
+    if (
+      charge.direction !== LedgerDirection.debit ||
+      (charge.kind !== LedgerEntryKind.adjustment &&
+        charge.kind !== LedgerEntryKind.rent)
+    ) {
+      throw new BadRequestException("Only a charge can be credited against.");
+    }
+    if (await manager.existsBy(LedgerEntry, { reversalOfId: charge.id })) {
+      throw new BadRequestException(
+        `${ledgerRef(charge.kind, charge.direction, charge.entryNo)} was reversed.`,
       );
     }
-    return this.findDto(existing.id);
+    return charge;
+  }
+
+  /** The sum of the credits applied against a charge that were not reversed since. */
+  private async appliedCents(
+    manager: EntityManager,
+    chargeId: string,
+  ): Promise<number> {
+    const [{ applied }] = (await manager.query(
+      `SELECT COALESCE(SUM(c.amount_cents), 0)::bigint AS applied
+       FROM ledger_entries c
+       WHERE c.applies_to_id = $1
+         AND NOT EXISTS (SELECT 1 FROM ledger_entries r WHERE r.reversal_of_id = c.id)`,
+      [chargeId],
+    )) as [{ applied: string }];
+    return Number(applied);
   }
 
   /**
@@ -156,6 +269,16 @@ export class LedgerService {
       if (original.kind === LedgerEntryKind.payment) {
         throw new ConflictException(
           "A payment cannot be reversed from the ledger. Reassign the payment instead.",
+        );
+      }
+      // Reversing a charge that has credits applied would give the driver the charge back and keep the credits:
+      // the credits are reversed first.
+      if (
+        original.direction === LedgerDirection.debit &&
+        (await this.appliedCents(manager, original.id)) > 0
+      ) {
+        throw new ConflictException(
+          `Reverse the credits applied to ${ledgerRef(original.kind, original.direction, original.entryNo)} first.`,
         );
       }
       return (
@@ -226,11 +349,13 @@ export class LedgerService {
    * of a payment has its own unique key and a retry of the same step can never write it twice.
    *
    * @param createdById the admin who caused it, or null for the system (matching, backfill).
+   * @param voidReason when an admin voids a payment recorded by hand: why, written on the reversal.
    */
   async syncPaymentCredit(
     manager: EntityManager,
     paymentId: string,
     createdById: string | null,
+    voidReason?: string,
   ): Promise<void> {
     const payment = await manager.findOneByOrFail(Payment, { id: paymentId });
     const credits = await manager.find(LedgerEntry, {
@@ -263,7 +388,9 @@ export class LedgerService {
         active,
         wanted
           ? "Payment moved to another driver"
-          : "Payment no longer confirmed",
+          : voidReason
+            ? `Payment voided: ${voidReason}`.slice(0, MAX_DESCRIPTION_LENGTH)
+            : "Payment no longer confirmed",
         createdById,
       );
     }
@@ -275,19 +402,35 @@ export class LedgerService {
       direction: LedgerDirection.credit,
       amountCents: payment.amountCents,
       kind: LedgerEntryKind.payment,
-      description:
-        `${SOURCE_LABEL[payment.source]} payment from ${payment.senderName}`.slice(
-          0,
-          500,
-        ),
+      description: this.paymentDescription(payment).slice(
+        0,
+        MAX_DESCRIPTION_LENGTH,
+      ),
       effectiveDate: chicagoDate(payment.occurredAt),
       paymentId,
       reversalOfId: null,
+      internalNote: payment.internalNote,
       createdById,
       idempotencyKey: latest
         ? `payment:${paymentId}:after:${latest.id}`
         : `payment:${paymentId}`,
     });
+  }
+
+  /**
+   * What the payment's credit says: "Zelle payment from J. Smith", or for a payment an admin recorded
+   * "Check payment · ref 1043".
+   */
+  private paymentDescription(payment: Payment): string {
+    // The text an admin typed for a payment recorded by hand wins over the automatic one.
+    if (payment.description) return payment.description;
+    if (payment.source === PaymentSource.manual) {
+      const method = payment.manualMethod
+        ? MANUAL_METHOD_LABEL[payment.manualMethod]
+        : "Manual";
+      return `${method} payment${payment.transactionId ? ` · ref ${payment.transactionId}` : ""}`;
+    }
+    return `${SOURCE_LABEL[payment.source]} payment from ${payment.senderName}`;
   }
 
   /**
@@ -327,19 +470,36 @@ export class LedgerService {
   }
 
   /**
-   * One page of a driver's ledger, newest first, each row with the balance right after it. The running balance is
-   * a window function over the driver's whole history in date order (so a backdated entry lands in the right place),
-   * computed before the page is cut.
+   * One page of a driver's ledger, each row with the balance right after it. The running balance is a window function
+   * over the driver's whole history in date order (so a backdated entry lands in the right place), computed before
+   * the filters and the page are cut: a row's balance is the same whatever is filtered.
    *
    * Order in time: the day the entry belongs to, then when it was recorded. A reversal and the credit that replaces
    * it share one transaction (same `created_at`), so the reversal counts first; `id` keeps the order stable.
+   * `order=asc` flips every part of that order.
+   *
+   * Filters (all optional, all in the database): the type of entry, the days the entries belong to (`from`, `to`,
+   * plain calendar days), and a search: a reference like `CH-1042`, an amount like `85` or `$85.00` (the entries of
+   * exactly that amount), or text in the description, the internal note or the email of the admin who entered it.
    * @throws NotFoundException unknown driver.
+   * @throws BadRequestException `from` after `to`.
    */
   async listPage(
     driverId: string,
-    query: PaginationQueryDto,
+    query: LedgerListQueryDto,
   ): Promise<LedgerPageDto> {
     await this.assertDriverExists(driverId);
+    if (query.from && query.to && query.from > query.to) {
+      throw new BadRequestException(
+        `The "from" date (${query.from}) is after the "to" date (${query.to}).`,
+      );
+    }
+    const { where, params } = this.listFilters(driverId, query);
+    const dir = query.order === LedgerOrder.asc ? "ASC" : "DESC";
+    // The window's own order (see above) in the direction asked for; the reversal-first rule flips with it.
+    const reversalFirst = query.order === LedgerOrder.asc ? "DESC" : "ASC";
+    const limitAt = params.length + 1;
+
     const rows = (await this.dataSource.query(
       `WITH history AS (
          SELECT e.*,
@@ -347,52 +507,304 @@ export class LedgerService {
              ORDER BY effective_date, created_at, (kind = 'reversal') DESC, id
              ROWS UNBOUNDED PRECEDING)::bigint AS running
          FROM ledger_entries e WHERE e.driver_id = $1)
-       SELECT h.id, h.driver_id, h.direction, h.amount_cents, h.kind, h.description,
-              h.effective_date::text AS effective_date, h.payment_id, h.reversal_of_id, h.created_by_id,
-              h.created_at, h.running, u.email AS created_by_email, r.id AS reversed_by_id
+       SELECT h.id, h.entry_no, h.driver_id, h.direction, h.amount_cents, h.kind, h.description,
+              h.effective_date::text AS effective_date, h.payment_id, h.reversal_of_id, h.applies_to_id,
+              h.internal_note, h.created_by_id, h.created_at, h.running, u.email AS created_by_email,
+              r.id AS reversed_by_id, r.entry_no AS reversed_by_no,
+              ro.entry_no AS reversal_of_no, ro.kind AS reversal_of_kind, ro.direction AS reversal_of_direction,
+              a.entry_no AS applies_to_no, a.kind AS applies_to_kind, a.direction AS applies_to_direction,
+              p.source AS payment_source, p.manual_method AS payment_manual_method, p.status AS payment_status,
+              (SELECT COALESCE(SUM(c.amount_cents), 0) FROM ledger_entries c
+                WHERE c.applies_to_id = h.id
+                  AND NOT EXISTS (SELECT 1 FROM ledger_entries cr WHERE cr.reversal_of_id = c.id))::int AS applied_cents
        FROM history h
        LEFT JOIN users u ON u.id = h.created_by_id
        LEFT JOIN ledger_entries r ON r.reversal_of_id = h.id
-       ORDER BY h.effective_date DESC, h.created_at DESC, (h.kind = 'reversal') ASC, h.id DESC
-       LIMIT $2 OFFSET $3`,
-      [driverId, query.limit, (query.page - 1) * query.limit],
+       LEFT JOIN ledger_entries ro ON ro.id = h.reversal_of_id
+       LEFT JOIN ledger_entries a ON a.id = h.applies_to_id
+       LEFT JOIN payments p ON p.id = h.payment_id
+       WHERE ${where}
+       ORDER BY h.effective_date ${dir}, h.created_at ${dir}, (h.kind = 'reversal') ${reversalFirst}, h.id ${dir}
+       LIMIT $${limitAt} OFFSET $${limitAt + 1}`,
+      [...params, query.limit, (query.page - 1) * query.limit],
     )) as RawLedgerRow[];
-    const [{ total, balance }] = (await this.dataSource.query(
-      `SELECT COUNT(*)::int AS total, COALESCE(SUM(${SIGNED}), 0)::bigint AS balance
-       FROM ledger_entries WHERE driver_id = $1`,
-      [driverId],
-    )) as [{ total: number; balance: string }];
+
+    const [{ total, debit, credit }] = (await this.dataSource.query(
+      `SELECT COUNT(*)::int AS total,
+         COALESCE(SUM(h.amount_cents) FILTER (WHERE h.direction = 'debit'), 0)::bigint AS debit,
+         COALESCE(SUM(h.amount_cents) FILTER (WHERE h.direction = 'credit'), 0)::bigint AS credit
+       FROM ledger_entries h
+       LEFT JOIN users u ON u.id = h.created_by_id
+       WHERE ${where}`,
+      params,
+    )) as [{ total: number; debit: string; credit: string }];
+
+    const balanceCents = await this.balanceCents(driverId);
+    let balanceBeforeCents: number | null = null;
+    if (query.from) {
+      const [{ before }] = (await this.dataSource.query(
+        `SELECT COALESCE(SUM(${SIGNED}), 0)::bigint AS before
+         FROM ledger_entries WHERE driver_id = $1 AND effective_date < $2::date`,
+        [driverId, query.from],
+      )) as [{ before: string }];
+      balanceBeforeCents = Number(before);
+    }
 
     return {
-      items: rows.map((row) =>
-        Object.assign(
-          this.toDto(
-            {
-              id: row.id,
-              driverId: row.driver_id,
-              direction: row.direction,
-              amountCents: row.amount_cents,
-              kind: row.kind,
-              description: row.description,
-              effectiveDate: row.effective_date,
-              paymentId: row.payment_id,
-              reversalOfId: row.reversal_of_id,
-              createdById: row.created_by_id,
-              createdBy: row.created_by_email
-                ? ({ email: row.created_by_email } as LedgerEntry["createdBy"])
-                : null,
-              idempotencyKey: "",
-              createdAt: row.created_at,
-            },
-            row.reversed_by_id,
-          ),
-          { runningBalanceCents: Number(row.running) },
-        ),
-      ),
+      items: rows.map((row) => this.toRowDto(row)),
       total,
       page: query.page,
       limit: query.limit,
-      balanceCents: Number(balance),
+      balanceCents,
+      totals: { debitCents: Number(debit), creditCents: Number(credit) },
+      balanceBeforeCents,
+    };
+  }
+
+  /**
+   * The WHERE for `listPage` on the table aliased `h` (joined to `users u`), with its parameters. `$1` is the
+   * driver. Only the fixed fragments below are ever written into the SQL; every value from the request is a
+   * parameter.
+   */
+  private listFilters(
+    driverId: string,
+    query: LedgerListQueryDto,
+  ): { where: string; params: unknown[] } {
+    const conditions = ["h.driver_id = $1"];
+    const params: unknown[] = [driverId];
+    const param = (value: unknown) => `$${params.push(value)}`;
+
+    switch (query.type) {
+      case LedgerTypeFilter.charges:
+        conditions.push(
+          "h.direction = 'debit' AND h.kind IN ('rent', 'adjustment')",
+        );
+        break;
+      case LedgerTypeFilter.credits:
+        conditions.push("h.kind = 'adjustment' AND h.direction = 'credit'");
+        break;
+      case LedgerTypeFilter.payments:
+        conditions.push("h.kind = 'payment'");
+        break;
+      case LedgerTypeFilter.reversals:
+        conditions.push("h.kind = 'reversal'");
+        break;
+    }
+    if (query.from) {
+      conditions.push(`h.effective_date >= ${param(query.from)}::date`);
+    }
+    if (query.to) {
+      conditions.push(`h.effective_date <= ${param(query.to)}::date`);
+    }
+    if (query.search) {
+      const entryNo = parseLedgerRef(query.search);
+      if (entryNo !== null) {
+        conditions.push(`h.entry_no = ${param(entryNo)}`);
+      } else {
+        const pattern = param(likePattern(query.search));
+        const matches = [
+          `h.description ILIKE ${pattern}`,
+          `h.internal_note ILIKE ${pattern}`,
+          `u.email ILIKE ${pattern}`,
+        ];
+        // An amount (`85`, `$85.00`) also finds the entries of exactly that amount, not "contains 85".
+        const cents = parseAmountToCents(query.search);
+        if (cents !== null) matches.push(`h.amount_cents = ${param(cents)}`);
+        conditions.push(`(${matches.join(" OR ")})`);
+      }
+    }
+    return { where: conditions.join(" AND "), params };
+  }
+
+  /** One row of `listPage`'s query as the API returns it. */
+  private toRowDto(row: RawLedgerRow): LedgerRowDto {
+    const reversed = row.reversed_by_id !== null;
+    const isCharge =
+      row.direction === LedgerDirection.debit &&
+      (row.kind === LedgerEntryKind.adjustment ||
+        row.kind === LedgerEntryKind.rent);
+    const left = row.amount_cents - row.applied_cents;
+    return {
+      id: row.id,
+      entryNo: Number(row.entry_no),
+      ref: ledgerRef(row.kind, row.direction, Number(row.entry_no)),
+      driverId: row.driver_id,
+      direction: row.direction,
+      amountCents: row.amount_cents,
+      kind: row.kind,
+      description: row.description,
+      effectiveDate: row.effective_date,
+      paymentId: row.payment_id,
+      reversalOfId: row.reversal_of_id,
+      appliesToId: row.applies_to_id,
+      internalNote: row.internal_note,
+      reversedById: row.reversed_by_id,
+      canReverse: this.canReverse(row.kind, reversed),
+      createdById: row.created_by_id,
+      createdByEmail: row.created_by_email,
+      createdAt: row.created_at,
+      runningBalanceCents: Number(row.running),
+      appliesToRef:
+        row.applies_to_no === null
+          ? null
+          : ledgerRef(
+              row.applies_to_kind as LedgerEntryKind,
+              row.applies_to_direction as LedgerDirection,
+              Number(row.applies_to_no),
+            ),
+      reversalOfRef:
+        row.reversal_of_no === null
+          ? null
+          : ledgerRef(
+              row.reversal_of_kind as LedgerEntryKind,
+              row.reversal_of_direction as LedgerDirection,
+              Number(row.reversal_of_no),
+            ),
+      reversedByRef:
+        row.reversed_by_no === null
+          ? null
+          : ledgerRef(
+              LedgerEntryKind.reversal,
+              LedgerDirection.credit,
+              Number(row.reversed_by_no),
+            ),
+      paymentSource: row.payment_source,
+      paymentManualMethod: row.payment_manual_method,
+      canVoidPayment:
+        row.kind === LedgerEntryKind.payment &&
+        !reversed &&
+        row.payment_source === PaymentSource.manual &&
+        row.payment_status === PaymentStatus.confirmed,
+      creditableCents: isCharge && !reversed && left > 0 ? left : null,
+    };
+  }
+
+  /**
+   * The top of the ledger page: the balance, what is owed by age (first in, first out, see `ageBalance`) and the
+   * newest confirmed payment. Reversed entries and their reversals are left out of the aging: together they are
+   * zero.
+   * @throws NotFoundException unknown driver.
+   */
+  async overview(driverId: string): Promise<LedgerOverviewDto> {
+    await this.assertDriverExists(driverId);
+    const today = chicagoDate(new Date());
+    const entries = (await this.dataSource.query(
+      `SELECT e.direction, e.amount_cents AS "amountCents", e.effective_date::text AS "effectiveDate"
+       FROM ledger_entries e
+       WHERE e.driver_id = $1 AND e.kind <> 'reversal'
+         AND NOT EXISTS (SELECT 1 FROM ledger_entries r WHERE r.reversal_of_id = e.id)
+       ORDER BY e.effective_date, e.created_at, e.entry_no`,
+      [driverId],
+    )) as Parameters<typeof ageBalance>[0];
+
+    const last = await this.dataSource.getRepository(Payment).findOne({
+      where: { driverId, status: PaymentStatus.confirmed },
+      order: { occurredAt: "DESC", id: "DESC" },
+    });
+    return {
+      balanceCents: await this.balanceCents(driverId),
+      aging: ageBalance(entries, today),
+      lastPayment: last && {
+        amountCents: last.amountCents,
+        source: last.source,
+        manualMethod: last.manualMethod,
+        occurredAt: last.occurredAt,
+      },
+      asOf: today,
+    };
+  }
+
+  /**
+   * One entry with everything that links to it: what it reverses or was reversed by, the charge it is applied
+   * against, the credits applied against it, and its payment.
+   * @throws NotFoundException no such entry on this driver.
+   */
+  async entryDetails(
+    driverId: string,
+    entryId: string,
+  ): Promise<LedgerEntryDetailsDto> {
+    const repo = this.dataSource.getRepository(LedgerEntry);
+    const entry = await repo.findOne({
+      where: { id: entryId, driverId },
+      relations: { createdBy: true },
+    });
+    if (!entry) throw new NotFoundException("Ledger entry not found.");
+
+    const link = (e: LedgerEntry): LedgerEntryLinkDto => ({
+      id: e.id,
+      ref: ledgerRef(e.kind, e.direction, e.entryNo),
+      description: e.description,
+      effectiveDate: e.effectiveDate,
+      createdAt: e.createdAt,
+      createdByEmail: e.createdBy?.email ?? null,
+    });
+    const load = (where: FindOptionsWhere<LedgerEntry>) =>
+      repo.findOne({ where, relations: { createdBy: true } });
+
+    const reversedBy = await load({ reversalOfId: entry.id });
+    const reversalOf = entry.reversalOfId
+      ? await load({ id: entry.reversalOfId })
+      : null;
+    const appliesTo = entry.appliesToId
+      ? await load({ id: entry.appliesToId })
+      : null;
+    const applied = await repo.find({
+      where: { appliesToId: entry.id },
+      relations: { createdBy: true },
+      order: { createdAt: "ASC", entryNo: "ASC" },
+    });
+    const reversedCredits = new Set(
+      applied.length === 0
+        ? []
+        : (
+            await repo.find({
+              where: { reversalOfId: In(applied.map((c) => c.id)) },
+            })
+          ).map((r) => r.reversalOfId),
+    );
+    const appliedCredits: LedgerAppliedCreditDto[] = applied.map((c) =>
+      Object.assign(link(c), {
+        amountCents: c.amountCents,
+        reversed: reversedCredits.has(c.id),
+      }),
+    );
+    const payment = entry.paymentId
+      ? await this.dataSource
+          .getRepository(Payment)
+          .findOneBy({ id: entry.paymentId })
+      : null;
+
+    const isCharge =
+      entry.direction === LedgerDirection.debit &&
+      (entry.kind === LedgerEntryKind.adjustment ||
+        entry.kind === LedgerEntryKind.rent);
+    const left =
+      entry.amountCents -
+      appliedCredits
+        .filter((c) => !c.reversed)
+        .reduce((sum, c) => sum + c.amountCents, 0);
+
+    return {
+      entry: this.toDto(entry, reversedBy?.id ?? null),
+      reversalOf: reversalOf && link(reversalOf),
+      reversedBy: reversedBy && link(reversedBy),
+      appliesTo: appliesTo && link(appliesTo),
+      appliedCredits,
+      payment: payment && {
+        id: payment.id,
+        source: payment.source,
+        manualMethod: payment.manualMethod,
+        senderName: payment.senderName,
+        transactionId: payment.transactionId,
+        occurredAt: payment.occurredAt,
+        status: payment.status,
+      },
+      creditableCents: isCharge && !reversedBy && left > 0 ? left : null,
+      canVoidPayment:
+        entry.kind === LedgerEntryKind.payment &&
+        !reversedBy &&
+        payment?.source === PaymentSource.manual &&
+        payment.status === PaymentStatus.confirmed,
     };
   }
 
@@ -525,6 +937,8 @@ export class LedgerService {
   toDto(entry: LedgerEntry, reversedById: string | null): LedgerEntryDto {
     return {
       id: entry.id,
+      entryNo: entry.entryNo,
+      ref: ledgerRef(entry.kind, entry.direction, entry.entryNo),
       driverId: entry.driverId,
       direction: entry.direction,
       amountCents: entry.amountCents,
@@ -533,34 +947,23 @@ export class LedgerService {
       effectiveDate: entry.effectiveDate,
       paymentId: entry.paymentId,
       reversalOfId: entry.reversalOfId,
+      appliesToId: entry.appliesToId,
+      internalNote: entry.internalNote,
       reversedById,
-      canReverse:
-        reversedById === null &&
-        entry.kind !== LedgerEntryKind.reversal &&
-        entry.kind !== LedgerEntryKind.payment,
+      canReverse: this.canReverse(entry.kind, reversedById !== null),
       createdById: entry.createdById,
       createdByEmail: entry.createdBy?.email ?? null,
       createdAt: entry.createdAt,
     };
   }
 
-  /**
-   * A manual entry is dated today or up to 90 days back, in Chicago. Never in the future.
-   * @throws BadRequestException otherwise.
-   */
-  private assertManualDate(day: string): void {
-    if (!isCalendarDate(day)) {
-      throw new BadRequestException("The date is not a real calendar day.");
-    }
-    const today = chicagoDate(new Date());
-    if (day > today) {
-      throw new BadRequestException("The date cannot be in the future.");
-    }
-    if (day < addDays(today, -MAX_BACKDATE_DAYS)) {
-      throw new BadRequestException(
-        `The date can be at most ${MAX_BACKDATE_DAYS} days back.`,
-      );
-    }
+  /** True when an admin may reverse it here: not a reversal, not a payment credit, not reversed already. */
+  private canReverse(kind: LedgerEntryKind, reversed: boolean): boolean {
+    return (
+      !reversed &&
+      kind !== LedgerEntryKind.reversal &&
+      kind !== LedgerEntryKind.payment
+    );
   }
 
   private async assertDriverExists(id: string): Promise<void> {
@@ -573,6 +976,7 @@ export class LedgerService {
 /** A row of `listPage`'s query, as Postgres returns it (snake_case columns, bigint as string). */
 interface RawLedgerRow {
   id: string;
+  entry_no: string;
   driver_id: string;
   direction: LedgerDirection;
   amount_cents: number;
@@ -581,9 +985,22 @@ interface RawLedgerRow {
   effective_date: string;
   payment_id: string | null;
   reversal_of_id: string | null;
+  applies_to_id: string | null;
+  internal_note: string | null;
   created_by_id: string | null;
   created_by_email: string | null;
   reversed_by_id: string | null;
+  reversed_by_no: string | null;
+  reversal_of_no: string | null;
+  reversal_of_kind: string | null;
+  reversal_of_direction: string | null;
+  applies_to_no: string | null;
+  applies_to_kind: string | null;
+  applies_to_direction: string | null;
+  payment_source: PaymentSource | null;
+  payment_manual_method: PaymentManualMethod | null;
+  payment_status: PaymentStatus | null;
+  applied_cents: number;
   created_at: Date;
   running: string;
 }

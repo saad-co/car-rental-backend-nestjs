@@ -32,7 +32,8 @@ Gmail ──► allow-listed sender + DKIM ──► LLM extract + validate ─�
 Payment ──► match: alias / email / phone exact, else LLM (70% assign, below → review) ──► Payment (confirmed)   [built, D48, D49]
 Plaid ──► filter: incoming, posted, Zelle ──► Payment (bank check, M5)                      [not built]
 Confirmed Payment ──► LedgerEntry (credit, same transaction; reassign = reversal + new credit)   [built, D60]
-Admin ──► LedgerEntry (manual charge/credit by category, reversal)                         [built, D60]
+Admin ──► LedgerEntry (manual charge/credit with a reason, credit against a charge, reversal)   [built, D60, D61, D64]
+Admin ──► Payment (manual, any method, confirmed) ──► LedgerEntry (credit, same transaction); void = reversal   [built, D64]
 Billing job (America/Chicago) ──► LedgerEntry (rent debit)
 Reminder job ──► effective balance check ──► Quo SMS (off / dry_run / live)
 ```
@@ -43,10 +44,10 @@ Full rules: `PHASE1_SPEC.md` sections 5–8.
 |---|---|
 | `src/email-intake/` | Module, 3-minute scheduler, `EmailIntakeService` (lock, cursor, one transaction per email), email log API. Subfolders: `mailbox/` (IMAP reader behind an interface), `verification/` (DKIM, sender allow-list, parser, `EmailProcessor`), `extraction/` (LLM prompt and answer validation) |
 | `src/llm/` | `LlmJsonClient` interface, Gemini adapter, `LlmTemporaryError` (rate limit 429 and overload 5xx; shared by intake and matching) |
-| `src/payments/` | `payments` table, admin list, manual assign |
+| `src/payments/` | `payments` table, admin list, manual assign, record a payment by hand (`POST /payments/manual`, duplicate warning) and void it (D64) |
 | `src/aliases/` | `payment_aliases` table, normalisation |
 | `src/matching/` | `MatchingService`, `AliasIndex`, AI driver matcher |
-| `src/ledger/` | `ledger_entries` (append-only: database triggers refuse UPDATE/DELETE and check reversals), `LedgerService` (manual entries, reversals, `syncPaymentCredit` called by payments and matching in their transaction, balance, history with running balance, weekly/monthly summaries by Chicago `effective_date`), routes `/drivers/:id/ledger…`, `ledger:backfill` command (D60) |
+| `src/ledger/` | `ledger_entries` (append-only: database triggers refuse UPDATE/DELETE and check reversals), `LedgerService` (manual entries, reversals, `syncPaymentCredit` called by payments and matching in their transaction, balance, history with running balance, weekly/monthly summaries by Chicago `effective_date`, filters, `entry_no` references, aging by first in, first out in `aging.ts`, entry details, credit against a charge), routes `/drivers/:id/ledger…` (list, overview, summary, entries), `ledger:backfill` command (D60, D64) |
 | `src/sms/` | Quo chat (D50, D51): `sms_messages` / `sms_attachments`, `SmsService` (send by `SMS_MODE`, list, history sync, webhook apply), admin routes `/sms/...`, `POST /webhooks/quo` (signature-checked). Subfolders: `quo/` (client behind an interface, signature check, event parser), `storage/` (S3-compatible bucket behind an interface), `attachments/` (copies texted-in files into the bucket) |
 
 `scripts/` holds developer tools (not part of the API): IMAP peek, extraction evaluation, old-database report and imports.

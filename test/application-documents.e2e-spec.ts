@@ -273,7 +273,7 @@ describe("application documents are copied into our storage (test database)", ()
     });
   });
 
-  describe("admin uploads into a slot (D64)", () => {
+  describe("admin uploads into a slot (D68)", () => {
     const PNG = Buffer.concat([
       Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
       Buffer.from("admin png"),

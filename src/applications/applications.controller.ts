@@ -71,7 +71,7 @@ export class ApplicationsController {
   }
 
   /**
-   * `POST /applications/manual`: an admin types in an application by hand, with its documents (D64). Same fields and
+   * `POST /applications/manual`: an admin types in an application by hand, with its documents (D68). Same fields and
    * rules as the website form; the result is an ordinary application that is then approved like any other. Admin
    * only (no `@Public`). Multipart form data: the text fields plus the files `license_file` (required),
    * `rating_file` and `earnings_file` (JPG, PNG or PDF, at most 10 MB each). The file fields end in `_file` because

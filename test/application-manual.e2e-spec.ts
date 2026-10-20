@@ -126,7 +126,7 @@ function validate(raw: Record<string, unknown>) {
   };
 }
 
-describe("an admin adds an application by hand (D64, test database)", () => {
+describe("an admin adds an application by hand (D68, test database)", () => {
   let db: DataSource;
   let storage: FakeStorage;
   let alerted: number;

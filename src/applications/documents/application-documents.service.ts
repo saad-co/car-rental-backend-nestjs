@@ -32,7 +32,7 @@ import {
 } from "./upload-file.js";
 
 /**
- * An application's documents: reading them (our own copies, D54) and admin uploads into the three slots (D64):
+ * An application's documents: reading them (our own copies, D54) and admin uploads into the three slots (D68):
  * licence, rating screenshot, earnings. One file per slot. Uploading into a filled slot replaces the file, a website
  * copy included.
  */

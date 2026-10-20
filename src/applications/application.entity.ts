@@ -149,7 +149,7 @@ export class Application {
   driver?: Driver | null;
 
   /**
-   * The admin who typed this application in by hand (D64). Null for applications that came from the website form.
+   * The admin who typed this application in by hand (D68). Null for applications that came from the website form.
    * `SET NULL`: removing an admin account never removes the applications they added.
    */
   @Column({ name: "created_by_id", type: "uuid", nullable: true })

@@ -11,7 +11,7 @@ export class ApplicationDocumentDto {
   kind: ApplicationDocumentKind;
   /** `stored`: our copy can be opened; `pending`: still being copied; `failed`: it cannot be copied (see `error`). */
   status: ApplicationDocumentStatus;
-  /** `website`: copied from the website's storage; `admin`: uploaded by an admin (D64). */
+  /** `website`: copied from the website's storage; `admin`: uploaded by an admin (D68). */
   origin: ApplicationDocumentOrigin;
   /** MIME type, e.g. `image/png`; null if unknown. */
   contentType: string | null;

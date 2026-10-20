@@ -12,7 +12,7 @@ function shortName(file: Express.Multer.File): string {
 }
 
 /**
- * The `payload` of a hand-typed application: the website's keys and value formats (D64), so the admin screens show
+ * The `payload` of a hand-typed application: the website's keys and value formats (D68), so the admin screens show
  * it exactly like a website one, plus `source: "admin"` to tell them apart. Empty optional answers are left out.
  */
 export function manualPayload(

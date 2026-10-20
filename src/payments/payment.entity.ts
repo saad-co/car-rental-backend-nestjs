@@ -26,6 +26,20 @@ export enum PaymentSource {
   manual = "manual",
 }
 
+/** How an admin received a payment recorded by hand (B79): what the payer used, shown next to "Manual". */
+export enum PaymentManualMethod {
+  zelle = "zelle",
+  cash_app = "cash_app",
+  venmo = "venmo",
+  stripe = "stripe",
+  chime = "chime",
+  cash = "cash",
+  check = "check",
+  card = "card",
+  money_order = "money_order",
+  other = "other",
+}
+
 /**
  * Where a payment is in its life. Today (B56, D49) every payment is `unmatched` until matching assigns it a
  * driver, and then `confirmed`: one stage for every method, the email is the confirmation.
@@ -77,6 +91,16 @@ export enum MatchMethod {
   "payments_match_confidence_range",
   `"match_confidence" IS NULL OR ("match_confidence" >= 0 AND "match_confidence" <= 1)`,
 )
+// The description and the staff note are only ever set on payments an admin recorded, and are not blank.
+@Check(
+  "payments_manual_text_shape",
+  `("description" IS NULL OR ("source" = 'manual' AND length(btrim("description")) BETWEEN 1 AND 500)) AND ("internal_note" IS NULL OR ("source" = 'manual' AND length(btrim("internal_note")) BETWEEN 1 AND 500))`,
+)
+// The method is only ever set on payments an admin recorded (older manual rows may have none).
+@Check(
+  "payments_manual_method_shape",
+  `"manual_method" IS NULL OR "source" = 'manual'`,
+)
 @Index("payments_driver_idx", ["driverId"])
 @Check(
   "payments_confidence_range",
@@ -88,6 +112,29 @@ export class Payment {
 
   @Column({ type: "enum", enum: PaymentSource, enumName: "payment_source" })
   source: PaymentSource;
+
+  /** For a `manual` payment: the text the admin gave for the driver's statement. Empty: the ledger writes its own. */
+  @Column({ type: "varchar", length: 500, nullable: true })
+  description: string | null;
+
+  /** For a `manual` payment: a note for staff only, copied to the ledger credit. Never on a statement. */
+  @Column({
+    name: "internal_note",
+    type: "varchar",
+    length: 500,
+    nullable: true,
+  })
+  internalNote: string | null;
+
+  /** For a `manual` payment: how it was paid (cash, check, Zelle...). Null for every other source. */
+  @Column({
+    name: "manual_method",
+    type: "enum",
+    enum: PaymentManualMethod,
+    enumName: "payment_manual_method",
+    nullable: true,
+  })
+  manualMethod: PaymentManualMethod | null;
 
   /**
    * The record this payment came from: for email sources, the `inbound_emails` id. (The link lives here,

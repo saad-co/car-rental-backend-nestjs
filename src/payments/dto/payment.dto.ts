@@ -1,5 +1,7 @@
+import { ApiProperty } from "@nestjs/swagger";
 import {
   MatchMethod,
+  PaymentManualMethod,
   PaymentSource,
   PaymentStatus,
 } from "../payment.entity.js";
@@ -16,6 +18,17 @@ export class PaymentDto {
   id: string;
   source: PaymentSource;
   status: PaymentStatus;
+  /** For a payment an admin recorded by hand: how it was paid (cash, check, ...). Null for every other source. */
+  @ApiProperty({
+    enum: PaymentManualMethod,
+    enumName: "PaymentManualMethod",
+    nullable: true,
+  })
+  manualMethod: PaymentManualMethod | null;
+  /** For a payment an admin recorded by hand: the text they gave for the driver's statement. */
+  description: string | null;
+  /** For a payment an admin recorded by hand: their staff-only note. */
+  internalNote: string | null;
   /** Integer cents. The frontend formats it; never a float. */
   amountCents: number;
   /** The payer's name exactly as the provider wrote it. */

@@ -1,6 +1,6 @@
 import { sniffFileType } from "./sniff-file-type.js";
 
-describe("sniffFileType (D64)", () => {
+describe("sniffFileType (D68)", () => {
   it("knows JPEG, PNG and PDF by their first bytes", () => {
     expect(sniffFileType(Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2]))).toEqual({
       contentType: "image/jpeg",

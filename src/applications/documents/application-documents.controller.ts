@@ -31,7 +31,7 @@ import { MAX_UPLOAD_BYTES } from "./upload-file.js";
 export class ApplicationDocumentsController {
   constructor(private readonly documents: ApplicationDocumentsService) {}
 
-  /** `GET /applications/:id/documents`: the files, as our own copies (D54) or admin uploads (D64). */
+  /** `GET /applications/:id/documents`: the files, as our own copies (D54) or admin uploads (D68). */
   @Get(":id/documents")
   list(
     @Param("id", ParseUUIDPipe) id: string,
@@ -41,7 +41,7 @@ export class ApplicationDocumentsController {
 
   /**
    * `PUT /applications/:id/documents/:kind`: puts one file (multipart field `file`) in the licence, rating or earnings
-   * slot, replacing what is there, a website copy included (D64). JPG, PNG or PDF, at most 10 MB; `400` otherwise.
+   * slot, replacing what is there, a website copy included (D68). JPG, PNG or PDF, at most 10 MB; `400` otherwise.
    * Returns the slot. PUT because the slot ends up holding exactly this file however many times it is sent.
    */
   @Put(":id/documents/:kind")

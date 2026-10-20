@@ -1,4 +1,4 @@
-/** Response of `POST /applications/manual` (D64). */
+/** Response of `POST /applications/manual` (D68). */
 export class ManualApplicationCreatedDto {
   /** The new application's id. */
   id: string;

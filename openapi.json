@@ -395,7 +395,7 @@
             }
           }
         },
-        "summary": "`POST /applications/manual`: an admin types in an application by hand, with its documents (D64). Same fields and\nrules as the website form; the result is an ordinary application that is then approved like any other. Admin\nonly (no `@Public`). Multipart form data: the text fields plus the files `license_file` (required),\n`rating_file` and `earnings_file` (JPG, PNG or PDF, at most 10 MB each). The file fields end in `_file` because\n`earnings` is already a text field (weekly earnings).\n\nThe interceptor is multer, the library you would mount as `upload.fields([...])` in Express: it reads the\nmultipart body, keeps the files in memory and leaves the text fields in `@Body()`, where the global\nValidationPipe checks them against `ManualApplicationDto`.\n\n`201` with `created: false` when the same `request_id` was already stored.",
+        "summary": "`POST /applications/manual`: an admin types in an application by hand, with its documents (D68). Same fields and\nrules as the website form; the result is an ordinary application that is then approved like any other. Admin\nonly (no `@Public`). Multipart form data: the text fields plus the files `license_file` (required),\n`rating_file` and `earnings_file` (JPG, PNG or PDF, at most 10 MB each). The file fields end in `_file` because\n`earnings` is already a text field (weekly earnings).\n\nThe interceptor is multer, the library you would mount as `upload.fields([...])` in Express: it reads the\nmultipart body, keeps the files in memory and leaves the text fields in `@Body()`, where the global\nValidationPipe checks them against `ManualApplicationDto`.\n\n`201` with `created: false` when the same `request_id` was already stored.",
         "tags": [
           "Applications"
         ]
@@ -602,7 +602,7 @@
             }
           }
         },
-        "summary": "`GET /applications/:id/documents`: the files, as our own copies (D54) or admin uploads (D64).",
+        "summary": "`GET /applications/:id/documents`: the files, as our own copies (D54) or admin uploads (D68).",
         "tags": [
           "ApplicationDocuments"
         ]
@@ -660,7 +660,7 @@
             }
           }
         },
-        "summary": "`PUT /applications/:id/documents/:kind`: puts one file (multipart field `file`) in the licence, rating or earnings\nslot, replacing what is there, a website copy included (D64). JPG, PNG or PDF, at most 10 MB; `400` otherwise.\nReturns the slot. PUT because the slot ends up holding exactly this file however many times it is sent.",
+        "summary": "`PUT /applications/:id/documents/:kind`: puts one file (multipart field `file`) in the licence, rating or earnings\nslot, replacing what is there, a website copy included (D68). JPG, PNG or PDF, at most 10 MB; `400` otherwise.\nReturns the slot. PUT because the slot ends up holding exactly this file however many times it is sent.",
         "tags": [
           "ApplicationDocuments"
         ]
@@ -1153,6 +1153,149 @@
         ]
       }
     },
+    "/ledger-presets": {
+      "get": {
+        "operationId": "LedgerPresetsController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LedgerPresetDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "`GET /ledger-presets`: every preset, charges first, each kind in the order of its cards.",
+        "tags": [
+          "LedgerPresets"
+        ]
+      },
+      "post": {
+        "operationId": "LedgerPresetsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateLedgerPresetDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LedgerPresetDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`POST /ledger-presets`: adds a preset at the end of its kind. `400` bad amount or text; `409` name taken.",
+        "tags": [
+          "LedgerPresets"
+        ]
+      }
+    },
+    "/ledger-presets/order": {
+      "put": {
+        "operationId": "LedgerPresetsController_reorder",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReorderLedgerPresetsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "summary": "`PUT /ledger-presets/order`: sets the order of one kind's cards (`kind`, `ids` = all that kind's ids). `400` the ids\nare not exactly that kind's presets. Declared before `:id` so \"order\" is never read as an id.",
+        "tags": [
+          "LedgerPresets"
+        ]
+      }
+    },
+    "/ledger-presets/{id}": {
+      "put": {
+        "operationId": "LedgerPresetsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateLedgerPresetDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LedgerPresetDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`PUT /ledger-presets/:id`: replaces a preset's name, amount and description (PUT because all three are replaced; the\namount may be null). `400` bad amount or text; `404` unknown id; `409` name taken.",
+        "tags": [
+          "LedgerPresets"
+        ]
+      },
+      "delete": {
+        "operationId": "LedgerPresetsController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "summary": "`DELETE /ledger-presets/:id`: `404` unknown id. Entries made from it keep their text and amount.",
+        "tags": [
+          "LedgerPresets"
+        ]
+      }
+    },
     "/drivers": {
       "get": {
         "operationId": "DriversController_list",
@@ -1611,6 +1754,79 @@
         ]
       }
     },
+    "/payments/manual": {
+      "post": {
+        "operationId": "PaymentsController_recordManual",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordPaymentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`POST /payments/manual`: records a payment an admin received by hand (cash, check, card, or any method) and\ncredits the driver's ledger. `201` the payment (also when the same `requestKey` is sent again); `400` bad\namount or date, unknown driver; `409` a possible duplicate (body has `code: \"possible_duplicate\"` and the\npayment found; send `confirmDuplicate: true` to record anyway), the key reused, or the reference used before.",
+        "tags": [
+          "Payments"
+        ]
+      }
+    },
+    "/payments/{id}/void": {
+      "post": {
+        "operationId": "PaymentsController_voidManual",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoidPaymentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`POST /payments/:id/void`: voids a payment recorded by hand and reverses its ledger credit. `201` the payment;\n`404` unknown payment; `409` not a manual payment, or already voided.",
+        "tags": [
+          "Payments"
+        ]
+      }
+    },
     "/payments/{id}/assign": {
       "post": {
         "operationId": "PaymentsController_assign",
@@ -1665,6 +1881,54 @@
             }
           },
           {
+            "name": "type",
+            "required": false,
+            "in": "query",
+            "description": "Only this type of entry. Omit for all.",
+            "schema": {
+              "$ref": "#/components/schemas/LedgerTypeFilter"
+            }
+          },
+          {
+            "name": "order",
+            "required": false,
+            "in": "query",
+            "description": "`desc`: newest first (the default). `asc`: oldest first.",
+            "schema": {
+              "$ref": "#/components/schemas/LedgerOrder"
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "First day to include, e.g. `2026-10-01`.",
+            "schema": {
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Last day to include, e.g. `2026-10-15` (the whole day counts).",
+            "schema": {
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "description": "Text to look for; which fields are searched depends on the list. Case does not matter.",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          },
+          {
             "name": "page",
             "required": true,
             "in": "query",
@@ -1700,7 +1964,38 @@
             }
           }
         },
-        "summary": "`GET /drivers/:id/ledger`: one page of entries, newest first, each with the balance after it, plus the\nbalance now. `404` unknown driver.",
+        "summary": "`GET /drivers/:id/ledger`: one page of entries, each with the balance after it, plus the balance now and the\ntotals of the filtered entries. Filters: `type`, `from`, `to`, `search` (text, an amount like `$85.00`, or a reference like `CH-1042`);\n`order=asc|desc` (default newest first). `400` bad dates or `from` after `to`; `404` unknown driver.",
+        "tags": [
+          "Ledger"
+        ]
+      }
+    },
+    "/drivers/{id}/ledger/overview": {
+      "get": {
+        "operationId": "LedgerController_overview",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LedgerOverviewDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`GET /drivers/:id/ledger/overview`: the balance, what is owed by age of the charges (0–6, 7–13, 14–29, 30+ days)\nand the newest confirmed payment. `404` unknown driver.",
         "tags": [
           "Ledger"
         ]
@@ -1765,6 +2060,45 @@
         ]
       }
     },
+    "/drivers/{id}/ledger/entries/{entryId}": {
+      "get": {
+        "operationId": "LedgerController_details",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "entryId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LedgerEntryDetailsDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`GET /drivers/:id/ledger/entries/:entryId`: one entry with what it reverses or was reversed by, the charge it\nis applied against, the credits applied against it and its payment. `404` no such entry on this driver.",
+        "tags": [
+          "Ledger"
+        ]
+      }
+    },
     "/drivers/{id}/ledger/entries": {
       "post": {
         "operationId": "LedgerController_addEntry",
@@ -1800,7 +2134,7 @@
             }
           }
         },
-        "summary": "`POST /drivers/:id/ledger/entries`: adds a manual charge or credit (late fee, flat tire, discount, …).\n`201` the entry (also when the same `requestKey` is sent again); `400` invalid amount, date or direction;\n`404` unknown driver; `409` a second opening balance, or the key reused for a different entry.",
+        "summary": "`POST /drivers/:id/ledger/entries`: adds a manual charge or credit (late fee, flat tire, discount, …), or a\ncredit applied against a charge (`appliesToId`). `201` the entry (also when the same `requestKey` is sent\nagain); `400` invalid amount, date or direction, or more than is left on the charge; `404` unknown driver or\ncharge; `409` the key reused for a different entry.",
         "tags": [
           "Ledger"
         ]
@@ -1849,7 +2183,7 @@
             }
           }
         },
-        "summary": "`POST /drivers/:id/ledger/entries/:entryId/reverse`: cancels an entry with a reversal. `201` the reversal;\n`404` no such entry on this driver; `409` a payment credit, a reversal, or reversed already.",
+        "summary": "`POST /drivers/:id/ledger/entries/:entryId/reverse`: cancels an entry with a reversal. `201` the reversal;\n`404` no such entry on this driver; `409` a payment credit, a reversal, reversed already, or a charge that\nstill has credits applied.",
         "tags": [
           "Ledger"
         ]
@@ -2240,7 +2574,7 @@
           },
           "createdBy": {
             "nullable": true,
-            "description": "The admin who added it by hand (D64). Null for applications that came from the website form.",
+            "description": "The admin who added it by hand (D68). Null for applications that came from the website form.",
             "type": "object",
             "allOf": [
               {
@@ -2309,7 +2643,7 @@
             "type": "string"
           },
           "origin": {
-            "description": "`website`: copied from the website's storage; `admin`: uploaded by an admin (D64).",
+            "description": "`website`: copied from the website's storage; `admin`: uploaded by an admin (D68).",
             "enum": [
               "website",
               "admin"
@@ -2825,6 +3159,148 @@
           "body"
         ]
       },
+      "LedgerPresetKind": {
+        "type": "string",
+        "enum": [
+          "charge",
+          "credit"
+        ]
+      },
+      "LedgerPresetDto": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LedgerPresetKind"
+              }
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "description": "The card's title, e.g. \"Late fee\"."
+          },
+          "amountCents": {
+            "type": "number",
+            "nullable": true,
+            "description": "The default amount in whole cents, or null for \"enter amount\"."
+          },
+          "description": {
+            "type": "string",
+            "description": "What the Description box is filled with."
+          },
+          "position": {
+            "type": "number",
+            "description": "The order of the cards within a kind, from 1."
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "name",
+          "amountCents",
+          "description",
+          "position",
+          "updatedAt"
+        ]
+      },
+      "CreateLedgerPresetDto": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LedgerPresetKind"
+              }
+            ]
+          },
+          "name": {
+            "type": "string",
+            "description": "1 to 60 characters after trimming. Two presets of a kind cannot share a name (409).",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "amountCents": {
+            "type": "number",
+            "nullable": true,
+            "description": "Whole cents, 1 to 1,000,000 ($10,000), or left out / null for \"enter amount\".",
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          "description": {
+            "type": "string",
+            "description": "What the Description box is filled with: 1 to 500 characters after trimming.",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "kind",
+          "name",
+          "description"
+        ]
+      },
+      "ReorderLedgerPresetsDto": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LedgerPresetKind"
+              }
+            ]
+          },
+          "ids": {
+            "description": "Exactly the ids of that kind's presets, each once (400 otherwise).",
+            "uniqueItems": true,
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "required": [
+          "kind",
+          "ids"
+        ]
+      },
+      "UpdateLedgerPresetDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "1 to 60 characters after trimming. Two presets of a kind cannot share a name (409).",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "amountCents": {
+            "type": "number",
+            "nullable": true,
+            "description": "Whole cents, 1 to 1,000,000 ($10,000), or left out / null for \"enter amount\".",
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          "description": {
+            "type": "string",
+            "description": "What the Description box is filled with: 1 to 500 characters after trimming.",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "name",
+          "description"
+        ]
+      },
       "DriverOnboardingDto": {
         "type": "object",
         "properties": {
@@ -3117,6 +3593,22 @@
           "limit"
         ]
       },
+      "PaymentManualMethod": {
+        "type": "string",
+        "enum": [
+          "zelle",
+          "cash_app",
+          "venmo",
+          "stripe",
+          "chime",
+          "cash",
+          "check",
+          "card",
+          "money_order",
+          "other"
+        ],
+        "description": "For a payment an admin recorded by hand: how it was paid (cash, check, ...). Null for every other source."
+      },
       "PaymentDriverDto": {
         "type": "object",
         "properties": {
@@ -3139,11 +3631,19 @@
       "PaymentDto": {
         "type": "object",
         "properties": {
+          "manualMethod": {
+            "nullable": true,
+            "description": "For a payment an admin recorded by hand: how it was paid (cash, check, ...). Null for every other source.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PaymentManualMethod"
+              }
+            ]
+          },
           "id": {
             "type": "string"
           },
           "source": {
-            "type": "string",
             "enum": [
               "email_zelle",
               "email_cashapp",
@@ -3152,17 +3652,28 @@
               "email_chime",
               "plaid_zelle",
               "manual"
-            ]
+            ],
+            "type": "string"
           },
           "status": {
-            "type": "string",
             "enum": [
               "reported",
               "confirmed",
               "unmatched",
               "rejected",
               "discrepancy"
-            ]
+            ],
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true,
+            "description": "For a payment an admin recorded by hand: the text they gave for the driver's statement."
+          },
+          "internalNote": {
+            "type": "string",
+            "nullable": true,
+            "description": "For a payment an admin recorded by hand: their staff-only note."
           },
           "amountCents": {
             "type": "number",
@@ -3216,7 +3727,6 @@
             ]
           },
           "matchMethod": {
-            "type": "string",
             "nullable": true,
             "description": "How it was assigned: alias, exact name, AI or by an admin.",
             "enum": [
@@ -3224,7 +3734,8 @@
               "name",
               "ai",
               "manual"
-            ]
+            ],
+            "type": "string"
           },
           "matchConfidence": {
             "type": "number",
@@ -3242,9 +3753,12 @@
           }
         },
         "required": [
+          "manualMethod",
           "id",
           "source",
           "status",
+          "description",
+          "internalNote",
           "amountCents",
           "senderName",
           "senderHandle",
@@ -3287,6 +3801,80 @@
           "limit"
         ]
       },
+      "RecordPaymentDto": {
+        "type": "object",
+        "properties": {
+          "method": {
+            "description": "How it was paid. Zelle, Cash App, Venmo, Stripe and Chime payments normally arrive by email by themselves.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PaymentManualMethod"
+              }
+            ]
+          },
+          "driverId": {
+            "type": "string",
+            "description": "The driver who paid.",
+            "format": "uuid"
+          },
+          "amountCents": {
+            "type": "number",
+            "description": "Whole cents, 1 to 1,000,000 ($10,000).",
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          "paidOn": {
+            "type": "string",
+            "description": "The day it was paid, `YYYY-MM-DD` in Chicago: today or up to 90 days back.",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "reference": {
+            "type": "string",
+            "description": "A receipt number, check number or confirmation code, if there is one. Two manual payments cannot share the same\nreference (a check recorded twice is refused).",
+            "maxLength": 100
+          },
+          "requestKey": {
+            "type": "string",
+            "description": "A UUID the form makes once per payment. Sending the same request again (a double click, a retry) returns the\npayment already recorded instead of recording a second one.",
+            "format": "uuid"
+          },
+          "confirmDuplicate": {
+            "type": "boolean",
+            "description": "Set to true to record it although the driver already has a confirmed payment of the same amount within three\ndays (the answer to the \"possible duplicate\" warning)."
+          },
+          "description": {
+            "type": "string",
+            "description": "The text for the driver's statement. Empty: the ledger writes its own (\"Cash payment · ref 17\"). Up to 500\ncharacters.",
+            "maxLength": 500
+          },
+          "internalNote": {
+            "type": "string",
+            "description": "A note for staff only (optional, up to 500 characters). Typed once; copied to the ledger credit; never on a statement.",
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "method",
+          "driverId",
+          "amountCents",
+          "paidOn",
+          "requestKey"
+        ]
+      },
+      "VoidPaymentDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "description": "Why the payment is voided, e.g. \"Check bounced\". 1 to 400 characters after trimming.",
+            "minLength": 1,
+            "maxLength": 400
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      },
       "AssignPaymentDto": {
         "type": "object",
         "properties": {
@@ -3327,6 +3915,22 @@
           "aliasOwnedBy"
         ]
       },
+      "LedgerTypeFilter": {
+        "type": "string",
+        "enum": [
+          "charges",
+          "credits",
+          "payments",
+          "reversals"
+        ]
+      },
+      "LedgerOrder": {
+        "type": "string",
+        "enum": [
+          "asc",
+          "desc"
+        ]
+      },
       "LedgerDirection": {
         "type": "string",
         "enum": [
@@ -3342,6 +3946,19 @@
           "adjustment",
           "reversal"
         ]
+      },
+      "PaymentSource": {
+        "type": "string",
+        "enum": [
+          "email_zelle",
+          "email_cashapp",
+          "email_venmo",
+          "email_stripe",
+          "email_chime",
+          "plaid_zelle",
+          "manual"
+        ],
+        "description": "For a payment row: where the payment came from."
       },
       "LedgerRowDto": {
         "type": "object",
@@ -3360,12 +3977,62 @@
               }
             ]
           },
+          "paymentSource": {
+            "nullable": true,
+            "description": "For a payment row: where the payment came from.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PaymentSource"
+              }
+            ]
+          },
+          "paymentManualMethod": {
+            "nullable": true,
+            "description": "For a payment row recorded by hand: how it was paid.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PaymentManualMethod"
+              }
+            ]
+          },
           "runningBalanceCents": {
             "type": "number",
             "description": "Balance after this entry, in date order (credits minus debits; negative = owes)."
           },
+          "appliesToRef": {
+            "type": "string",
+            "nullable": true,
+            "description": "The reference of the charge this credit is applied against."
+          },
+          "reversalOfRef": {
+            "type": "string",
+            "nullable": true,
+            "description": "The reference of the entry this reversal cancels."
+          },
+          "reversedByRef": {
+            "type": "string",
+            "nullable": true,
+            "description": "The reference of the reversal that cancelled this entry."
+          },
+          "canVoidPayment": {
+            "type": "boolean",
+            "description": "For a payment row recorded by hand and still confirmed: it can be voided."
+          },
+          "creditableCents": {
+            "type": "number",
+            "nullable": true,
+            "description": "For a charge that can still be credited against: how much of it is left (its amount minus the active credits\napplied to it). Null when it cannot (not a charge, reversed, or already fully credited)."
+          },
           "id": {
             "type": "string"
+          },
+          "entryNo": {
+            "type": "number",
+            "description": "The short number people use, e.g. 1042 in \"CH-1042\"."
+          },
+          "ref": {
+            "type": "string",
+            "description": "The reference shown on screen: `CH-1042` (charge), `CR-…` (credit), `PM-…` (payment), `RV-…` (reversal)."
           },
           "driverId": {
             "type": "string"
@@ -3389,6 +4056,16 @@
             "type": "string",
             "nullable": true,
             "description": "The entry this one cancels (reversals only)."
+          },
+          "appliesToId": {
+            "type": "string",
+            "nullable": true,
+            "description": "The charge this credit is applied against, if any."
+          },
+          "internalNote": {
+            "type": "string",
+            "nullable": true,
+            "description": "The staff-only note typed with the entry, if any."
           },
           "reversedById": {
             "type": "string",
@@ -3417,19 +4094,47 @@
         "required": [
           "direction",
           "kind",
+          "paymentSource",
+          "paymentManualMethod",
           "runningBalanceCents",
+          "appliesToRef",
+          "reversalOfRef",
+          "reversedByRef",
+          "canVoidPayment",
+          "creditableCents",
           "id",
+          "entryNo",
+          "ref",
           "driverId",
           "amountCents",
           "description",
           "effectiveDate",
           "paymentId",
           "reversalOfId",
+          "appliesToId",
+          "internalNote",
           "reversedById",
           "canReverse",
           "createdById",
           "createdByEmail",
           "createdAt"
+        ]
+      },
+      "LedgerTotalsDto": {
+        "type": "object",
+        "properties": {
+          "debitCents": {
+            "type": "number",
+            "description": "Sum of the debits (charges) among them."
+          },
+          "creditCents": {
+            "type": "number",
+            "description": "Sum of the credits among them (payments, credits, and reversals of charges)."
+          }
+        },
+        "required": [
+          "debitCents",
+          "creditCents"
         ]
       },
       "LedgerPageDto": {
@@ -3443,7 +4148,7 @@
           },
           "total": {
             "type": "number",
-            "description": "All entries of the driver, across pages."
+            "description": "Entries that match the filters, across pages."
           },
           "page": {
             "type": "number"
@@ -3453,7 +4158,15 @@
           },
           "balanceCents": {
             "type": "number",
-            "description": "The driver's balance now (credits minus debits; negative = owes)."
+            "description": "The driver's balance now (credits minus debits; negative = owes), whatever the filters."
+          },
+          "totals": {
+            "$ref": "#/components/schemas/LedgerTotalsDto"
+          },
+          "balanceBeforeCents": {
+            "type": "number",
+            "nullable": true,
+            "description": "Balance at the start of the `from` day: every entry dated before it. Null when no `from` was given. A statement\nstarts from it."
           }
         },
         "required": [
@@ -3461,7 +4174,105 @@
           "total",
           "page",
           "limit",
-          "balanceCents"
+          "balanceCents",
+          "totals",
+          "balanceBeforeCents"
+        ]
+      },
+      "LedgerAgingDto": {
+        "type": "object",
+        "properties": {
+          "currentCents": {
+            "type": "number",
+            "description": "Charges 0 to 6 days old."
+          },
+          "days7to13Cents": {
+            "type": "number",
+            "description": "Charges 7 to 13 days old."
+          },
+          "days14to29Cents": {
+            "type": "number",
+            "description": "Charges 14 to 29 days old."
+          },
+          "days30PlusCents": {
+            "type": "number",
+            "description": "Charges 30 or more days old."
+          },
+          "pastDueCents": {
+            "type": "number",
+            "description": "Everything 7 days old or more (the three numbers above it)."
+          }
+        },
+        "required": [
+          "currentCents",
+          "days7to13Cents",
+          "days14to29Cents",
+          "days30PlusCents",
+          "pastDueCents"
+        ]
+      },
+      "LedgerLastPaymentDto": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PaymentSource"
+              }
+            ]
+          },
+          "manualMethod": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PaymentManualMethod"
+              }
+            ]
+          },
+          "amountCents": {
+            "type": "number"
+          },
+          "occurredAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "manualMethod",
+          "amountCents",
+          "occurredAt"
+        ]
+      },
+      "LedgerOverviewDto": {
+        "type": "object",
+        "properties": {
+          "balanceCents": {
+            "type": "number",
+            "description": "Credits minus debits; negative = the driver owes."
+          },
+          "aging": {
+            "$ref": "#/components/schemas/LedgerAgingDto"
+          },
+          "lastPayment": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LedgerLastPaymentDto"
+              }
+            ]
+          },
+          "asOf": {
+            "type": "string",
+            "description": "The Chicago day the ages are counted to, `YYYY-MM-DD`."
+          }
+        },
+        "required": [
+          "balanceCents",
+          "aging",
+          "lastPayment",
+          "asOf"
         ]
       },
       "LedgerPeriod": {
@@ -3544,6 +4355,321 @@
           "items"
         ]
       },
+      "LedgerEntryDto": {
+        "type": "object",
+        "properties": {
+          "direction": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LedgerDirection"
+              }
+            ]
+          },
+          "kind": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LedgerEntryKind"
+              }
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "entryNo": {
+            "type": "number",
+            "description": "The short number people use, e.g. 1042 in \"CH-1042\"."
+          },
+          "ref": {
+            "type": "string",
+            "description": "The reference shown on screen: `CH-1042` (charge), `CR-…` (credit), `PM-…` (payment), `RV-…` (reversal)."
+          },
+          "driverId": {
+            "type": "string"
+          },
+          "amountCents": {
+            "type": "number",
+            "description": "Always positive; `direction` says which way."
+          },
+          "description": {
+            "type": "string"
+          },
+          "effectiveDate": {
+            "type": "string",
+            "description": "The Chicago day it belongs to, `YYYY-MM-DD`."
+          },
+          "paymentId": {
+            "type": "string",
+            "nullable": true
+          },
+          "reversalOfId": {
+            "type": "string",
+            "nullable": true,
+            "description": "The entry this one cancels (reversals only)."
+          },
+          "appliesToId": {
+            "type": "string",
+            "nullable": true,
+            "description": "The charge this credit is applied against, if any."
+          },
+          "internalNote": {
+            "type": "string",
+            "nullable": true,
+            "description": "The staff-only note typed with the entry, if any."
+          },
+          "reversedById": {
+            "type": "string",
+            "nullable": true,
+            "description": "The reversal that cancelled this entry, if any."
+          },
+          "canReverse": {
+            "type": "boolean",
+            "description": "True when an admin may reverse it here: not a reversal, not a payment credit, not reversed already."
+          },
+          "createdById": {
+            "type": "string",
+            "nullable": true,
+            "description": "Null for entries made by the system (payment credits from matching)."
+          },
+          "createdByEmail": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "When it was recorded (may be later than `effectiveDate`)."
+          }
+        },
+        "required": [
+          "direction",
+          "kind",
+          "id",
+          "entryNo",
+          "ref",
+          "driverId",
+          "amountCents",
+          "description",
+          "effectiveDate",
+          "paymentId",
+          "reversalOfId",
+          "appliesToId",
+          "internalNote",
+          "reversedById",
+          "canReverse",
+          "createdById",
+          "createdByEmail",
+          "createdAt"
+        ]
+      },
+      "LedgerEntryLinkDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "effectiveDate": {
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "createdByEmail": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "ref",
+          "description",
+          "effectiveDate",
+          "createdAt",
+          "createdByEmail"
+        ]
+      },
+      "LedgerAppliedCreditDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "effectiveDate": {
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "createdByEmail": {
+            "type": "string",
+            "nullable": true
+          },
+          "amountCents": {
+            "type": "number"
+          },
+          "reversed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "ref",
+          "description",
+          "effectiveDate",
+          "createdAt",
+          "createdByEmail",
+          "amountCents",
+          "reversed"
+        ]
+      },
+      "PaymentStatus": {
+        "type": "string",
+        "enum": [
+          "reported",
+          "confirmed",
+          "unmatched",
+          "rejected",
+          "discrepancy"
+        ]
+      },
+      "LedgerPaymentInfoDto": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PaymentSource"
+              }
+            ]
+          },
+          "manualMethod": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PaymentManualMethod"
+              }
+            ]
+          },
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PaymentStatus"
+              }
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "senderName": {
+            "type": "string"
+          },
+          "transactionId": {
+            "type": "string",
+            "nullable": true,
+            "description": "The provider's transaction id, or the reference typed for a manual payment."
+          },
+          "occurredAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "manualMethod",
+          "status",
+          "id",
+          "senderName",
+          "transactionId",
+          "occurredAt"
+        ]
+      },
+      "LedgerEntryDetailsDto": {
+        "type": "object",
+        "properties": {
+          "entry": {
+            "$ref": "#/components/schemas/LedgerEntryDto"
+          },
+          "reversalOf": {
+            "nullable": true,
+            "description": "For a reversal: the entry it cancels.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LedgerEntryLinkDto"
+              }
+            ]
+          },
+          "reversedBy": {
+            "nullable": true,
+            "description": "The reversal that cancelled this entry.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LedgerEntryLinkDto"
+              }
+            ]
+          },
+          "appliesTo": {
+            "nullable": true,
+            "description": "For a credit: the charge it is applied against.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LedgerEntryLinkDto"
+              }
+            ]
+          },
+          "appliedCredits": {
+            "description": "For a charge: the credits applied against it, oldest first.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LedgerAppliedCreditDto"
+            }
+          },
+          "payment": {
+            "nullable": true,
+            "description": "For a payment entry: the payment.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LedgerPaymentInfoDto"
+              }
+            ]
+          },
+          "creditableCents": {
+            "type": "number",
+            "nullable": true,
+            "description": "For a charge: how much of it can still be credited, or null."
+          },
+          "canVoidPayment": {
+            "type": "boolean",
+            "description": "For a payment entry recorded by hand and still confirmed: it can be voided."
+          }
+        },
+        "required": [
+          "entry",
+          "reversalOf",
+          "reversedBy",
+          "appliesTo",
+          "appliedCredits",
+          "payment",
+          "creditableCents",
+          "canVoidPayment"
+        ]
+      },
       "CreateLedgerEntryDto": {
         "type": "object",
         "properties": {
@@ -3576,6 +4702,16 @@
             "type": "string",
             "description": "A UUID the form makes once per entry. Sending the same request again (a double click, a retry after a timeout)\nreturns the entry already made instead of making a second one.",
             "format": "uuid"
+          },
+          "appliesToId": {
+            "type": "string",
+            "description": "\"Credit against this charge\": the charge this credit reduces (e.g. a waived late fee). Only a credit can name\none, the charge must be on this driver and not reversed, and the amount can be at most what is left on it.",
+            "format": "uuid"
+          },
+          "internalNote": {
+            "type": "string",
+            "description": "A note for staff only (optional, up to 500 characters). Typed once, never changed, never printed on a statement.",
+            "maxLength": 500
           }
         },
         "required": [
@@ -3584,90 +4720,6 @@
           "effectiveDate",
           "reason",
           "requestKey"
-        ]
-      },
-      "LedgerEntryDto": {
-        "type": "object",
-        "properties": {
-          "direction": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/LedgerDirection"
-              }
-            ]
-          },
-          "kind": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/LedgerEntryKind"
-              }
-            ]
-          },
-          "id": {
-            "type": "string"
-          },
-          "driverId": {
-            "type": "string"
-          },
-          "amountCents": {
-            "type": "number",
-            "description": "Always positive; `direction` says which way."
-          },
-          "description": {
-            "type": "string"
-          },
-          "effectiveDate": {
-            "type": "string",
-            "description": "The Chicago day it belongs to, `YYYY-MM-DD`."
-          },
-          "paymentId": {
-            "type": "string",
-            "nullable": true
-          },
-          "reversalOfId": {
-            "type": "string",
-            "nullable": true,
-            "description": "The entry this one cancels (reversals only)."
-          },
-          "reversedById": {
-            "type": "string",
-            "nullable": true,
-            "description": "The reversal that cancelled this entry, if any."
-          },
-          "canReverse": {
-            "type": "boolean",
-            "description": "True when an admin may reverse it here: not a reversal, not a payment credit, not reversed already."
-          },
-          "createdById": {
-            "type": "string",
-            "nullable": true,
-            "description": "Null for entries made by the system (payment credits from matching)."
-          },
-          "createdByEmail": {
-            "type": "string",
-            "nullable": true
-          },
-          "createdAt": {
-            "format": "date-time",
-            "type": "string",
-            "description": "When it was recorded (may be later than `effectiveDate`)."
-          }
-        },
-        "required": [
-          "direction",
-          "kind",
-          "id",
-          "driverId",
-          "amountCents",
-          "description",
-          "effectiveDate",
-          "paymentId",
-          "reversalOfId",
-          "reversedById",
-          "canReverse",
-          "createdById",
-          "createdByEmail",
-          "createdAt"
         ]
       },
       "ReverseLedgerEntryDto": {
