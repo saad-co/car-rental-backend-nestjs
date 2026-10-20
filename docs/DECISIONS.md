@@ -844,7 +844,7 @@ twice; the client's revision was about being able to add drivers who did not use
   (our rule; the sheet only ever had whole-cent results).
 - **Our reading, to confirm (B91 question 2):** the weekly or daily payment equals the total rate; one-time total = the sum of
   the one-time charges; amount due at pickup = first payment + one-time total; end date = start date + term months (default
-  18). The received sheet types these by hand and they disagree with its own total, so we calculate them.
+  18, clamped to the month's last day: 2026-08-31 + 6 = 2027-02-28); the recurring Total row = payment + excess mileage + insurance excess + other recurring (the sheet's Total row). The received sheet types these by hand and they disagree with its own total, so we calculate them.
 - The percentages apply to Illinois. California and Tennessee wait for the client (B91 question 3).
 **Why:** one typed number drives everything, as the client asked ("an applet ... others driven by formulas as a % of the
 total rate"), and calculated totals cannot drift like the hand-typed ones in the samples.

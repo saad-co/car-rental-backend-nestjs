@@ -49,6 +49,7 @@ Full rules: `PHASE1_SPEC.md` sections 5–8.
 | `src/matching/` | `MatchingService`, `AliasIndex`, AI driver matcher |
 | `src/ledger/` | `ledger_entries` (append-only: database triggers refuse UPDATE/DELETE and check reversals), `LedgerService` (manual entries, reversals, `syncPaymentCredit` called by payments and matching in their transaction, balance, history with running balance, weekly/monthly summaries by Chicago `effective_date`, filters, `entry_no` references, aging by first in, first out in `aging.ts`, entry details, credit against a charge), routes `/drivers/:id/ledger…` (list, overview, summary, entries), `ledger:backfill` command (D60, D64) |
 | `src/sms/` | Quo chat (D50, D51): `sms_messages` / `sms_attachments`, `SmsService` (send by `SMS_MODE`, list, history sync, webhook apply), admin routes `/sms/...`, `POST /webhooks/quo` (signature-checked). Subfolders: `quo/` (client behind an interface, signature check, event parser), `storage/` (S3-compatible bucket behind an interface), `attachments/` (copies texted-in files into the bucket) |
+| `src/contracts/` | Module 2 step 1 (D71): `contracts` table (a draft per driver, one enforced by a partial unique index; calculated numbers are never stored), pure `contract-math.ts` (rate lines, totals, end date, integer cents), `POST /contracts/calculate`, `GET /drivers/:driverId/contract-draft`, `POST /drivers/:driverId/contracts`, `PUT` / `DELETE /contracts/:id` (drafts only) |
 
 `scripts/` holds developer tools (not part of the API): IMAP peek, extraction evaluation, old-database report and imports.
 

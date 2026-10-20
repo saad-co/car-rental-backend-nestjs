@@ -1296,6 +1296,173 @@
         ]
       }
     },
+    "/contracts/calculate": {
+      "post": {
+        "operationId": "ContractsController_calculate",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContractInputDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractNumbersDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`POST /contracts/calculate`: the numbers for some inputs, nothing saved. `400` bad inputs.",
+        "tags": [
+          "Contracts"
+        ]
+      }
+    },
+    "/drivers/{driverId}/contract-draft": {
+      "get": {
+        "operationId": "ContractsController_getDraft",
+        "parameters": [
+          {
+            "name": "driverId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractDraftDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`GET /drivers/:driverId/contract-draft`: the driver's draft, or `{ draft: null }`. `404` unknown driver.",
+        "tags": [
+          "Contracts"
+        ]
+      }
+    },
+    "/drivers/{driverId}/contracts": {
+      "post": {
+        "operationId": "ContractsController_createDraft",
+        "parameters": [
+          {
+            "name": "driverId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContractInputDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`POST /drivers/:driverId/contracts`: starts the draft. `400` bad inputs; `404` unknown driver; `409` a draft exists.",
+        "tags": [
+          "Contracts"
+        ]
+      }
+    },
+    "/contracts/{id}": {
+      "put": {
+        "operationId": "ContractsController_updateDraft",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContractInputDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`PUT /contracts/:id`: replaces every input of a draft. `400` bad inputs; `404` unknown id or not a draft.",
+        "tags": [
+          "Contracts"
+        ]
+      },
+      "delete": {
+        "operationId": "ContractsController_deleteDraft",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "summary": "`DELETE /contracts/:id`: deletes a draft. `404` unknown id or not a draft.",
+        "tags": [
+          "Contracts"
+        ]
+      }
+    },
     "/drivers": {
       "get": {
         "operationId": "DriversController_list",
@@ -3379,6 +3546,282 @@
         "required": [
           "name",
           "description"
+        ]
+      },
+      "ContractSchedule": {
+        "type": "string",
+        "enum": [
+          "weekly",
+          "daily"
+        ],
+        "description": "How often the driver pays: weekly or daily."
+      },
+      "ContractInputDto": {
+        "type": "object",
+        "properties": {
+          "schedule": {
+            "description": "How often the driver pays: weekly or daily.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractSchedule"
+              }
+            ]
+          },
+          "totalRateCents": {
+            "type": "number",
+            "description": "The weekly or daily rate in cents, 1 to 1,000,000 ($10,000): the one number the disclosure is calculated from.",
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          "startDate": {
+            "type": "string",
+            "description": "First day of the term, a real day written `YYYY-MM-DD`.",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "termMonths": {
+            "type": "number",
+            "description": "Length of the term in months, 1 to 60 (the client's contracts use 18).",
+            "minimum": 1,
+            "maximum": 60
+          },
+          "securityDepositCents": {
+            "type": "number",
+            "description": "One-time charge: security deposit, cents (0 to 1,000,000)."
+          },
+          "documentationFeeCents": {
+            "type": "number",
+            "description": "One-time charge: documentation fee, cents."
+          },
+          "insuranceStartFeeCents": {
+            "type": "number",
+            "description": "One-time charge: insurance policy start fee, cents."
+          },
+          "otherOneTimeCents": {
+            "type": "number",
+            "description": "One-time charge: other, cents."
+          },
+          "holdVehicleCents": {
+            "type": "number",
+            "description": "One-time charge: hold vehicle payment, cents."
+          },
+          "excessMileageCents": {
+            "type": "number",
+            "description": "Recurring charge: excess mileage, cents per mile."
+          },
+          "insuranceExcessCents": {
+            "type": "number",
+            "description": "Recurring charge: insurance excess, cents per month."
+          },
+          "otherRecurringCents": {
+            "type": "number",
+            "description": "Recurring charge: other, cents."
+          }
+        },
+        "required": [
+          "schedule",
+          "totalRateCents",
+          "startDate",
+          "termMonths",
+          "securityDepositCents",
+          "documentationFeeCents",
+          "insuranceStartFeeCents",
+          "otherOneTimeCents",
+          "holdVehicleCents",
+          "excessMileageCents",
+          "insuranceExcessCents",
+          "otherRecurringCents"
+        ]
+      },
+      "ContractNumbersDto": {
+        "type": "object",
+        "properties": {
+          "baseCents": {
+            "type": "number",
+            "description": "Base rate (42% of the total, plus any rounding remainder)."
+          },
+          "insuranceCents": {
+            "type": "number",
+            "description": "Insurance (30%)."
+          },
+          "milesCents": {
+            "type": "number",
+            "description": "Unlimited miles package (13%)."
+          },
+          "maintenanceCents": {
+            "type": "number",
+            "description": "Full maintenance package (10%)."
+          },
+          "taxCents": {
+            "type": "number",
+            "description": "Taxes (5%)."
+          },
+          "paymentCents": {
+            "type": "number",
+            "description": "The weekly or daily payment: equal to the total rate."
+          },
+          "oneTimeTotalCents": {
+            "type": "number",
+            "description": "The sum of the five one-time charges."
+          },
+          "amountDueAtPickupCents": {
+            "type": "number",
+            "description": "First payment + one-time charges."
+          },
+          "recurringTotalCents": {
+            "type": "number",
+            "description": "Payment + excess mileage + insurance excess + other recurring (the sheet's recurring Total row)."
+          },
+          "endDate": {
+            "type": "string",
+            "description": "Last day of the term, `YYYY-MM-DD` (start date + term months, clamped to the month's last day)."
+          }
+        },
+        "required": [
+          "baseCents",
+          "insuranceCents",
+          "milesCents",
+          "maintenanceCents",
+          "taxCents",
+          "paymentCents",
+          "oneTimeTotalCents",
+          "amountDueAtPickupCents",
+          "recurringTotalCents",
+          "endDate"
+        ]
+      },
+      "ContractStatus": {
+        "type": "string",
+        "enum": [
+          "draft"
+        ]
+      },
+      "ContractDto": {
+        "type": "object",
+        "properties": {
+          "schedule": {
+            "description": "How often the driver pays: weekly or daily.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractSchedule"
+              }
+            ]
+          },
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractStatus"
+              }
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "driverId": {
+            "type": "string"
+          },
+          "numbers": {
+            "description": "Recalculated from the inputs on every read (D71).",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractNumbersDto"
+              }
+            ]
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "totalRateCents": {
+            "type": "number",
+            "description": "The weekly or daily rate in cents, 1 to 1,000,000 ($10,000): the one number the disclosure is calculated from.",
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          "startDate": {
+            "type": "string",
+            "description": "First day of the term, a real day written `YYYY-MM-DD`.",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "termMonths": {
+            "type": "number",
+            "description": "Length of the term in months, 1 to 60 (the client's contracts use 18).",
+            "minimum": 1,
+            "maximum": 60
+          },
+          "securityDepositCents": {
+            "type": "number",
+            "description": "One-time charge: security deposit, cents (0 to 1,000,000)."
+          },
+          "documentationFeeCents": {
+            "type": "number",
+            "description": "One-time charge: documentation fee, cents."
+          },
+          "insuranceStartFeeCents": {
+            "type": "number",
+            "description": "One-time charge: insurance policy start fee, cents."
+          },
+          "otherOneTimeCents": {
+            "type": "number",
+            "description": "One-time charge: other, cents."
+          },
+          "holdVehicleCents": {
+            "type": "number",
+            "description": "One-time charge: hold vehicle payment, cents."
+          },
+          "excessMileageCents": {
+            "type": "number",
+            "description": "Recurring charge: excess mileage, cents per mile."
+          },
+          "insuranceExcessCents": {
+            "type": "number",
+            "description": "Recurring charge: insurance excess, cents per month."
+          },
+          "otherRecurringCents": {
+            "type": "number",
+            "description": "Recurring charge: other, cents."
+          }
+        },
+        "required": [
+          "schedule",
+          "status",
+          "id",
+          "driverId",
+          "numbers",
+          "createdAt",
+          "updatedAt",
+          "totalRateCents",
+          "startDate",
+          "termMonths",
+          "securityDepositCents",
+          "documentationFeeCents",
+          "insuranceStartFeeCents",
+          "otherOneTimeCents",
+          "holdVehicleCents",
+          "excessMileageCents",
+          "insuranceExcessCents",
+          "otherRecurringCents"
+        ]
+      },
+      "ContractDraftDto": {
+        "type": "object",
+        "properties": {
+          "draft": {
+            "nullable": true,
+            "description": "The driver's draft, or null when there is none.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "draft"
         ]
       },
       "DriverOnboardingDto": {
