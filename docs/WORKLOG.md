@@ -4,10 +4,29 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-20 — Payment aliases on the driver page: add and remove (B52, D69; part 2 of B85)
+- **Branch** `feature/manual-add-driver` (same PRs as part 1: backend #24, frontend #18), as separate commits.
+- **Backend:** `POST /drivers/:id/aliases` ({ type, value }) and `DELETE /drivers/:id/aliases/:aliasId`, both return the
+  updated driver; `DriverAliasDto.id`. Saved as `manual`, normalised as matching compares them (case, spaces, `$` / `@`,
+  phone as `+1XXXXXXXXXX`, email lower-case); a US-phone / email format check; `409` when the driver has it already, or
+  when another driver has it (the message names them; an alias belongs to one driver). Removal works on any source.
+  The admin and the change go to the server log (there is no audit-log table yet).
+- **Frontend:** `DriverAliasesCard` on the driver page: chips per payment method with a x (confirm dialog), an "Add an
+  alias" form (method, name or handle) with the API's message shown under it; damaged imported aliases are in a
+  collapsible list and can be removed.
+- **Verified:** 17 new tests (`driver-aliases`), the drivers-list test updated for the new `id`; backend lint, build,
+  all unit + e2e pass; frontend lint (2 old warnings) and build. Browser: add (spaces tidied), same alias again, bad
+  phone and email, empty, another driver's alias (names Browser Tester), same text under another method allowed, remove
+  with cancel and confirm.
+- **Not done:** moving an alias between drivers (B54); re-matching payments already in "Needs review" after adding an
+  alias (matching tries each payment once); driver-added aliases with approval (B53, needs the driver portal).
+
+---
+
 ### 2026-10-19 — Add an application by hand, with documents (B85 part 1, D68)
 - **Branch** `feature/manual-add-driver` in both repos, worktrees `wt-manual-add-driver-backend` / `-frontend` (slot 1:
   backend :5001, frontend :5174, databases `car_rental_manual_add_driver` / `_test`; the main `.env` copied with intake
-  off and `MAIL_MODE=log`). **Not committed, not pushed, no PRs** (waiting for the go-ahead).
+  off and `MAIL_MODE=log`). PRs: backend #24, frontend #18 (into `dev`).
 - **Backend:** migration `AddManualApplications` (`applications.created_by_id`; `application_documents.origin` /
   `uploaded_by_id`, `source_path` nullable, CHECK `application_documents_origin_shape`; `down()` refuses while admin
   uploads exist). `POST /applications/manual` (admin only, multipart: the website form's fields plus `license_file`,
@@ -41,7 +60,7 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
   field only for No, a `3+` / Long term / capital 400 application saved and shown correctly.
 - **Left in the worktree database only:** the fake applicants `Browser Tester` (approved, a driver) and `Qa Tester`; fake
   files in the local MinIO bucket under their application ids.
-- **Not done:** aliases on the driver page = **part 2 of this chat** (open part of B52), after part 1 is merged. B89
+- **Not done:** B89
   (website earnings files are lists and are not copied). Not deployed. Workspace `CLAUDE.md` "Current focus" to be
   updated when merged.
 - **Merge order:** backend PR first (the frontend client is generated from it). New migration runs on deploy. Shared

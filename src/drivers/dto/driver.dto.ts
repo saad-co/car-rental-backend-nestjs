@@ -4,6 +4,8 @@ import { DriverStatus } from "../driver.entity.js";
 
 /** One payment alias of a driver: a name, handle or company they pay from, under a payment method. */
 export class DriverAliasDto {
+  /** Needed to remove it (`DELETE /drivers/:id/aliases/:aliasId`). */
+  id: string;
   type: AliasType;
   /** As entered or as the provider wrote it. */
   value: string;

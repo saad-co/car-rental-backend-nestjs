@@ -799,3 +799,19 @@ by the client's mockup flow in use.
 - **Not done here:** aliases on the driver page (part 2, B52); several earnings files (B89).
 **Why:** keeps one way to create a driver (approval), so nothing about drivers' logins, texts or onboarding is written
 twice; the client's revision was about being able to add drivers who did not use the website.
+
+### D69 — 2026-10-20 — An admin adds and removes payment aliases on the driver page (B52, part 2 of B85; Abulkalam)
+- `POST /drivers/:id/aliases` ({ type, value }) and `DELETE /drivers/:id/aliases/:aliasId`, admin only. Types are the
+  seven we have: Zelle, Cash App, Venmo, Chime, Stripe, Email, Phone. Saved with `source = manual`.
+- **Same normalisation as matching** (`normalizeAliasValue`): lower-case, spaces collapsed, `$` / `@` dropped for Cash App
+  and Venmo, phones as `+1XXXXXXXXXX`. Phone and email values must look like a US phone / an email.
+- **One alias, one driver** (D48): an alias another driver already has is refused with `409` naming that driver; the
+  same driver adding it twice is also `409`. Nothing is taken from another driver: moving one is B54, still open. The
+  database's `UNIQUE (type, value_normalized)` decides when two admins add it at the same instant.
+- **Remove works on any alias**, imported, AI-learned or manual: it is the fix for a wrong alias. Payments already matched
+  through it stay as they are; later payments from that payer are matched without it. Asked first (confirm dialog).
+- **Not included:** payments already in "Needs review" are not matched again after an alias is added (matching tries each
+  payment once; the admin assigns them, which also saves the alias); driver-added aliases with approval (B53) wait for the
+  driver portal.
+- No audit-log table exists yet, so who added or removed what is written to the server log.
+**Why:** the client wants every name or handle a driver pays from recorded (B52), and a wrong alias must be fixable.

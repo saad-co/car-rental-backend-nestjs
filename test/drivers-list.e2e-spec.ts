@@ -95,9 +95,20 @@ describe("Drivers list with aliases and payment summary (test database)", () => 
     const kimDto = page.items.find((d) => d.id === kim.id);
 
     // Ordered by payment method as declared (Zelle first), then by value.
+    // Each alias also carries its id, which the driver page needs to remove it (D69).
     expect(timDto?.aliases).toEqual([
-      { type: "zelle", value: "TIMOTHY SUTTON", source: "legacy" },
-      { type: "cashapp", value: "Sutton Logistics", source: "manual" },
+      {
+        id: expect.stringMatching(/^[0-9a-f-]{36}$/) as unknown,
+        type: "zelle",
+        value: "TIMOTHY SUTTON",
+        source: "legacy",
+      },
+      {
+        id: expect.stringMatching(/^[0-9a-f-]{36}$/) as unknown,
+        type: "cashapp",
+        value: "Sutton Logistics",
+        source: "manual",
+      },
     ]);
     expect(timDto?.paymentCount).toBe(2);
     expect(timDto?.lastPaymentAt).toEqual(new Date("2026-10-11T12:00:00Z"));

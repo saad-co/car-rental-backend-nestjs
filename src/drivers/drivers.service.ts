@@ -1,20 +1,26 @@
 import { addDateRange } from "../common/date-range.js";
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
+import { isEmail } from "class-validator";
 import { Brackets, EntityManager, In, Repository } from "typeorm";
-import { PaymentAlias } from "../aliases/payment-alias.entity.js";
+import { AliasType, normalizeAliasValue } from "../aliases/normalize-alias.js";
+import { AliasSource, PaymentAlias } from "../aliases/payment-alias.entity.js";
+import { isUniqueViolation } from "../database/postgres-errors.js";
 import { likePattern, phoneDigits } from "../common/search.js";
 import { Payment } from "../payments/payment.entity.js";
 import { User } from "../users/user.entity.js";
 import { Driver, DriverStatus } from "./driver.entity.js";
+import { AddAliasDto } from "./dto/add-alias.dto.js";
 import { DriverDto, DriverListDto } from "./dto/driver.dto.js";
 import { ListDriversQueryDto } from "./dto/list-drivers-query.dto.js";
 import { OnboardingStep } from "./dto/set-onboarding-step.dto.js";
+import { toUsE164 } from "./us-phone.js";
 
 /**
  * Drivers for the admin screens: reading them, their onboarding steps and status (D56), and deactivating /
@@ -173,6 +179,105 @@ export class DriversService {
     return this.findOne(id);
   }
 
+  /**
+   * Adds a payment alias to a driver (D69): a name or handle they pay from, under one payment method, saved as
+   * `manual`. It is stored as typed (for display) and in its normalised form (what matching compares: lower-case,
+   * `$` / `@` dropped for Cash App and Venmo, phones as `+1XXXXXXXXXX`).
+   *
+   * An alias belongs to one driver (`UNIQUE (type, value_normalized)`): if another driver already has it, this is
+   * refused and names that driver. Moving an alias between drivers is not done here (B54). The database decides
+   * when two admins add the same alias at the same instant.
+   *
+   * @throws NotFoundException unknown driver.
+   * @throws BadRequestException a phone that is not a US number, an email that is not an address, or nothing left
+   *   after normalising (e.g. just `$`).
+   * @throws ConflictException the alias exists already (on this driver, or on another one).
+   */
+  async addAlias(
+    driverId: string,
+    dto: AddAliasDto,
+    adminId: string,
+  ): Promise<DriverDto> {
+    if (!(await this.drivers.existsBy({ id: driverId }))) {
+      throw new NotFoundException("Driver not found.");
+    }
+    if (dto.type === AliasType.phone && !toUsE164(dto.value)) {
+      throw new BadRequestException(
+        "That is not a US phone number (10 digits).",
+      );
+    }
+    if (dto.type === AliasType.email && !isEmail(dto.value)) {
+      throw new BadRequestException("That is not an email address.");
+    }
+    const valueNormalized = normalizeAliasValue(dto.type, dto.value);
+    if (valueNormalized === "") {
+      throw new BadRequestException("Enter a name or handle.");
+    }
+
+    /** The error to answer with if this alias exists already, or null. */
+    const existingAlias = async () => {
+      const existing = await this.aliases.findOne({
+        where: { type: dto.type, valueNormalized },
+        relations: { driver: true },
+      });
+      if (!existing) return null;
+      if (existing.driverId === driverId) {
+        return new ConflictException("This driver already has this alias.");
+      }
+      const owner =
+        `${existing.driver?.firstName ?? ""} ${existing.driver?.lastName ?? ""}`.trim();
+      return new ConflictException(
+        `This alias already belongs to ${owner}. An alias can belong to one driver only.`,
+      );
+    };
+    const conflict = await existingAlias();
+    if (conflict) throw conflict;
+
+    try {
+      await this.aliases.insert({
+        driverId,
+        type: dto.type,
+        value: dto.value,
+        valueNormalized,
+        source: AliasSource.manual,
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        // Another request added it a moment ago: report the owner like above.
+        throw (
+          (await existingAlias()) ??
+          new ConflictException("This alias already exists.")
+        );
+      }
+      throw error;
+    }
+    this.logger.log(
+      `Admin ${adminId} added ${dto.type} alias "${dto.value}" to driver ${driverId}.`,
+    );
+    return this.findOne(driverId);
+  }
+
+  /**
+   * Removes one alias of a driver, whatever its source (manual, imported or learned by the AI): that is how a wrong
+   * alias is fixed (D69). Payments already matched through it stay as they are; later ones from that payer are
+   * matched without it.
+   *
+   * @throws NotFoundException unknown driver, or the alias is not this driver's.
+   */
+  async removeAlias(
+    driverId: string,
+    aliasId: string,
+    adminId: string,
+  ): Promise<DriverDto> {
+    const alias = await this.aliases.findOneBy({ id: aliasId, driverId });
+    if (!alias) throw new NotFoundException("Alias not found.");
+    await this.aliases.delete({ id: aliasId, driverId });
+    this.logger.log(
+      `Admin ${adminId} removed ${alias.type} alias "${alias.value}" (${alias.source}) from driver ${driverId}.`,
+    );
+    return this.findOne(driverId);
+  }
+
   /** Loads a driver inside a transaction and locks its row until the transaction ends. */
   private async lockDriver(
     manager: EntityManager,
@@ -224,6 +329,7 @@ export class DriversService {
         aliases: aliases
           .filter((alias) => alias.driverId === row.id)
           .map((alias) => ({
+            id: alias.id,
             type: alias.type,
             value: alias.value,
             source: alias.source,

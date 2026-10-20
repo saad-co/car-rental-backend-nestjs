@@ -1458,6 +1458,86 @@
         ]
       }
     },
+    "/drivers/{id}/aliases": {
+      "post": {
+        "operationId": "DriversController_addAlias",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddAliasDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`POST /drivers/:id/aliases`: adds a payment alias (a name or handle the driver pays from, per payment method) so\ntheir payments match automatically (D69). `409` with the owner's name when another driver already has it.\nReturns the updated driver.",
+        "tags": [
+          "Drivers"
+        ]
+      }
+    },
+    "/drivers/{id}/aliases/{aliasId}": {
+      "delete": {
+        "operationId": "DriversController_removeAlias",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "aliasId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`DELETE /drivers/:id/aliases/:aliasId`: removes one of the driver's aliases. Returns the updated driver.",
+        "tags": [
+          "Drivers"
+        ]
+      }
+    },
     "/drivers/{id}/deactivate": {
       "post": {
         "operationId": "DriversController_deactivate",
@@ -3329,6 +3409,10 @@
       "DriverAliasDto": {
         "type": "object",
         "properties": {
+          "id": {
+            "type": "string",
+            "description": "Needed to remove it (`DELETE /drivers/:id/aliases/:aliasId`)."
+          },
           "type": {
             "type": "string",
             "enum": [
@@ -3356,6 +3440,7 @@
           }
         },
         "required": [
+          "id",
           "type",
           "value",
           "source"
@@ -3480,6 +3565,33 @@
         "required": [
           "step",
           "done"
+        ]
+      },
+      "AddAliasDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "The payment method the name or handle belongs to; matching only compares aliases of the payment's own method.",
+            "enum": [
+              "zelle",
+              "cashapp",
+              "venmo",
+              "chime",
+              "stripe",
+              "email",
+              "phone"
+            ]
+          },
+          "value": {
+            "type": "string",
+            "description": "The name, handle, company, email or phone as the payer shows it. Extra spaces are trimmed.",
+            "maxLength": 255
+          }
+        },
+        "required": [
+          "type",
+          "value"
         ]
       },
       "InboundEmailProvider": {
