@@ -14,14 +14,16 @@ import { CurrentUser } from "../auth/current-user.decorator.js";
 import type { AuthenticatedUser } from "../auth/jwt-auth.guard.js";
 import { ContractsService } from "./contracts.service.js";
 import {
+  ContractCompanyDto,
   ContractDraftDto,
   ContractDto,
   ContractInputDto,
   ContractNumbersDto,
+  ContractNumbersInputDto,
 } from "./dto/contract.dto.js";
 
 /**
- * Contract drafts (Module 2 step 1, D71). Admin only (the global guard). The routes live under two prefixes (the
+ * Contract drafts (Module 2, D71 and step 2). Admin only (the global guard). The routes live under two prefixes (the
  * driver's and the contract's), so the paths are written in full here.
  */
 @Controller()
@@ -31,8 +33,14 @@ export class ContractsController {
   /** `POST /contracts/calculate`: the numbers for some inputs, nothing saved. `400` bad inputs. */
   @Post("contracts/calculate")
   @HttpCode(HttpStatus.OK)
-  calculate(@Body() body: ContractInputDto): ContractNumbersDto {
+  calculate(@Body() body: ContractNumbersInputDto): ContractNumbersDto {
     return this.contracts.calculate(body);
+  }
+
+  /** `GET /contracts/companies`: the fixed list of companies a contract's Lessor is chosen from (not paginated: five rows). */
+  @Get("contracts/companies")
+  listCompanies(): Promise<ContractCompanyDto[]> {
+    return this.contracts.listCompanies();
   }
 
   /** `GET /drivers/:driverId/contract-draft`: the driver's draft, or `{ draft: null }`. `404` unknown driver. */
@@ -43,7 +51,7 @@ export class ContractsController {
     return { draft: await this.contracts.getDraft(driverId) };
   }
 
-  /** `POST /drivers/:driverId/contracts`: starts the draft. `400` bad inputs; `404` unknown driver; `409` a draft exists. */
+  /** `POST /drivers/:driverId/contracts`: starts the draft. `400` bad inputs or unknown company; `404` unknown driver; `409` a draft exists. */
   @Post("drivers/:driverId/contracts")
   createDraft(
     @Param("driverId", ParseUUIDPipe) driverId: string,
@@ -53,7 +61,7 @@ export class ContractsController {
     return this.contracts.createDraft(driverId, body, admin.id);
   }
 
-  /** `PUT /contracts/:id`: replaces every input of a draft. `400` bad inputs; `404` unknown id or not a draft. */
+  /** `PUT /contracts/:id`: replaces every input of a draft. `400` bad inputs or unknown company; `404` unknown id or not a draft. */
   @Put("contracts/:id")
   updateDraft(
     @Param("id", ParseUUIDPipe) id: string,

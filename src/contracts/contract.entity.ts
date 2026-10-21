@@ -11,6 +11,7 @@ import {
 } from "typeorm";
 import { Driver } from "../drivers/driver.entity.js";
 import { User } from "../users/user.entity.js";
+import { ContractCompany } from "./contract-company.entity.js";
 
 /**
  * Where a contract is. Only `draft` exists in step 1 (Module 2); sending, signing and the rest come with steps 3 and 4,
@@ -134,6 +135,79 @@ export class Contract {
 
   @Column({ name: "other_recurring_cents", type: "integer", default: 0 })
   otherRecurringCents: number;
+
+  // Step 2 details. All optional: a draft can be saved before they are known, and nothing here is checked beyond a length
+  // limit (the client asked for the values, not for rules about them).
+
+  /** The Lessor, from the fixed company list; its name is printed as the company's signature (D72). */
+  @Column({ name: "company_id", type: "uuid", nullable: true })
+  companyId: string | null;
+
+  @ManyToOne(() => ContractCompany, { nullable: true, onDelete: "RESTRICT" })
+  @JoinColumn({ name: "company_id" })
+  company?: ContractCompany | null;
+
+  @Column({
+    name: "vehicle_model",
+    type: "varchar",
+    length: 100,
+    nullable: true,
+  })
+  vehicleModel: string | null;
+
+  @Column({ name: "vehicle_vin", type: "varchar", length: 50, nullable: true })
+  vehicleVin: string | null;
+
+  @Column({
+    name: "vehicle_plate",
+    type: "varchar",
+    length: 20,
+    nullable: true,
+  })
+  vehiclePlate: string | null;
+
+  /** The state the plate is from, as typed ("IL" or "Illinois"). */
+  @Column({
+    name: "vehicle_plate_state",
+    type: "varchar",
+    length: 50,
+    nullable: true,
+  })
+  vehiclePlateState: string | null;
+
+  /** Purchase option price (section 15 of the sample contracts) in whole cents. */
+  @Column({ name: "purchase_option_cents", type: "integer", nullable: true })
+  purchaseOptionCents: number | null;
+
+  /** The driver's address on one line, as typed. */
+  @Column({
+    name: "lessee_address",
+    type: "varchar",
+    length: 300,
+    nullable: true,
+  })
+  lesseeAddress: string | null;
+
+  /** Sensitive (B94: to be encrypted). Never in a list response or a log line. */
+  @Column({
+    name: "license_number",
+    type: "varchar",
+    length: 50,
+    nullable: true,
+  })
+  licenseNumber: string | null;
+
+  @Column({
+    name: "license_state",
+    type: "varchar",
+    length: 50,
+    nullable: true,
+  })
+  licenseState: string | null;
+
+  /** Sensitive (B94: to be encrypted). A plain calendar day. Never in a list response or a log line. */
+  @Column({ name: "date_of_birth", type: "date", nullable: true })
+  dateOfBirth: string | null;
 
   /** The admin who made the draft; null if that account was removed. */
   @Column({ name: "created_by_id", type: "uuid", nullable: true })
