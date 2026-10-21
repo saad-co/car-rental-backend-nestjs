@@ -848,3 +848,15 @@ twice; the client's revision was about being able to add drivers who did not use
 - The percentages apply to Illinois. California and Tennessee wait for the client (B91 question 3).
 **Why:** one typed number drives everything, as the client asked ("an applet ... others driven by formulas as a % of the
 total rate"), and calculated totals cannot drift like the hand-typed ones in the samples.
+
+### D72 — 2026-10-21 — The company signature is the entity name, preprinted on each contract; client confirms firma.dev (Module 2; client, via Saad)
+- **Client wording:** "The signature will be the name of the entity, not the person. So the signature will say Evergreen Holdings LLC or
+  Gonzo, or Silver Pine, etc and it will bear the signature first. In fact, it can be preprinted on each contract." She also said
+  she likes firma.dev (its "nearly free electronic signature API" article), which confirms D70.
+- **Decision:** nobody at the company signs each contract and there is no company signer in the envelope: the driver is the only
+  signer. The company signature is the entity name, which comes from the company chosen on the draft (step 2), printed before the
+  driver signs. This answers B91 question 1.
+- **Our reading, to check in step 3 (simplest option first):** a locked text field in the signing PDF, filled with the chosen
+  entity name in a script-style font, in the Lessor's signature block (the PDF template marker approach of D70). firma's
+  automatic organization seal stays a fallback if the text field looks wrong.
+**Why:** removes the countersigning step and the wait for a second signer, so a contract is complete the moment the driver signs.

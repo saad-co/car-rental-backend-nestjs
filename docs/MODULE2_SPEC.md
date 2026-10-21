@@ -38,15 +38,15 @@ for it after using the first version.
 |---|---|---|
 | 1 | **Rate calculator.** A contract draft on the driver: admin types schedule (daily or weekly), total rate, start date, term, one-time and recurring charges; the system calculates the breakdown, totals, amount due at pickup and end date (D71). | Admin creates, edits and deletes a draft from the driver page; numbers match the sheet. |
 | 2 | **Contract details.** Company (from a list), vehicle (typed: model, VIN, plate, state), purchase option price on the draft. Driver details come from the driver and application. | Draft holds every value the contract header needs. |
-| 3 | **Send for signing (firma, D70).** The client's Illinois Google Doc, exported as PDF with `{{MARKER}}` texts where values go, is the template (firma anchor tags); "Send" creates a signing request with the draft's values as locked fields; the driver signs from an email link; the company countersigns by hand or by firma's automatic organization seal (question 1). Values sent are frozen on the contract. | A test-mode contract is signed end to end. |
+| 3 | **Send for signing (firma, D70).** The client's Illinois Google Doc, exported as PDF with `{{MARKER}}` texts where values go, is the template (firma anchor tags); "Send" creates a signing request with the draft's values as locked fields; the driver signs from an email link; the company's signature is its **entity name, preprinted on the contract before the driver signs** (D72), so the driver is the only signer. Values sent are frozen on the contract. | A test-mode contract is signed end to end. |
 | 4 | **Track and file.** firma webhooks move the status (sent, viewed, signed, declined, expired); a scheduled check catches events firma could not deliver (it tries only 3 times); the signed PDF and certificate are copied into our storage; "Contract signed" (D56) is ticked automatically. | Status on the driver page; signed PDF opens from the driver's file. |
 
 **Later (not now):** reminders to sign, a vehicle list, California and Tennessee versions, car swap / rate change /
 renewal, contract charges posted to the ledger, billing settings taken from the contract (M2).
 
 ## 3. Open questions (minimal, B91)
-1. **Company signature** (blocks step 3 only): does Jason sign each contract himself after the driver, or is the company's
-   electronic seal added automatically (firma, free)? Abulkalam asks Saad.
+1. **Company signature** (settled 2026-10-21, D72): the signature is the name of the entity (Evergreen Holdings LLC, Gonzo, Silver Pine,
+   ...), preprinted on each contract and bearing the signature first. No one at the company signs each contract.
 2. **Totals** (not a question, shown in the step 1 demo): payment = the total rate, amount due at pickup = first payment +
    one-time charges, end date = start date + term months (D71). The samples agree: $409 + $200 = $609, $399 + $250 = $649,
    daily $61 + $300 = $361. The client corrects it if wrong.
