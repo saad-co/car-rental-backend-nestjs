@@ -14,12 +14,18 @@ import { User } from "../users/user.entity.js";
 import { ContractCompany } from "./contract-company.entity.js";
 
 /**
- * Where a contract is. `draft` is being typed; `sent` went to the driver through firma (step 3). Signed, viewed, declined and
- * expired come with step 4, which adds values to this enum with its own migration.
+ * Where a contract is. `draft` is being typed; `sent` went to the driver through firma (step 3). Step 4 (D75) follows firma
+ * from there: `viewed` (the driver opened it), then one of the four end states `signed`, `declined`, `expired`,
+ * `cancelled`. The value order is the order of the database enum (values are only ever added at the end).
  */
 export enum ContractStatus {
   draft = "draft",
   sent = "sent",
+  viewed = "viewed",
+  signed = "signed",
+  declined = "declined",
+  expired = "expired",
+  cancelled = "cancelled",
 }
 
 /**
@@ -85,6 +91,13 @@ export const DEFAULT_TERM_MONTHS = 18;
   `("status" = 'draft') = ("sent_at" IS NULL)
     AND ("sent_at" IS NULL) = ("firma_signing_request_id" IS NULL)
     AND ("sent_at" IS NULL) = ("sent_values" IS NULL)`,
+)
+// The two signed files are saved together, and only for a contract that was signed (written on columns: a CHECK cannot
+// name an enum value added in the same migration).
+@Check(
+  "contracts_documents_shape",
+  `("signed_pdf_key" IS NULL) = ("certificate_key" IS NULL)
+    AND ("signed_pdf_key" IS NULL OR "signed_at" IS NOT NULL)`,
 )
 // One firma envelope belongs to one contract.
 @Index("contracts_firma_signing_request_id", ["firmaSigningRequestId"], {
@@ -259,6 +272,38 @@ export class Contract {
   /** The frozen copy of what was sent. Sensitive (B94). */
   @Column({ name: "sent_values", type: "jsonb", nullable: true })
   sentValues: ContractSentValues | null;
+
+  // Step 4 (D75): what firma reported after sending, and the copies of the signed files. All null until they happen.
+
+  /** When the current status happened, as firma reports it (the driver opened it, signed it, ...); null while `sent`. */
+  @Column({ name: "status_updated_at", type: "timestamptz", nullable: true })
+  statusUpdatedAt: Date | null;
+
+  /** When the driver finished signing (firma's `finished_on`). */
+  @Column({ name: "signed_at", type: "timestamptz", nullable: true })
+  signedAt: Date | null;
+
+  /** Bucket key of the signed PDF (the contract with firma's certificate page); null until it is saved. */
+  @Column({
+    name: "signed_pdf_key",
+    type: "varchar",
+    length: 300,
+    nullable: true,
+  })
+  signedPdfKey: string | null;
+
+  /** Bucket key of the signature certificate alone; saved together with the signed PDF. */
+  @Column({
+    name: "certificate_key",
+    type: "varchar",
+    length: 300,
+    nullable: true,
+  })
+  certificateKey: string | null;
+
+  /** Why the last attempt to save the signed files failed; cleared on success. Shown on the contract page (no silent failure). */
+  @Column({ name: "documents_error", type: "text", nullable: true })
+  documentsError: string | null;
 
   /** The admin who made the draft; null if that account was removed. */
   @Column({ name: "created_by_id", type: "uuid", nullable: true })

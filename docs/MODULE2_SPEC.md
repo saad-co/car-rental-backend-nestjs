@@ -1,7 +1,7 @@
 # Module 2 Spec — Driver Contracts and E-Signature
 
 Contracts (vehicle lease agreements) are filled in from our data, sent to the driver to sign online, and the signed copy
-lands on the driver's file. Started 2026-10-20. Decisions: D70 (signing provider), D71 (rate calculation), D72 (company signature), D73 (contract details).
+lands on the driver's file. Started 2026-10-20. Decisions: D70 (signing provider), D71 (rate calculation), D72 (company signature), D73 (contract details), D74 (sending), D75 (tracking and filing).
 
 **Scope rule:** keep it simple. Build the steps below one at a time; everything under "Later" waits until the client asks
 for it after using the first version.
@@ -39,7 +39,7 @@ for it after using the first version.
 | 1 | **Rate calculator.** A contract draft on the driver: admin types schedule (daily or weekly), total rate, start date, term, one-time and recurring charges; the system calculates the breakdown, totals, amount due at pickup and end date (D71). | Admin creates, edits and deletes a draft from the driver page; numbers match the sheet. |
 | 2 | **Contract details.** Company (from a fixed list of five, D73), vehicle (typed: model, VIN, plate, plate state) and purchase option price on the draft. The driver's name, email and phone come from the driver record; the address, licence number, licence state and date of birth are typed on the draft (the driver record and the website form do not hold them). All optional, nothing checked beyond a length limit; completeness is checked when sending (step 3). | Draft holds every value the contract header needs. |
 | 3 | **Send for signing (firma, D70, D74).** The client's Illinois Google Doc, exported as PDF with `{{MARKER}}` texts where values go, is the template, stored in our repo (one for all four Illinois companies; the sample driver's licence photo removed). "Send for signing" on the contract page uploads that PDF to firma on every send, with one anchor per marker that makes a locked field holding the draft's value (firma's anchor tags do not work with templates stored in firma); the driver signs from firma's email link; the company's signature is its **entity name printed as a plain locked text before the driver signs** (D72; firma cannot set the font of an anchored field), so the driver is the only signer. Values sent are frozen on the contract; a sent contract cannot be edited or deleted. Send is refused until every value is filled, and for a company that is not in Illinois. | A test-mode contract is signed end to end (done 2026-10-21 with the firma test key). |
-| 4 | **Track and file.** firma webhooks move the status (sent, viewed, signed, declined, expired); a scheduled check catches events firma could not deliver (it tries only 3 times); the signed PDF and certificate are copied into our storage; "Contract signed" (D56) is ticked automatically. | Status on the driver page; signed PDF opens from the driver's file. |
+| 4 | **Track and file (D75).** The contract's status follows firma: sent, viewed (the driver opened it), then signed, declined, expired or cancelled. **One function decides:** it asks firma for the signing request and applies the answer. A firma webhook (`POST /webhooks/firma`, signed) and a 5-minute scheduled check only trigger it, so a lost, repeated or late webhook is harmless (firma tries only 3 times). A contract only moves forward and an end state never changes. When the driver signs, the signed PDF (with firma's certificate page) and the certificate alone are copied into our private bucket by a retried job (a failure shows on the contract page), and "Contract signed" (D56) is ticked by the system in the same transaction. | Status and date on the contract page and the driver's Contract card; "Open signed contract" and "Certificate" open the saved files; the driver's step says "automatic". |
 
 **Later (not now):** reminders to sign, a vehicle list, California and Tennessee versions, car swap / rate change /
 renewal, contract charges posted to the ledger, billing settings taken from the contract (M2).
@@ -67,7 +67,7 @@ as a requirement; *our suggestion* = ours, to be shown to the client. "Sample co
 | Admin creates the draft from the driver page, numbers worked out by the system (step 1, built) | Saad's message, 2026-10-19: the client asked for "an applet" that does this | client-confirmed |
 | Send for signing from the contract page (step 3, built) | Scope PDF, Module 2 ("sends it for signature"); signing provider chosen by the client (D70); Saad's "applet" message | client-confirmed |
 | The company's signature is its entity name, printed before the driver signs (step 3, built) | Client message via Saad, 2026-10-21 (D72) | client-confirmed |
-| Track the status and file the signed PDF; "Contract signed" ticked automatically (step 4, planned) | Scope PDF, Module 2 (status at each stage, signed PDF and audit trail stored, driver activated); D56 | from a document |
+| Track the status and file the signed PDF; "Contract signed" ticked automatically (step 4, built, see "Step 4" below) | Scope PDF, Module 2 (status at each stage, signed PDF and audit trail stored, driver activated); D56 | from a document |
 
 ### Step 1 fields (rate calculator, D71)
 | Field | Source | Status |
@@ -112,3 +112,16 @@ as a requirement; *our suggestion* = ours, to be shown to the client. "Sample co
 | A sent contract is frozen: no edit, no delete; the sent values are kept as a copy | Ours; the scope PDF says the signed copy is the legal record | our suggestion |
 | Only the Illinois contract can be sent; a California company is refused | Saad: the rate sheet is Illinois only; the samples differ by state | client-confirmed |
 | "Sent" with its date on the contract page and the driver's Contract card | Ours (status updates come in step 4) | our suggestion |
+
+### Step 4 flow (track and file, D75)
+| Field or step | Source | Status |
+|---|---|---|
+| The contract's status follows firma: sent, viewed, signed | Scope PDF: "status visible at each stage: sent, viewed, signed, countersigned" (no countersigning here, D72) | from a document |
+| Declined, expired and cancelled are shown too | Ours: firma has these states and a contract can end in them | our suggestion |
+| The signed PDF and the signature certificate are kept in our own storage | Scope PDF: "stored against the driver record permanently, with the audit trail and signer certificate"; D70 (no record depends on firma) | from a document |
+| Signing ticks "Contract signed" on the driver by itself | Scope PDF: "flips the driver to active when signing completes"; D56 makes `active` need all three steps, so we tick one step and D56 does the rest | from a document |
+| The tick is the system's (no admin); an admin's earlier tick keeps its date and admin; an inactive driver gets the date but stays inactive | Ours: follows D56 (steps, inactive locked) | our suggestion |
+| A webhook from firma plus a 5-minute scheduled catch-up; the webhook only triggers a look-up, firma is asked for the real state | Ours: firma delivers an event only 3 times (D70), so a missed event needs the job; asking firma makes a repeated or forged event harmless | our suggestion |
+| A failed save of the signed files is shown on the contract page and retried | Spec rule 5, no silent failure | from a document |
+| The signed PDF opens through short-lived links from a private bucket | Ours: same as the application documents (D54); the PDF holds the licence number and date of birth (B94) | our suggestion |
+| The contract page refreshes by itself every 30 seconds while the contract waits for the driver | Ours: the status changes without the admin doing anything | our suggestion |

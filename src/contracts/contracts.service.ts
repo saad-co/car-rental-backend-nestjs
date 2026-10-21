@@ -344,6 +344,10 @@ export class ContractsService {
       numbers: contractNumbers(inputs),
       sentAt: row.sentAt,
       sentValues: row.sentValues,
+      statusUpdatedAt: row.statusUpdatedAt,
+      signedAt: row.signedAt,
+      documentsSaved: row.signedPdfKey !== null && row.certificateKey !== null,
+      documentsError: row.documentsError,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };

@@ -1529,6 +1529,51 @@
         ]
       }
     },
+    "/contracts/{id}/documents": {
+      "get": {
+        "operationId": "ContractsController_getDocuments",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractDocumentsDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`GET /contracts/:id/documents`: short-lived links to the signed contract and its certificate (D75), minted for this\nrequest and never stored. Both are null until the files are saved. `404` unknown id.",
+        "tags": [
+          "Contracts"
+        ]
+      }
+    },
+    "/webhooks/firma": {
+      "post": {
+        "operationId": "FirmaWebhookController_receive",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "FirmaWebhook"
+        ]
+      }
+    },
     "/drivers": {
       "get": {
         "operationId": "DriversController_list",
@@ -3780,7 +3825,12 @@
         "type": "string",
         "enum": [
           "draft",
-          "sent"
+          "sent",
+          "viewed",
+          "signed",
+          "declined",
+          "expired",
+          "cancelled"
         ]
       },
       "ContractSentValuesDto": {
@@ -3900,6 +3950,23 @@
               }
             ]
           },
+          "statusUpdatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "When the current status happened, as firma reports it (opened, signed, declined, ...); null while `sent` (D75)."
+          },
+          "signedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "When the driver finished signing; null until they do."
+          },
+          "documentsError": {
+            "type": "string",
+            "nullable": true,
+            "description": "Why saving the signed files last failed, shown to the admin; null when nothing is wrong."
+          },
           "id": {
             "type": "string"
           },
@@ -3913,6 +3980,10 @@
                 "$ref": "#/components/schemas/ContractNumbersDto"
               }
             ]
+          },
+          "documentsSaved": {
+            "type": "boolean",
+            "description": "True once the signed PDF and the certificate are in our storage (open them with `GET /contracts/:id/documents`)."
           },
           "createdAt": {
             "format": "date-time",
@@ -3977,9 +4048,13 @@
           "status",
           "sentAt",
           "sentValues",
+          "statusUpdatedAt",
+          "signedAt",
+          "documentsError",
           "id",
           "driverId",
           "numbers",
+          "documentsSaved",
           "createdAt",
           "updatedAt",
           "totalRateCents",
@@ -4164,6 +4239,25 @@
           "statusCode",
           "message",
           "missing"
+        ]
+      },
+      "ContractDocumentsDto": {
+        "type": "object",
+        "properties": {
+          "signedPdfUrl": {
+            "type": "string",
+            "nullable": true,
+            "description": "The signed contract with firma's certificate page; null until it is saved."
+          },
+          "certificateUrl": {
+            "type": "string",
+            "nullable": true,
+            "description": "The signature certificate alone; null until it is saved."
+          }
+        },
+        "required": [
+          "signedPdfUrl",
+          "certificateUrl"
         ]
       },
       "DriverOnboardingDto": {
