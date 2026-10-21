@@ -56,13 +56,57 @@ export interface FirmaSent {
 }
 
 /**
- * The only thing the contracts need from firma (D70) in step 3: create a signing request from our PDF and send it to the
- * driver in one call. The real adapter is `FirmaHttpClient`; tests use a fake (same pattern as `QuoClient`).
+ * Where a signing request is, as firma says it (step 4, D75). firma's `status` is a set of flags that can be true together
+ * (`sent` stays true after a finish or a cancel); the adapter resolves them into this one word, finished first.
+ */
+export type FirmaRequestStatus =
+  "sent" | "finished" | "declined" | "cancelled" | "expired";
+
+/** What the contracts need to know about one signing request. Every date is firma's own time. */
+export interface FirmaRequestState {
+  id: string;
+  status: FirmaRequestStatus;
+  /** When the driver first opened the signing page (from firma's audit trail); only looked up while `sent`. */
+  viewedAt: Date | null;
+  /** The time of the end state: finished, declined or cancelled (`expires_at` for expired); null while `sent`. */
+  endedAt: Date | null;
+  /**
+   * Links to the signed PDF (the contract with firma's certificate page) and to the certificate alone. Both are null
+   * until firma has finished making them (about 20 seconds after the signing) and for any request that was not
+   * signed. A link works for an hour and needs no key: fetch it at once, never store it.
+   */
+  signedPdfUrl: string | null;
+  certificateUrl: string | null;
+}
+
+/** One file downloaded from a firma link. */
+export interface FirmaDownload {
+  body: Buffer;
+  contentType: string | null;
+}
+
+/** Options for one lookup. */
+export interface FirmaLookupOptions {
+  /** Give up on each call to firma after this long (default 20 s). The webhook answers firma within 5 s. */
+  timeoutMs?: number;
+}
+
+/**
+ * What the contracts need from firma (D70): create a signing request from our PDF and send it to the driver (step 3), then
+ * read where it is and fetch the signed files (step 4). The real adapter is `FirmaHttpClient`; tests use a fake (same
+ * pattern as `QuoClient`).
  *
  * Implementations throw `FirmaError` on any failure and never return a guess.
  */
 export interface FirmaClient {
   createAndSend(request: FirmaSendRequest): Promise<FirmaSent>;
+  /** firma is the authority on a contract's status: this is the one place we ask it. */
+  getSigningRequest(
+    id: string,
+    options?: FirmaLookupOptions,
+  ): Promise<FirmaRequestState>;
+  /** Downloads a file from one of the links of a `FirmaRequestState` (25 MB at most, 30 s). */
+  download(url: string): Promise<FirmaDownload>;
 }
 
 /** Injection token. The value is null when `FIRMA_API_KEY` is not set: sending then answers 503. */

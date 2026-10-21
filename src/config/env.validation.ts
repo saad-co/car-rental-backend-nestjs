@@ -190,6 +190,18 @@ class EnvironmentVariables {
   FIRMA_API_KEY?: string;
 
   /**
+   * Signing secret of the firma webhook (shown in firma's dashboard when the webhook is created), used as it is written
+   * (step 4, D75). Unset: `POST /webhooks/firma` answers 503; the 5-minute catch-up job still follows every contract.
+   */
+  @ValidateIf(
+    (env: EnvironmentVariables) =>
+      env.FIRMA_WEBHOOK_SECRET !== undefined && env.FIRMA_WEBHOOK_SECRET !== "",
+  )
+  @IsString()
+  @IsNotEmpty()
+  FIRMA_WEBHOOK_SECRET?: string;
+
+  /**
    * Staff phone (E.164, US) that gets a text with a link whenever the website submits a new application (D53).
    * Empty or unset: no alerts. The text follows SMS_MODE like every other text.
    */

@@ -34,6 +34,15 @@ const request: FirmaSendRequest = {
   ],
 };
 
+/** The address a `fetch` call was given, whatever form it came in. */
+function href(input: Parameters<typeof fetch>[0]): string {
+  return typeof input === "string"
+    ? input
+    : input instanceof URL
+      ? input.href
+      : input.url;
+}
+
 function respond(status: number, body: unknown): typeof fetch {
   return () =>
     Promise.resolve(
@@ -150,5 +159,224 @@ describe("FirmaHttpClient", () => {
     expect((error as FirmaError).message).toContain("socket hang up");
     expect((error as FirmaError).message).toContain("dashboard");
     expect((error as FirmaError).message).not.toContain("secret-key");
+  });
+});
+
+const BASE =
+  "https://api.firma.dev/functions/v1/signing-request-api/signing-requests";
+
+/** firma's answer for one request, shaped as the real API gives it (checked in the D75 spike). */
+function requestJson(over: Record<string, unknown> = {}) {
+  return {
+    id: "req-1",
+    status: {
+      sent: true,
+      finished: false,
+      cancelled: false,
+      declined: false,
+      expired: false,
+    },
+    timestamps: {
+      sent_on: "2026-10-21T12:00:00Z",
+      finished_on: null,
+      cancelled_on: null,
+      declined_on: null,
+      last_changed_on: "2026-10-21T12:00:00Z",
+    },
+    certificate: { generated: false },
+    expires_at: null,
+    final_document_download_url: null,
+    certificate_only_download_url: null,
+    ...over,
+  };
+}
+
+describe("FirmaHttpClient.getSigningRequest", () => {
+  it("reads one request with the key in Authorization, and asks the audit trail only while it is still sent", async () => {
+    const seen: { url: string; init: RequestInit }[] = [];
+    const client = new FirmaHttpClient({
+      apiKey: "secret-key",
+      fetchImpl: (url, init) => {
+        seen.push({ url: url as string, init: init as RequestInit });
+        return respond(
+          200,
+          href(url).endsWith("/audit")
+            ? {
+                results: [
+                  {
+                    source: "admin",
+                    event: "activity",
+                    timestamp: "2026-10-21T12:00:01Z",
+                  },
+                  {
+                    source: "signer",
+                    event: "document_viewed",
+                    timestamp: "2026-10-21T12:05:00Z",
+                  },
+                  {
+                    source: "signer",
+                    event: "document_viewed",
+                    timestamp: "2026-10-21T12:09:00Z",
+                  },
+                ],
+              }
+            : requestJson(),
+        )(url, init);
+      },
+    });
+
+    const state = await client.getSigningRequest("req-1");
+
+    expect(seen.map((call) => call.url)).toEqual([
+      `${BASE}/req-1`,
+      `${BASE}/req-1/audit`,
+    ]);
+    expect(seen[0].init.headers).toMatchObject({ Authorization: "secret-key" });
+    expect(state).toEqual({
+      id: "req-1",
+      status: "sent",
+      viewedAt: new Date("2026-10-21T12:05:00Z"),
+      endedAt: null,
+      signedPdfUrl: null,
+      certificateUrl: null,
+    });
+  });
+
+  it("does not ask the audit trail for a request that is already finished", async () => {
+    const urls: string[] = [];
+    const client = new FirmaHttpClient({
+      apiKey: "k",
+      fetchImpl: (url, init) => {
+        urls.push(href(url));
+        return respond(
+          200,
+          requestJson({
+            status: { sent: true, finished: true },
+            timestamps: { finished_on: "2026-10-21T12:30:00Z" },
+            certificate: { generated: true },
+            final_document_download_url: "https://files.test/final.pdf?token=a",
+            certificate_only_download_url:
+              "https://files.test/cert.pdf?token=b",
+          }),
+        )(url, init);
+      },
+    });
+
+    const state = await client.getSigningRequest("req-1");
+
+    expect(urls).toEqual([`${BASE}/req-1`]);
+    expect(state.status).toBe("finished");
+    expect(state.endedAt).toEqual(new Date("2026-10-21T12:30:00Z"));
+    expect(state.signedPdfUrl).toBe("https://files.test/final.pdf?token=a");
+    expect(state.certificateUrl).toBe("https://files.test/cert.pdf?token=b");
+  });
+
+  it("turns firma's refusal into a FirmaError without the key", async () => {
+    const client = new FirmaHttpClient({
+      apiKey: "secret-key",
+      fetchImpl: respond(404, { error: "Signing request not found" }),
+    });
+    const error = await client
+      .getSigningRequest("nope")
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(FirmaError);
+    expect((error as FirmaError).status).toBe(404);
+    expect((error as FirmaError).message).toContain("not found");
+    expect((error as FirmaError).message).not.toContain("secret-key");
+  });
+
+  it("says so when firma does not answer", async () => {
+    const client = new FirmaHttpClient({
+      apiKey: "secret-key",
+      fetchImpl: () => Promise.reject(new Error("timed out")),
+    });
+    const error = await client
+      .getSigningRequest("req-1")
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(FirmaError);
+    expect((error as FirmaError).status).toBeNull();
+    expect((error as FirmaError).message).toContain("timed out");
+  });
+});
+
+describe("FirmaHttpClient.download", () => {
+  const pdf = Buffer.from("%PDF-1.7 fake");
+
+  it("fetches the link without sending the API key to it", async () => {
+    let seen: { url: string; init: RequestInit } | undefined;
+    const client = new FirmaHttpClient({
+      apiKey: "secret-key",
+      fetchImpl: (url, init) => {
+        seen = { url: href(url), init: init as RequestInit };
+        return Promise.resolve(
+          new Response(pdf, { headers: { "content-type": "application/pdf" } }),
+        );
+      },
+    });
+
+    const file = await client.download("https://files.test/final.pdf?token=a");
+
+    expect(seen?.url).toBe("https://files.test/final.pdf?token=a");
+    expect(JSON.stringify(seen?.init.headers ?? {})).not.toContain(
+      "secret-key",
+    );
+    expect(seen?.init.redirect).toBe("error");
+    expect(file.body.equals(pdf)).toBe(true);
+    expect(file.contentType).toBe("application/pdf");
+  });
+
+  it("refuses a link that is not https", async () => {
+    const client = new FirmaHttpClient({
+      apiKey: "k",
+      fetchImpl: respond(200, "x"),
+    });
+    await expect(client.download("http://files.test/a.pdf")).rejects.toThrow(
+      /non-https/,
+    );
+  });
+
+  it("refuses a file that is too large, by its declared size", async () => {
+    const client = new FirmaHttpClient({
+      apiKey: "k",
+      fetchImpl: () =>
+        Promise.resolve(
+          new Response(pdf, {
+            headers: { "content-length": String(26 * 1024 * 1024) },
+          }),
+        ),
+    });
+    await expect(client.download("https://files.test/a.pdf")).rejects.toThrow(
+      /too large/,
+    );
+  });
+
+  it("refuses a file that grows past the limit whatever the headers said", async () => {
+    const big = new Uint8Array(26 * 1024 * 1024);
+    const client = new FirmaHttpClient({
+      apiKey: "k",
+      fetchImpl: () => Promise.resolve(new Response(big)),
+    });
+    await expect(client.download("https://files.test/a.pdf")).rejects.toThrow(
+      /too large/,
+    );
+  });
+
+  it("refuses an empty file and a link that answers an error", async () => {
+    const empty = new FirmaHttpClient({
+      apiKey: "k",
+      fetchImpl: () => Promise.resolve(new Response(new Uint8Array(0))),
+    });
+    await expect(empty.download("https://files.test/a.pdf")).rejects.toThrow(
+      /empty file/,
+    );
+    const gone = new FirmaHttpClient({
+      apiKey: "k",
+      fetchImpl: respond(403, "expired"),
+    });
+    const error = await gone
+      .download("https://files.test/a.pdf")
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(FirmaError);
+    expect((error as FirmaError).status).toBe(403);
   });
 });

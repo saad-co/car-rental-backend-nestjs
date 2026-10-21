@@ -11,5 +11,7 @@ import { DriversService } from "./drivers.service.js";
   imports: [TypeOrmModule.forFeature([Driver, PaymentAlias, Payment])],
   controllers: [DriversController],
   providers: [DriversService],
+  // ContractsModule ticks "Contract signed" when a driver signs (D75).
+  exports: [DriversService],
 })
 export class DriversModule {}

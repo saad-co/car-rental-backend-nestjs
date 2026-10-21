@@ -13,10 +13,12 @@ import {
 import { ApiBadRequestResponse } from "@nestjs/swagger";
 import { CurrentUser } from "../auth/current-user.decorator.js";
 import type { AuthenticatedUser } from "../auth/jwt-auth.guard.js";
+import { ContractTrackingService } from "./contract-tracking.service.js";
 import { ContractsService } from "./contracts.service.js";
 import {
   ContractCompanyDto,
   ContractCurrentDto,
+  ContractDocumentsDto,
   ContractDto,
   ContractInputDto,
   ContractMissingDto,
@@ -30,7 +32,10 @@ import {
  */
 @Controller()
 export class ContractsController {
-  constructor(private readonly contracts: ContractsService) {}
+  constructor(
+    private readonly contracts: ContractsService,
+    private readonly tracking: ContractTrackingService,
+  ) {}
 
   /** `POST /contracts/calculate`: the numbers for some inputs, nothing saved. `400` bad inputs. */
   @Post("contracts/calculate")
@@ -85,6 +90,17 @@ export class ContractsController {
     @CurrentUser() admin: AuthenticatedUser,
   ): Promise<ContractDto> {
     return this.contracts.sendForSigning(id, admin.id);
+  }
+
+  /**
+   * `GET /contracts/:id/documents`: short-lived links to the signed contract and its certificate (D75), minted for this
+   * request and never stored. Both are null until the files are saved. `404` unknown id.
+   */
+  @Get("contracts/:id/documents")
+  getDocuments(
+    @Param("id", ParseUUIDPipe) id: string,
+  ): Promise<ContractDocumentsDto> {
+    return this.tracking.getDocuments(id);
   }
 
   /** `DELETE /contracts/:id`: deletes a draft. `404` unknown id or not a draft. */

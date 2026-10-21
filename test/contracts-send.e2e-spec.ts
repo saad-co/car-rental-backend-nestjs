@@ -17,6 +17,8 @@ import { Driver } from "../src/drivers/driver.entity.js";
 import {
   FirmaError,
   type FirmaClient,
+  type FirmaDownload,
+  type FirmaRequestState,
   type FirmaSendRequest,
   type FirmaSent,
 } from "../src/firma/firma-client.js";
@@ -34,6 +36,15 @@ class FakeFirma implements FirmaClient {
     this.requests.push(request);
     if (this.failWith) throw this.failWith;
     return { signingRequestId: `firma-${this.requests.length}` };
+  }
+
+  // Tracking is step 4's business (contracts-track.e2e-spec); sending never asks.
+  getSigningRequest(): Promise<FirmaRequestState> {
+    return Promise.reject(new Error("not used while sending"));
+  }
+
+  download(): Promise<FirmaDownload> {
+    return Promise.reject(new Error("not used while sending"));
   }
 }
 

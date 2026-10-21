@@ -257,8 +257,29 @@ export class ContractDto extends ContractInputDto {
   /** The frozen copy of what was sent; null while it is a draft. */
   @ApiProperty({ type: () => ContractSentValuesDto, nullable: true })
   sentValues: ContractSentValuesDto | null;
+  /** When the current status happened, as firma reports it (opened, signed, declined, ...); null while `sent` (D75). */
+  @ApiProperty({ type: Date, nullable: true })
+  statusUpdatedAt: Date | null;
+  /** When the driver finished signing; null until they do. */
+  @ApiProperty({ type: Date, nullable: true })
+  signedAt: Date | null;
+  /** True once the signed PDF and the certificate are in our storage (open them with `GET /contracts/:id/documents`). */
+  documentsSaved: boolean;
+  /** Why saving the signed files last failed, shown to the admin; null when nothing is wrong. */
+  @ApiProperty({ type: String, nullable: true })
+  documentsError: string | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+/** Response of `GET /contracts/:id/documents`: short-lived links, minted for this request. */
+export class ContractDocumentsDto {
+  /** The signed contract with firma's certificate page; null until it is saved. */
+  @ApiProperty({ type: String, nullable: true })
+  signedPdfUrl: string | null;
+  /** The signature certificate alone; null until it is saved. */
+  @ApiProperty({ type: String, nullable: true })
+  certificateUrl: string | null;
 }
 
 /** Response of `GET /drivers/:driverId/contract`. */

@@ -137,6 +137,39 @@ export class DriversService {
   }
 
   /**
+   * Ticks "Contract signed" because the driver signed their contract (Module 2 step 4, D75). Runs inside the caller's
+   * transaction, so the contract becomes `signed` and the tick happens together or not at all, and locks the driver's row
+   * like `setOnboardingStep` does.
+   *
+   * - It is the system's tick: no admin (`contractSignedById` stays null). If an admin already ticked the step by hand,
+   *   it keeps its date and admin.
+   * - The status follows D56 (all three steps → `active`), except for an inactive driver: they only get the date and stay
+   *   inactive (reactivating works the status out from the steps).
+   * - An admin may un-tick the step later; that does not touch the contract.
+   *
+   * @returns true when this call set the date, false when the step was already done.
+   * @throws NotFoundException unknown driver.
+   */
+  async recordContractSigned(
+    manager: EntityManager,
+    driverId: string,
+    signedAt: Date,
+  ): Promise<boolean> {
+    const driver = await this.lockDriver(manager, driverId);
+    if (driver.contractSignedAt !== null) return false;
+    driver.contractSignedAt = signedAt;
+    driver.contractSignedById = null;
+    if (driver.status !== DriverStatus.inactive) {
+      driver.status = statusFromSteps(driver);
+    }
+    await manager.save(driver);
+    this.logger.log(
+      `Contract signed ticked for driver ${driverId} by the system; status ${driver.status}.`,
+    );
+    return true;
+  }
+
+  /**
    * Marks a driver inactive (they left, B67) and turns off their login in the same transaction: `users.active` is
    * read on every request (JwtAuthGuard), so an open session ends at the next click, and logging in is refused.
    * Steps are kept. Deactivating an inactive driver changes nothing.

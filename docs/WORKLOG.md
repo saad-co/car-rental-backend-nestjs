@@ -4,6 +4,42 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-21 — Module 2 step 4: track a sent contract and file the signed copy (D75, B96)
+- **Branch** `feature/contracts-track` in both repos, worktrees `wt-contracts-track-backend` / `-frontend` (slot 3: backend :5003, frontend
+  :5176, databases `car_rental_contracts_track` / `_test`). **Not committed, not merged, not deployed.**
+- **Spike first (passed, plan corrected, all in D75):** firma's `status` is flags; "viewed" is visible by polling (`/audit`, first signer
+  `document_viewed`); the PDF links need no key, work 1 hour and fill about 20 seconds after signing; declined, cancelled and expired seen.
+- **Backend:** migration `AddContractTracking` (5 statuses, `status_updated_at`, `signed_at`, `signed_pdf_key`, `certificate_key`,
+  `documents_error`, CHECK `contracts_documents_shape`); `FirmaClient.getSigningRequest` + `download`; `nextContractStatus` (forward only, end
+  states fixed); `ContractTrackingService.refreshFromFirma` (one place that decides), `saveDocuments`, `getDocuments`;
+  `DriversService.recordContractSigned` (system tick, same transaction); `ContractTrackingJob` (every 5 minutes, advisory lock
+  `7_302_003`); `POST /webhooks/firma` (signature `X-Firma-Signature`, trigger only); `GET /contracts/:id/documents`; `FIRMA_WEBHOOK_SECRET`
+  (optional); `ContractDto` gains `statusUpdatedAt`, `signedAt`, `documentsSaved`, `documentsError`; `openapi.json` exported.
+- **Frontend:** a banner per status on the contract page (sent, opened, signed with **Open signed contract** and **Certificate**,
+  declined, expired, cancelled), the contract page refreshes every 30 s while it waits, the driver's Contract card shows status, date and
+  **Open signed contract**, the Onboarding row says "automatic, from the signed contract"; client regenerated from the worktree's `openapi.json`.
+- **Verified:** migration run, revert, run, no drift; backend lint (3 old warnings), build, unit 249, e2e 397 (new `contracts-track.e2e-spec`:
+  webhook good / bad / old-secret / no-secret / unknown id / not-ours events, status moves, replay changes nothing, the job catches missed
+  finished, declined, expired, signed never turns expired, files saved once, retried when links are empty, failed download recorded and
+  cleared, not a PDF, no bucket, tick: system, admin's earlier tick kept, inactive driver stays inactive, webhook + job at once = one tick,
+  rollback when the tick fails, documents links, admin-only route); frontend lint (2 old warnings), prettier, build. **Real test-mode
+  walkthrough** (throwaway local admin, drivers "Sim ...", made-up values, firma test key): send; the job showed "Opened by the driver" (firma's
+  own time) after the page was opened; signed on firma's page, the next job run marked it `signed` and saved both files, the page showed
+  "Signed on ..." with working links (the saved PDF opens: 7 pages, values filled, test watermark), the driver's step ticked "automatic",
+  card shows Signed; declined and cancelled banners; a signed `curl` webhook (made-up secret) marked a real just-signed contract `signed` within
+  seconds, the same event again changed nothing, a wrong secret and no header gave 401, an unknown request and a non-signing event gave 200
+  "ignored"; logs hold only ids and statuses. Expiry: a request with a 1-hour expiry showed `expired: true` right after `expires_at` (D75).
+  Console clean; the repeated refetches seen in the pane come from window focus (`refetchOnWindowFocus`) flapping in the pane, also on the drivers list.
+- **Not done:** cancel / resend from our app, reminders (B96); the real firma webhook cannot reach a laptop: set it up on staging (B96 item 4,
+  `FIRMA_WEBHOOK_SECRET`). The walkthrough sent test-mode emails to the developer's address (the first contract) and to `example.test` addresses.
+- **No timestamp tolerance** on the webhook signature (firma does not say whether retries are re-signed): see D75.
+- **Before deploy:** `FIRMA_WEBHOOK_SECRET` in Railway staging, the webhook created in firma with its master switch on, `S3_*` present; `FIRMA_API_KEY` as for step 3.
+- **Shared files:** backend `contracts.*`, `contract.entity.ts`, `dto/contract.dto.ts`, `firma/*`, `drivers.service.ts` / `drivers.module.ts`,
+  `env.validation.ts`, `.env.example`, `openapi.json`, the migration, docs; frontend `schema.d.ts`, `queryClient.ts`, `contracts.queries.ts`,
+  `ContractDraft.tsx`, `DriverDetail.tsx`. No other feature in flight. Local only: the worktree `.env` holds a throwaway admin and a made-up webhook secret.
+
+---
+
 ### 2026-10-21 — Module 2 step 3: send a contract for signing (D74, B95)
 - **Branch** `feature/contracts-send` in both repos, worktrees `wt-contracts-send-backend` / `-frontend` (slot 3: backend :5003, frontend
   :5176, databases `car_rental_contracts_send` / `_test`). **Not committed, not merged, not deployed.**
