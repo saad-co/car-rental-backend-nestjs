@@ -1353,9 +1353,9 @@
         ]
       }
     },
-    "/drivers/{driverId}/contract-draft": {
+    "/drivers/{driverId}/contract": {
       "get": {
-        "operationId": "ContractsController_getDraft",
+        "operationId": "ContractsController_getCurrent",
         "parameters": [
           {
             "name": "driverId",
@@ -1372,13 +1372,13 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ContractDraftDto"
+                  "$ref": "#/components/schemas/ContractCurrentDto"
                 }
               }
             }
           }
         },
-        "summary": "`GET /drivers/:driverId/contract-draft`: the driver's draft, or `{ draft: null }`. `404` unknown driver.",
+        "summary": "`GET /drivers/:driverId/contract`: the open draft or else the contract sent last, or `{ contract: null }`. `404` unknown driver.",
         "tags": [
           "Contracts"
         ]
@@ -1483,6 +1483,47 @@
           }
         },
         "summary": "`DELETE /contracts/:id`: deletes a draft. `404` unknown id or not a draft.",
+        "tags": [
+          "Contracts"
+        ]
+      }
+    },
+    "/contracts/{id}/send": {
+      "post": {
+        "operationId": "ContractsController_send",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractMissingDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`POST /contracts/:id/send`: sends the draft to the driver to sign (firma) and freezes it. `400` values still empty\n(`missing`); `404` unknown id; `409` already sent, or not an Illinois company; `502` firma refused; `503` no firma key.",
         "tags": [
           "Contracts"
         ]
@@ -3738,7 +3779,37 @@
       "ContractStatus": {
         "type": "string",
         "enum": [
-          "draft"
+          "draft",
+          "sent"
+        ]
+      },
+      "ContractSentValuesDto": {
+        "type": "object",
+        "properties": {
+          "values": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Every value as printed on the contract, by marker name (`LESSEE_NAME`, `TOTAL_RATE`, ...)."
+          },
+          "template": {
+            "type": "string",
+            "description": "File name of the PDF template the contract was made from."
+          },
+          "recipientName": {
+            "type": "string",
+            "description": "The driver the signing email went to."
+          },
+          "recipientEmail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "values",
+          "template",
+          "recipientName",
+          "recipientEmail"
         ]
       },
       "ContractDto": {
@@ -3810,6 +3881,22 @@
             "allOf": [
               {
                 "$ref": "#/components/schemas/ContractStatus"
+              }
+            ]
+          },
+          "sentAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "When it was sent for signing; null while it is a draft."
+          },
+          "sentValues": {
+            "nullable": true,
+            "description": "The frozen copy of what was sent; null while it is a draft.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractSentValuesDto"
               }
             ]
           },
@@ -3888,6 +3975,8 @@
         "required": [
           "schedule",
           "status",
+          "sentAt",
+          "sentValues",
           "id",
           "driverId",
           "numbers",
@@ -3906,12 +3995,12 @@
           "otherRecurringCents"
         ]
       },
-      "ContractDraftDto": {
+      "ContractCurrentDto": {
         "type": "object",
         "properties": {
-          "draft": {
+          "contract": {
             "nullable": true,
-            "description": "The driver's draft, or null when there is none.",
+            "description": "The driver's open draft, or else the contract sent most recently; null when there is none.",
             "type": "object",
             "allOf": [
               {
@@ -3921,7 +4010,7 @@
           }
         },
         "required": [
-          "draft"
+          "contract"
         ]
       },
       "ContractInputDto": {
@@ -4052,6 +4141,29 @@
           "excessMileageCents",
           "insuranceExcessCents",
           "otherRecurringCents"
+        ]
+      },
+      "ContractMissingDto": {
+        "type": "object",
+        "properties": {
+          "statusCode": {
+            "type": "number"
+          },
+          "message": {
+            "type": "string"
+          },
+          "missing": {
+            "description": "The labels of the empty values (for example `Vehicle VIN`, `Date of birth`).",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "statusCode",
+          "message",
+          "missing"
         ]
       },
       "DriverOnboardingDto": {

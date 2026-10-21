@@ -9,6 +9,7 @@
         "name": "@nestjs/swagger",
         "options": { "introspectComments": true }
       }
-    ]
+    ],
+    "assets": [{ "include": "contracts/templates/*.pdf", "outDir": "dist" }]
   }
 }

@@ -231,7 +231,19 @@ export class ContractNumbersDto {
   endDate: string;
 }
 
-/** A saved contract draft: what was typed, the numbers calculated from it, and its bookkeeping. */
+/** What was sent to the driver (step 3), frozen at the moment of sending. Holds the licence number and date of birth (B94). */
+export class ContractSentValuesDto {
+  /** File name of the PDF template the contract was made from. */
+  template: string;
+  /** The driver the signing email went to. */
+  recipientName: string;
+  recipientEmail: string;
+  /** Every value as printed on the contract, by marker name (`LESSEE_NAME`, `TOTAL_RATE`, ...). */
+  @ApiProperty({ type: "object", additionalProperties: { type: "string" } })
+  values: Record<string, string>;
+}
+
+/** A saved contract: what was typed, the numbers calculated from it, and its bookkeeping. */
 export class ContractDto extends ContractInputDto {
   id: string;
   driverId: string;
@@ -239,13 +251,27 @@ export class ContractDto extends ContractInputDto {
   status: ContractStatus;
   /** Recalculated from the inputs on every read (D71). */
   numbers: ContractNumbersDto;
+  /** When it was sent for signing; null while it is a draft. */
+  @ApiProperty({ type: Date, nullable: true })
+  sentAt: Date | null;
+  /** The frozen copy of what was sent; null while it is a draft. */
+  @ApiProperty({ type: () => ContractSentValuesDto, nullable: true })
+  sentValues: ContractSentValuesDto | null;
   createdAt: Date;
   updatedAt: Date;
 }
 
-/** Response of `GET /drivers/:driverId/contract-draft`. */
-export class ContractDraftDto {
-  /** The driver's draft, or null when there is none. */
+/** Response of `GET /drivers/:driverId/contract`. */
+export class ContractCurrentDto {
+  /** The driver's open draft, or else the contract sent most recently; null when there is none. */
   @ApiProperty({ type: () => ContractDto, nullable: true })
-  draft: ContractDto | null;
+  contract: ContractDto | null;
+}
+
+/** The answer when a contract cannot be sent yet: which values are still empty. */
+export class ContractMissingDto {
+  statusCode: number;
+  message: string;
+  /** The labels of the empty values (for example `Vehicle VIN`, `Date of birth`). */
+  missing: string[];
 }

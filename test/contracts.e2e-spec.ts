@@ -66,6 +66,8 @@ describe("Contract drafts (Module 2 steps 1 and 2, D71, test database)", () => {
       db.getRepository(Contract),
       db.getRepository(Driver),
       db.getRepository(ContractCompany),
+      db,
+      null,
     );
   });
 
@@ -99,7 +101,7 @@ describe("Contract drafts (Module 2 steps 1 and 2, D71, test database)", () => {
   });
 
   it("has no draft until one is created", async () => {
-    expect(await contracts.getDraft(driverId)).toBeNull();
+    expect(await contracts.getCurrent(driverId)).toBeNull();
   });
 
   it("creates a draft that returns the inputs and the calculated numbers", async () => {
@@ -114,7 +116,7 @@ describe("Contract drafts (Module 2 steps 1 and 2, D71, test database)", () => {
       securityDepositCents: 20_000,
       numbers: { amountDueAtPickupCents: 59_900, endDate: "2028-04-13" },
     });
-    expect(await contracts.getDraft(driverId)).toEqual(created);
+    expect(await contracts.getCurrent(driverId)).toEqual(created);
 
     const [row] = (await db.query(
       `SELECT created_by_id, updated_by_id FROM contracts`,
@@ -187,7 +189,7 @@ describe("Contract drafts (Module 2 steps 1 and 2, D71, test database)", () => {
   it("deletes a draft, after which the driver can start a new one", async () => {
     const created = await contracts.createDraft(driverId, body(), admin);
     await contracts.deleteDraft(created.id);
-    expect(await contracts.getDraft(driverId)).toBeNull();
+    expect(await contracts.getCurrent(driverId)).toBeNull();
     await expect(
       contracts.createDraft(driverId, body(), admin),
     ).resolves.toBeDefined();
@@ -195,7 +197,7 @@ describe("Contract drafts (Module 2 steps 1 and 2, D71, test database)", () => {
 
   it("says not found for an unknown driver, an unknown draft and a contract that is not a draft", async () => {
     const unknown = randomUUID();
-    await expect(contracts.getDraft(unknown)).rejects.toThrow(
+    await expect(contracts.getCurrent(unknown)).rejects.toThrow(
       NotFoundException,
     );
     await expect(contracts.createDraft(unknown, body(), admin)).rejects.toThrow(
@@ -263,7 +265,7 @@ describe("Contract drafts (Module 2 steps 1 and 2, D71, test database)", () => {
       body(),
       admin,
     );
-    const read = (await contracts.getDraft(driverId)) as ContractDto;
+    const read = (await contracts.getCurrent(driverId)) as ContractDto;
     for (const value of [
       read.totalRateCents,
       read.termMonths,
@@ -330,7 +332,7 @@ describe("Contract drafts (Module 2 steps 1 and 2, D71, test database)", () => {
         body(details(company.id)),
         admin,
       );
-      const read = (await contracts.getDraft(driverId)) as ContractDto;
+      const read = (await contracts.getCurrent(driverId)) as ContractDto;
       for (const draft of [saved, read]) {
         expect(draft).toMatchObject(details(company.id));
         expect(typeof draft.purchaseOptionCents).toBe("number");
