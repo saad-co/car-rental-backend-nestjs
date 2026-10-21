@@ -1,15 +1,30 @@
 import {
+  BadGatewayException,
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
+  Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from "@nestjs/common";
-import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { InjectDataSource, InjectRepository } from "@nestjs/typeorm";
+import { DataSource, Repository } from "typeorm";
 import { isUniqueViolation } from "../database/postgres-errors.js";
 import { Driver } from "../drivers/driver.entity.js";
+import {
+  FIRMA_CLIENT,
+  FirmaError,
+  type FirmaClient,
+} from "../firma/firma-client.js";
 import { ContractCompany } from "./contract-company.entity.js";
 import { contractNumbers, type ContractMathInput } from "./contract-math.js";
+import {
+  buildAnchors,
+  ILLINOIS_TEMPLATE_FILE,
+  loadIllinoisTemplate,
+} from "./contract-template.js";
+import { buildContractValues, missingForSend } from "./contract-values.js";
 import {
   Contract,
   type ContractSchedule,
@@ -43,12 +58,18 @@ interface DetailColumns {
 /** Everything the admin types for a contract as a plain object. */
 type InputColumns = NumberColumns & DetailColumns;
 
+/** The only contract text that is built; the other states wait for their templates (B95). */
+const BUILT_STATE = "IL";
+
 /**
  * Contract drafts (Module 2 step 1, D71): the admin types the inputs, the numbers are calculated by `contract-math.ts`
  * and never stored. A driver has at most one draft (a database index); a draft is not a record yet, so it may be deleted.
+ * Sending (step 3, D74) freezes the contract: it can no longer be changed or deleted.
  */
 @Injectable()
 export class ContractsService {
+  private readonly logger = new Logger(ContractsService.name);
+
   constructor(
     @InjectRepository(Contract)
     private readonly contracts: Repository<Contract>,
@@ -56,6 +77,11 @@ export class ContractsService {
     private readonly drivers: Repository<Driver>,
     @InjectRepository(ContractCompany)
     private readonly companies: Repository<ContractCompany>,
+    @InjectDataSource()
+    private readonly dataSource: DataSource,
+    /** Null when `FIRMA_API_KEY` is not set: sending then answers 503. */
+    @Inject(FIRMA_CLIENT)
+    private readonly firma: FirmaClient | null,
   ) {}
 
   /** The calculated numbers for some inputs, without saving anything (the page calls this while the admin types). */
@@ -72,16 +98,22 @@ export class ContractsService {
   }
 
   /**
-   * The driver's draft, or null when there is none.
+   * The driver's current contract: the open draft, or else the one sent most recently; null when there is none.
    * @throws NotFoundException no driver with this id.
    */
-  async getDraft(driverId: string): Promise<ContractDto | null> {
+  async getCurrent(driverId: string): Promise<ContractDto | null> {
     await this.assertDriverExists(driverId);
     const draft = await this.contracts.findOneBy({
       driverId,
       status: ContractStatus.draft,
     });
-    return draft ? this.toDto(draft) : null;
+    if (draft) return this.toDto(draft);
+    const [latest] = await this.contracts.find({
+      where: { driverId },
+      order: { createdAt: "DESC" },
+      take: 1,
+    });
+    return latest ? this.toDto(latest) : null;
   }
 
   /**
@@ -147,6 +179,106 @@ export class ContractsService {
     if (!result.affected) throw new NotFoundException("Draft not found.");
   }
 
+  /**
+   * Sends a draft to the driver for signing through firma (step 3, D74) and freezes it. The whole thing runs in one
+   * transaction that holds a lock on the contract's row, so two clicks at once make one envelope: the second waits, then
+   * finds the contract already sent. If firma refuses, nothing is saved and the contract stays a draft.
+   * @throws ServiceUnavailableException no firma key is set.
+   * @throws NotFoundException no contract with this id.
+   * @throws ConflictException it is not a draft any more, or its company's contract is not built yet.
+   * @throws BadRequestException values are still empty (`missing` lists them).
+   * @throws BadGatewayException firma refused or did not answer (its own message is passed on).
+   */
+  async sendForSigning(id: string, adminId: string): Promise<ContractDto> {
+    const firma = this.firma;
+    if (!firma) {
+      throw new ServiceUnavailableException(
+        "Signing is not set up (FIRMA_API_KEY).",
+      );
+    }
+    const sent = await this.dataSource.transaction(async (manager) => {
+      const contract = await manager.findOne(Contract, {
+        where: { id },
+        lock: { mode: "pessimistic_write" },
+      });
+      if (!contract) throw new NotFoundException("Contract not found.");
+      if (contract.status !== ContractStatus.draft) {
+        throw new ConflictException(
+          "This contract has already been sent for signing.",
+        );
+      }
+      const company = contract.companyId
+        ? await manager.findOneBy(ContractCompany, { id: contract.companyId })
+        : null;
+      if (company && company.state !== BUILT_STATE) {
+        throw new ConflictException("Only the Illinois contract is built yet.");
+      }
+      const driver = await manager.findOneByOrFail(Driver, {
+        id: contract.driverId,
+      });
+      const missing = missingForSend(contract, company, driver);
+      if (missing.length > 0 || !company) {
+        throw new BadRequestException({
+          statusCode: 400,
+          message: `Fill in before sending: ${missing.join(", ")}.`,
+          missing,
+        });
+      }
+
+      const values = buildContractValues(contract, company, driver);
+      let firmaId: string;
+      try {
+        ({ signingRequestId: firmaId } = await firma.createAndSend({
+          name: `Vehicle Lease Agreement - ${company.name}`,
+          pdf: loadIllinoisTemplate(),
+          recipient: {
+            firstName: driver.firstName,
+            lastName: driver.lastName,
+            email: driver.email,
+          },
+          anchors: buildAnchors(values),
+        }));
+      } catch (error) {
+        if (error instanceof FirmaError) {
+          // The message carries firma's own reason and never the key or the values (it is safe to log and to show).
+          this.logger.error(
+            `firma did not send contract ${id}: ${error.message}`,
+          );
+          throw new BadGatewayException(error.message);
+        }
+        throw error;
+      }
+
+      try {
+        await manager.update(Contract, id, {
+          status: ContractStatus.sent,
+          sentAt: new Date(),
+          sentById: adminId,
+          firmaSigningRequestId: firmaId,
+          sentValues: {
+            template: ILLINOIS_TEMPLATE_FILE,
+            recipientName: `${driver.firstName} ${driver.lastName}`,
+            recipientEmail: driver.email,
+            values: { ...values },
+          },
+        });
+      } catch (error) {
+        // firma already has the envelope: say which one, so it can be cancelled by hand. Never swallowed.
+        this.logger.error(
+          `firma request ${firmaId} was created for contract ${id}, but saving the contract failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+        throw error;
+      }
+      return manager.findOneByOrFail(Contract, { id });
+    });
+    this.logger.log(
+      `Contract ${id} sent for signing (firma ${sent.firmaSigningRequestId}) by admin ${adminId}.`,
+    );
+    return this.toDto(sent);
+  }
+
   private async findDraft(id: string): Promise<Contract> {
     const draft = await this.contracts.findOneBy({
       id,
@@ -210,6 +342,8 @@ export class ContractsService {
       driverId: row.driverId,
       status: row.status,
       numbers: contractNumbers(inputs),
+      sentAt: row.sentAt,
+      sentValues: row.sentValues,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };

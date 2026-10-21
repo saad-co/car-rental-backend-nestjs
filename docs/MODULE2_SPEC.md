@@ -38,7 +38,7 @@ for it after using the first version.
 |---|---|---|
 | 1 | **Rate calculator.** A contract draft on the driver: admin types schedule (daily or weekly), total rate, start date, term, one-time and recurring charges; the system calculates the breakdown, totals, amount due at pickup and end date (D71). | Admin creates, edits and deletes a draft from the driver page; numbers match the sheet. |
 | 2 | **Contract details.** Company (from a fixed list of five, D73), vehicle (typed: model, VIN, plate, plate state) and purchase option price on the draft. The driver's name, email and phone come from the driver record; the address, licence number, licence state and date of birth are typed on the draft (the driver record and the website form do not hold them). All optional, nothing checked beyond a length limit; completeness is checked when sending (step 3). | Draft holds every value the contract header needs. |
-| 3 | **Send for signing (firma, D70).** The client's Illinois Google Doc, exported as PDF with `{{MARKER}}` texts where values go, is the template (firma anchor tags); "Send" creates a signing request with the draft's values as locked fields; the driver signs from an email link; the company's signature is its **entity name, preprinted on the contract before the driver signs** (D72), so the driver is the only signer. Values sent are frozen on the contract. | A test-mode contract is signed end to end. |
+| 3 | **Send for signing (firma, D70, D74).** The client's Illinois Google Doc, exported as PDF with `{{MARKER}}` texts where values go, is the template, stored in our repo (one for all four Illinois companies; the sample driver's licence photo removed). "Send for signing" on the contract page uploads that PDF to firma on every send, with one anchor per marker that makes a locked field holding the draft's value (firma's anchor tags do not work with templates stored in firma); the driver signs from firma's email link; the company's signature is its **entity name printed as a plain locked text before the driver signs** (D72; firma cannot set the font of an anchored field), so the driver is the only signer. Values sent are frozen on the contract; a sent contract cannot be edited or deleted. Send is refused until every value is filled, and for a company that is not in Illinois. | A test-mode contract is signed end to end (done 2026-10-21 with the firma test key). |
 | 4 | **Track and file.** firma webhooks move the status (sent, viewed, signed, declined, expired); a scheduled check catches events firma could not deliver (it tries only 3 times); the signed PDF and certificate are copied into our storage; "Contract signed" (D56) is ticked automatically. | Status on the driver page; signed PDF opens from the driver's file. |
 
 **Later (not now):** reminders to sign, a vehicle list, California and Tennessee versions, car swap / rate change /
@@ -65,8 +65,8 @@ as a requirement; *our suggestion* = ours, to be shown to the client. "Sample co
 | Flow step | Source | Status |
 |---|---|---|
 | Admin creates the draft from the driver page, numbers worked out by the system (step 1, built) | Saad's message, 2026-10-19: the client asked for "an applet" that does this | client-confirmed |
-| Send for signing (step 3, planned) | Scope PDF, Module 2 ("sends it for signature"); signing provider chosen by the client (D70) | client-confirmed |
-| The company's signature is its entity name, printed before the driver signs (step 3, planned) | Client message via Saad, 2026-10-21 (D72) | client-confirmed |
+| Send for signing from the contract page (step 3, built) | Scope PDF, Module 2 ("sends it for signature"); signing provider chosen by the client (D70); Saad's "applet" message | client-confirmed |
+| The company's signature is its entity name, printed before the driver signs (step 3, built) | Client message via Saad, 2026-10-21 (D72) | client-confirmed |
 | Track the status and file the signed PDF; "Contract signed" ticked automatically (step 4, planned) | Scope PDF, Module 2 (status at each stage, signed PDF and audit trail stored, driver activated); D56 | from a document |
 
 ### Step 1 fields (rate calculator, D71)
@@ -98,3 +98,17 @@ as a requirement; *our suggestion* = ours, to be shown to the client. "Sample co
 | All details optional; only a length limit on each | Ours: the client asked for the values, not for rules about them | our suggestion |
 | Licence number and date of birth kept out of lists and logs (encryption planned, B94) | Ours: personal data | our suggestion |
 | Company list fixed by the migration, no screen to change it (B93) | Ours: five companies, simplest first | our suggestion |
+
+### Step 3 fields and flow (send for signing, D74)
+| Field or step | Source | Status |
+|---|---|---|
+| Driver signs by an email link from firma; the driver is the only signer | Client message via Saad, 2026-10-21 (D72) | client-confirmed |
+| Company name printed in the signature block | Client message via Saad, 2026-10-21 (D72) | client-confirmed |
+| The company name is shown as plain text, not in a script font | Ours: firma cannot set the font of an anchored field (D74); the client may ask for a script look (B95) | our suggestion |
+| One PDF template from the Ashwood sample, used for all four Illinois companies | Line-by-line comparison of the four Illinois samples, 2026-10-19 | from a document |
+| The sample driver's licence photo (last page of the sample) removed from the template; the "Driver License" heading stays, empty | Ours: it is a real person's licence (D74); what the page is for is an open question (B95) | our suggestion |
+| Values printed from the draft, formatted as in the samples ($409.00, October 13, 2026, 04/04/1983, (872) 287-9566, purchase option $9,750) | Sample contracts | from a document |
+| Send is refused until every value is filled, naming the empty ones | Ours: a sample contract has no blanks | our suggestion |
+| A sent contract is frozen: no edit, no delete; the sent values are kept as a copy | Ours; the scope PDF says the signed copy is the legal record | our suggestion |
+| Only the Illinois contract can be sent; a California company is refused | Saad: the rate sheet is Illinois only; the samples differ by state | client-confirmed |
+| "Sent" with its date on the contract page and the driver's Contract card | Ours (status updates come in step 4) | our suggestion |

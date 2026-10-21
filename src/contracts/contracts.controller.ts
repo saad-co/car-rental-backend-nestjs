@@ -10,14 +10,16 @@ import {
   Post,
   Put,
 } from "@nestjs/common";
+import { ApiBadRequestResponse } from "@nestjs/swagger";
 import { CurrentUser } from "../auth/current-user.decorator.js";
 import type { AuthenticatedUser } from "../auth/jwt-auth.guard.js";
 import { ContractsService } from "./contracts.service.js";
 import {
   ContractCompanyDto,
-  ContractDraftDto,
+  ContractCurrentDto,
   ContractDto,
   ContractInputDto,
+  ContractMissingDto,
   ContractNumbersDto,
   ContractNumbersInputDto,
 } from "./dto/contract.dto.js";
@@ -43,12 +45,12 @@ export class ContractsController {
     return this.contracts.listCompanies();
   }
 
-  /** `GET /drivers/:driverId/contract-draft`: the driver's draft, or `{ draft: null }`. `404` unknown driver. */
-  @Get("drivers/:driverId/contract-draft")
-  async getDraft(
+  /** `GET /drivers/:driverId/contract`: the open draft or else the contract sent last, or `{ contract: null }`. `404` unknown driver. */
+  @Get("drivers/:driverId/contract")
+  async getCurrent(
     @Param("driverId", ParseUUIDPipe) driverId: string,
-  ): Promise<ContractDraftDto> {
-    return { draft: await this.contracts.getDraft(driverId) };
+  ): Promise<ContractCurrentDto> {
+    return { contract: await this.contracts.getCurrent(driverId) };
   }
 
   /** `POST /drivers/:driverId/contracts`: starts the draft. `400` bad inputs or unknown company; `404` unknown driver; `409` a draft exists. */
@@ -69,6 +71,20 @@ export class ContractsController {
     @CurrentUser() admin: AuthenticatedUser,
   ): Promise<ContractDto> {
     return this.contracts.updateDraft(id, body, admin.id);
+  }
+
+  /**
+   * `POST /contracts/:id/send`: sends the draft to the driver to sign (firma) and freezes it. `400` values still empty
+   * (`missing`); `404` unknown id; `409` already sent, or not an Illinois company; `502` firma refused; `503` no firma key.
+   */
+  @Post("contracts/:id/send")
+  @HttpCode(HttpStatus.OK)
+  @ApiBadRequestResponse({ type: ContractMissingDto })
+  send(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() admin: AuthenticatedUser,
+  ): Promise<ContractDto> {
+    return this.contracts.sendForSigning(id, admin.id);
   }
 
   /** `DELETE /contracts/:id`: deletes a draft. `404` unknown id or not a draft. */

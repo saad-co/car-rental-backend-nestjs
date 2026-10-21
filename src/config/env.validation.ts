@@ -177,6 +177,19 @@ class EnvironmentVariables {
   QUO_WEBHOOK_SECRET?: string;
 
   /**
+   * Key of the firma.dev account that sends contracts for signing (Module 2 step 3, D70). The key's own kind decides what
+   * happens: a test key sends watermarked contracts that count for nothing, a live key sends real ones. Unset: "Send for
+   * signing" answers 503 and nothing else is affected.
+   */
+  @ValidateIf(
+    (env: EnvironmentVariables) =>
+      env.FIRMA_API_KEY !== undefined && env.FIRMA_API_KEY !== "",
+  )
+  @IsString()
+  @IsNotEmpty()
+  FIRMA_API_KEY?: string;
+
+  /**
    * Staff phone (E.164, US) that gets a text with a link whenever the website submits a new application (D53).
    * Empty or unset: no alerts. The text follows SMS_MODE like every other text.
    */

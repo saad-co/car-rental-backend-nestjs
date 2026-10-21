@@ -14,11 +14,23 @@ import { User } from "../users/user.entity.js";
 import { ContractCompany } from "./contract-company.entity.js";
 
 /**
- * Where a contract is. Only `draft` exists in step 1 (Module 2); sending, signing and the rest come with steps 3 and 4,
- * which add values to this enum with their own migrations.
+ * Where a contract is. `draft` is being typed; `sent` went to the driver through firma (step 3). Signed, viewed, declined and
+ * expired come with step 4, which adds values to this enum with its own migration.
  */
 export enum ContractStatus {
   draft = "draft",
+  sent = "sent",
+}
+
+/**
+ * The frozen copy of what was sent (step 3): the template file, who it went to, and every value as printed on the PDF.
+ * Holds the licence number and date of birth as plain text (B94): keep it out of lists and logs.
+ */
+export interface ContractSentValues {
+  template: string;
+  recipientName: string;
+  recipientEmail: string;
+  values: Record<string, string>;
 }
 
 /** How often the driver pays the rate. */
@@ -66,6 +78,19 @@ export const DEFAULT_TERM_MONTHS = 18;
   "contracts_term_range",
   `"term_months" BETWEEN ${MIN_TERM_MONTHS} AND ${MAX_TERM_MONTHS}`,
 )
+// Sending leaves all of its marks together or none: a draft has no sent data, anything else has all of it. Written on
+// columns and on 'draft' only: a CHECK cannot name a value added to the enum in the same migration.
+@Check(
+  "contracts_sent_shape",
+  `("status" = 'draft') = ("sent_at" IS NULL)
+    AND ("sent_at" IS NULL) = ("firma_signing_request_id" IS NULL)
+    AND ("sent_at" IS NULL) = ("sent_values" IS NULL)`,
+)
+// One firma envelope belongs to one contract.
+@Index("contracts_firma_signing_request_id", ["firmaSigningRequestId"], {
+  unique: true,
+  where: `"firma_signing_request_id" IS NOT NULL`,
+})
 export class Contract {
   @PrimaryGeneratedColumn("uuid")
   id: string;
@@ -208,6 +233,32 @@ export class Contract {
   /** Sensitive (B94: to be encrypted). A plain calendar day. Never in a list response or a log line. */
   @Column({ name: "date_of_birth", type: "date", nullable: true })
   dateOfBirth: string | null;
+
+  // Step 3: set together when the contract is sent to firma, null before.
+
+  @Column({ name: "sent_at", type: "timestamptz", nullable: true })
+  sentAt: Date | null;
+
+  /** The admin who clicked Send; null before, or if that account was removed. */
+  @Column({ name: "sent_by_id", type: "uuid", nullable: true })
+  sentById: string | null;
+
+  @ManyToOne(() => User, { nullable: true, onDelete: "SET NULL" })
+  @JoinColumn({ name: "sent_by_id" })
+  sentBy?: User | null;
+
+  /** firma's id of the signing request (one envelope per contract). */
+  @Column({
+    name: "firma_signing_request_id",
+    type: "varchar",
+    length: 100,
+    nullable: true,
+  })
+  firmaSigningRequestId: string | null;
+
+  /** The frozen copy of what was sent. Sensitive (B94). */
+  @Column({ name: "sent_values", type: "jsonb", nullable: true })
+  sentValues: ContractSentValues | null;
 
   /** The admin who made the draft; null if that account was removed. */
   @Column({ name: "created_by_id", type: "uuid", nullable: true })

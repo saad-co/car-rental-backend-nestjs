@@ -26,6 +26,10 @@ export class ContractCompany {
   @Column({ type: "varchar", length: 300 })
   address: string;
 
+  /** The two-letter state whose contract text this company uses (`IL`, `CA`). Only the Illinois one is built (step 3). */
+  @Column({ type: "char", length: 2 })
+  state: string;
+
   @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt: Date;
 }

@@ -4,6 +4,38 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-21 — Module 2 step 3: send a contract for signing (D74, B95)
+- **Branch** `feature/contracts-send` in both repos, worktrees `wt-contracts-send-backend` / `-frontend` (slot 3: backend :5003, frontend
+  :5176, databases `car_rental_contracts_send` / `_test`). **Not committed, not merged, not deployed.**
+- **Spike first (passed):** five anchors on the real PDF with the firma test key, then the full build. Findings and firma's limits are in D74.
+- **Template:** the Ashwood PDF with markers, stored at `src/contracts/templates/illinois-lease.pdf` (copied into `dist` by `nest-cli.json`
+  `assets`). Its last page held a real driver's licence photo as an image: removed before storing (checked, no image data or personal text left).
+- **Backend:** `src/firma/` (`FirmaClient` interface, `FirmaHttpClient`, `FirmaError`; same pattern as Quo); `FIRMA_API_KEY` optional in
+  `env.validation.ts` and `.env.example`; migration `AddContractSending` (status `sent`; `sent_at`, `sent_by_id`, `firma_signing_request_id`,
+  `sent_values`; CHECK `contracts_sent_shape`; unique index on the firma id; `contract_companies.state`); `contract-values.ts`,
+  `contract-template.ts` (placements measured from the PDF); `ContractsService.sendForSigning` (transaction with a row lock);
+  `POST /contracts/:id/send`; `GET /drivers/:driverId/contract` replaces `contract-draft`; `ContractDto` gains `sentAt` and `sentValues`;
+  `openapi.json` exported.
+- **Frontend:** "Send for signing" button (enabled once the draft is saved and unchanged) with a confirm dialog (a refusal shows the list
+  of empty values, or firma's message); a sent contract is read-only with a green "Sent on ... to ..." banner; the driver's Contract card
+  shows "Sent <date>"; `useDriverContract`, `useSendContract`; client regenerated from the worktree's `openapi.json`.
+- **Verified:** migration run, revert, run, no drift; backend lint (3 old warnings), build (template present in `dist`), unit 184, e2e 361
+  (new: `contracts-send.e2e-spec` 32 tests: sends once and freezes, two at once = one firma call, 503 without a key, 404, Californian
+  company 409, each empty value named, firma failure leaves a draft and can be retried, frozen contract refuses edit and delete, the
+  CHECK and the unique index); frontend lint (2 old warnings), prettier, build. **Real test-mode walkthrough** (throwaway local admin,
+  driver "Sim Tester" with your own email, made-up values): the page, refusal with "Vehicle VIN, Date of birth", fill and save, firma's
+  refusal shown in the dialog (found the same-page duplicate limit), send (200), banner and read-only form, driver card "Sent ...", the
+  firma request with 41 fields (one per marker occurrence, every value right), signed on firma's page, firma shows `finished`. Layout
+  checked on three more email-less requests (`send_signing_email: false`) with short and very long values.
+- **Not done:** nothing is tracked after sending (step 4); cosmetic marks beside the repeated markers and the open items in B95;
+  the signing page was checked in the pane only (not on a phone). The spike and the walkthrough sent real test-mode signing emails (and firma's finish email) to the developer's address.
+- **Before deploy:** set `FIRMA_API_KEY` (test key) in Railway staging; no other new setting.
+- **Shared files:** backend `contracts.*`, `contract*.entity.ts`, `dto/contract.dto.ts`, `env.validation.ts`, `.env.example`, `nest-cli.json`,
+  `openapi.json`, the migration; frontend `schema.d.ts`, `queryClient.ts`, `contracts.queries.ts`, `ContractDraft.tsx`, `DriverDetail.tsx`.
+  No other feature in flight. Local only: `.claude/launch.json` in the workspace root now starts the slot 3 `contracts-send` servers.
+
+---
+
 ### 2026-10-21 — Module 2 step 2: contract details (D73, B93, B94)
 - **Branch** `feature/contracts-details` in both repos, worktrees `wt-contracts-details-backend` / `-frontend` (slot 3: backend :5003,
   frontend :5176, databases `car_rental_contracts_details` / `_test`). **Not committed, not merged, not deployed.**
