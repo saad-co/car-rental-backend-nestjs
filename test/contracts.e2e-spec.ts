@@ -1,15 +1,24 @@
-import { ConflictException, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from "@nestjs/common";
 import { plainToInstance } from "class-transformer";
 import { validateSync } from "class-validator";
 import { randomUUID } from "node:crypto";
 import type { DataSource } from "typeorm";
+import { ContractCompany } from "../src/contracts/contract-company.entity.js";
 import { Contract } from "../src/contracts/contract.entity.js";
 import { ContractsService } from "../src/contracts/contracts.service.js";
 import {
   ContractInputDto,
   type ContractDto,
 } from "../src/contracts/dto/contract.dto.js";
+import { PaymentAlias } from "../src/aliases/payment-alias.entity.js";
 import { Driver } from "../src/drivers/driver.entity.js";
+import { DriversService } from "../src/drivers/drivers.service.js";
+import { ListDriversQueryDto } from "../src/drivers/dto/list-drivers-query.dto.js";
+import { Payment } from "../src/payments/payment.entity.js";
 import { openTestDatabase } from "./test-database.js";
 
 /** A valid body: the weekly sample ($399, $200 deposit, 18 months from 2026-10-13). */
@@ -29,7 +38,7 @@ const body = (over: Partial<ContractInputDto> = {}): ContractInputDto => ({
   ...over,
 });
 
-describe("Contract drafts (Module 2 step 1, D71, test database)", () => {
+describe("Contract drafts (Module 2 steps 1 and 2, D71, test database)", () => {
   let db: DataSource;
   let contracts: ContractsService;
   let admin: string;
@@ -56,6 +65,7 @@ describe("Contract drafts (Module 2 step 1, D71, test database)", () => {
     contracts = new ContractsService(
       db.getRepository(Contract),
       db.getRepository(Driver),
+      db.getRepository(ContractCompany),
     );
   });
 
@@ -263,5 +273,185 @@ describe("Contract drafts (Module 2 step 1, D71, test database)", () => {
     }
     expect(typeof read.startDate).toBe("string");
     expect(read.startDate).toBe(created.startDate);
+  });
+
+  describe("details (step 2)", () => {
+    /** Every detail filled in, with made-up values only. */
+    const details = (companyId: string) => ({
+      companyId,
+      vehicleModel: "Toyota Camry 2023",
+      vehicleVin: "1HGCM82633A004352",
+      vehiclePlate: "AB 12345",
+      vehiclePlateState: "IL",
+      purchaseOptionCents: 2_500_000,
+      lesseeAddress: "1 Example St, Chicago IL 60601",
+      licenseNumber: "X123-4567-8901",
+      licenseState: "IL",
+      dateOfBirth: "1990-05-17",
+    });
+
+    const firstCompany = async () => (await contracts.listCompanies())[0];
+
+    it("lists the five companies, each name with its own address, ordered by name", async () => {
+      const list = await contracts.listCompanies();
+      expect(list.map(({ name, address }) => [name, address])).toEqual([
+        ["Ashwood Holdings LLC", "114 E Everett St Ste 176, Dixon IL 61021"],
+        ["Evergreen Holdings LLC", "114 E Everett St, Ste 130, Dixon IL 61021"],
+        ["Gonzo Enterprises Inc", "1107 S State St, Unit 11, Ukiah, CA 95482"],
+        [
+          "Gonzo Enterprises Inc",
+          "2515 Waukegan Rd, Suite 340, Bannockburn IL 60015",
+        ],
+        ["Silver Pine Holdings LLC", "3902 W North Ave, Chicago IL 60647"],
+      ]);
+      expect(Object.keys(list[0]).sort()).toEqual(["address", "id", "name"]);
+    });
+
+    it("has every detail empty on a draft saved without them (step 1 bodies still work)", async () => {
+      const created = await contracts.createDraft(driverId, body(), admin);
+      expect(created).toMatchObject({
+        companyId: null,
+        vehicleModel: null,
+        vehicleVin: null,
+        vehiclePlate: null,
+        vehiclePlateState: null,
+        purchaseOptionCents: null,
+        lesseeAddress: null,
+        licenseNumber: null,
+        licenseState: null,
+        dateOfBirth: null,
+      });
+    });
+
+    it("saves every detail and returns the same values when read again", async () => {
+      const company = await firstCompany();
+      const saved = await contracts.createDraft(
+        driverId,
+        body(details(company.id)),
+        admin,
+      );
+      const read = (await contracts.getDraft(driverId)) as ContractDto;
+      for (const draft of [saved, read]) {
+        expect(draft).toMatchObject(details(company.id));
+        expect(typeof draft.purchaseOptionCents).toBe("number");
+        expect(draft.dateOfBirth).toBe("1990-05-17");
+      }
+    });
+
+    it("clears a detail that an update leaves out or sends as null", async () => {
+      const company = await firstCompany();
+      const saved = await contracts.createDraft(
+        driverId,
+        body(details(company.id)),
+        admin,
+      );
+      const updated = await contracts.updateDraft(
+        saved.id,
+        body({ vehicleModel: "Honda Accord", licenseNumber: null }),
+        admin,
+      );
+      expect(updated).toMatchObject({
+        vehicleModel: "Honda Accord",
+        companyId: null,
+        vehicleVin: null,
+        licenseNumber: null,
+        purchaseOptionCents: null,
+        dateOfBirth: null,
+      });
+    });
+
+    it("refuses a company that is not in the list, on create and on update", async () => {
+      const unknown = randomUUID();
+      await expect(
+        contracts.createDraft(driverId, body({ companyId: unknown }), admin),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(await db.getRepository(Contract).count()).toBe(0);
+
+      const saved = await contracts.createDraft(driverId, body(), admin);
+      await expect(
+        contracts.updateDraft(saved.id, body({ companyId: unknown }), admin),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it("stores an empty or blank box as nothing and trims the rest", () => {
+      const dto = plainToInstance(
+        ContractInputDto,
+        Object.assign({}, body(), {
+          vehicleModel: "   ",
+          vehiclePlate: "  AB 12345  ",
+          lesseeAddress: "",
+        }),
+      );
+      expect(validateSync(dto)).toEqual([]);
+      expect(dto.vehicleModel).toBeNull();
+      expect(dto.vehiclePlate).toBe("AB 12345");
+      expect(dto.lesseeAddress).toBeNull();
+    });
+
+    it("accepts a free-text detail as typed, with no format rule", () => {
+      expect(
+        problems({
+          vehicleVin: "not a real vin",
+          vehiclePlateState: "Illinois",
+          licenseState: "anything",
+          vehiclePlate: "abc",
+        }),
+      ).toEqual([]);
+    });
+
+    it.each([
+      ["a purchase option below 0", { purchaseOptionCents: -1 }],
+      ["a purchase option with a fraction", { purchaseOptionCents: 100.5 }],
+      ["a purchase option typed as text", { purchaseOptionCents: "25000" }],
+      [
+        "a purchase option too big for the column",
+        { purchaseOptionCents: 2_147_483_648 },
+      ],
+      ["a date of birth that does not exist", { dateOfBirth: "2000-02-30" }],
+      ["a date of birth not written YYYY-MM-DD", { dateOfBirth: "05/17/1990" }],
+      ["a company id that is not an id", { companyId: "Evergreen" }],
+      ["a model over 100 characters", { vehicleModel: "x".repeat(101) }],
+      ["a VIN over 50 characters", { vehicleVin: "x".repeat(51) }],
+      ["a plate over 20 characters", { vehiclePlate: "x".repeat(21) }],
+      ["an address over 300 characters", { lesseeAddress: "x".repeat(301) }],
+      [
+        "a licence number over 50 characters",
+        { licenseNumber: "x".repeat(51) },
+      ],
+      ["a detail that is not text", { vehicleModel: 12 }],
+    ])("refuses %s", (_name, over) => {
+      expect(problems(over).length).toBeGreaterThan(0);
+    });
+
+    it("accepts the edges: a purchase option of $0 and the largest the column holds", () => {
+      expect(problems({ purchaseOptionCents: 0 })).toEqual([]);
+      expect(problems({ purchaseOptionCents: 2_147_483_647 })).toEqual([]);
+    });
+
+    it("keeps the licence number and date of birth out of the drivers list and the driver page", async () => {
+      const company = await firstCompany();
+      await contracts.createDraft(driverId, body(details(company.id)), admin);
+      const drivers = new DriversService(
+        db.getRepository(Driver),
+        db.getRepository(PaymentAlias),
+        db.getRepository(Payment),
+      );
+      const list = await drivers.list(plainToInstance(ListDriversQueryDto, {}));
+      const page = await drivers.findOne(driverId);
+      for (const response of [list, page]) {
+        const json = JSON.stringify(response);
+        expect(json).not.toContain("X123-4567-8901");
+        expect(json).not.toContain("1990-05-17");
+        expect(json).not.toMatch(/license|dateOfBirth/i);
+      }
+    });
+
+    it("keeps a company that contracts point to (it cannot be deleted)", async () => {
+      const company = await firstCompany();
+      await contracts.createDraft(driverId, body(details(company.id)), admin);
+      await expect(
+        db.query(`DELETE FROM contract_companies WHERE id = $1`, [company.id]),
+      ).rejects.toThrow(/violates foreign key/);
+    });
   });
 });

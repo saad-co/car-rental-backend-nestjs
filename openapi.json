@@ -1305,7 +1305,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ContractInputDto"
+                "$ref": "#/components/schemas/ContractNumbersInputDto"
               }
             }
           }
@@ -1323,6 +1323,31 @@
           }
         },
         "summary": "`POST /contracts/calculate`: the numbers for some inputs, nothing saved. `400` bad inputs.",
+        "tags": [
+          "Contracts"
+        ]
+      }
+    },
+    "/contracts/companies": {
+      "get": {
+        "operationId": "ContractsController_listCompanies",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ContractCompanyDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "`GET /contracts/companies`: the fixed list of companies a contract's Lessor is chosen from (not paginated: five rows).",
         "tags": [
           "Contracts"
         ]
@@ -1394,7 +1419,7 @@
             }
           }
         },
-        "summary": "`POST /drivers/:driverId/contracts`: starts the draft. `400` bad inputs; `404` unknown driver; `409` a draft exists.",
+        "summary": "`POST /drivers/:driverId/contracts`: starts the draft. `400` bad inputs or unknown company; `404` unknown driver; `409` a draft exists.",
         "tags": [
           "Contracts"
         ]
@@ -1435,7 +1460,7 @@
             }
           }
         },
-        "summary": "`PUT /contracts/:id`: replaces every input of a draft. `400` bad inputs; `404` unknown id or not a draft.",
+        "summary": "`PUT /contracts/:id`: replaces every input of a draft. `400` bad inputs or unknown company; `404` unknown id or not a draft.",
         "tags": [
           "Contracts"
         ]
@@ -3556,7 +3581,7 @@
         ],
         "description": "How often the driver pays: weekly or daily."
       },
-      "ContractInputDto": {
+      "ContractNumbersInputDto": {
         "type": "object",
         "properties": {
           "schedule": {
@@ -3689,6 +3714,27 @@
           "endDate"
         ]
       },
+      "ContractCompanyDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "description": "The name as printed on the contract, and as the company's signature (D72)."
+          },
+          "address": {
+            "type": "string",
+            "description": "The address on one line, as printed on the contract."
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "address"
+        ]
+      },
       "ContractStatus": {
         "type": "string",
         "enum": [
@@ -3705,6 +3751,60 @@
                 "$ref": "#/components/schemas/ContractSchedule"
               }
             ]
+          },
+          "companyId": {
+            "type": "string",
+            "nullable": true,
+            "description": "The Lessor: the id of a company from `GET /contracts/companies`.",
+            "format": "uuid"
+          },
+          "vehicleModel": {
+            "type": "string",
+            "nullable": true,
+            "description": "Vehicle model, as typed."
+          },
+          "vehicleVin": {
+            "type": "string",
+            "nullable": true,
+            "description": "Vehicle identification number, as typed."
+          },
+          "vehiclePlate": {
+            "type": "string",
+            "nullable": true,
+            "description": "Licence plate, as typed."
+          },
+          "vehiclePlateState": {
+            "type": "string",
+            "nullable": true,
+            "description": "The state the plate is from, as typed."
+          },
+          "purchaseOptionCents": {
+            "type": "number",
+            "nullable": true,
+            "description": "Purchase option price in cents (0 up to the column's limit).",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "lesseeAddress": {
+            "type": "string",
+            "nullable": true,
+            "description": "The driver's address on one line, as typed."
+          },
+          "licenseNumber": {
+            "type": "string",
+            "nullable": true,
+            "description": "Driver's licence number. Sensitive: only in the single draft response, never in a list (B94)."
+          },
+          "licenseState": {
+            "type": "string",
+            "nullable": true,
+            "description": "The state that issued the licence, as typed."
+          },
+          "dateOfBirth": {
+            "type": "string",
+            "nullable": true,
+            "description": "Driver's date of birth, a real day written `YYYY-MM-DD`. Sensitive: only in the single draft response (B94).",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
           },
           "status": {
             "allOf": [
@@ -3822,6 +3922,136 @@
         },
         "required": [
           "draft"
+        ]
+      },
+      "ContractInputDto": {
+        "type": "object",
+        "properties": {
+          "schedule": {
+            "description": "How often the driver pays: weekly or daily.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractSchedule"
+              }
+            ]
+          },
+          "companyId": {
+            "type": "string",
+            "nullable": true,
+            "description": "The Lessor: the id of a company from `GET /contracts/companies`.",
+            "format": "uuid"
+          },
+          "vehicleModel": {
+            "type": "string",
+            "nullable": true,
+            "description": "Vehicle model, as typed."
+          },
+          "vehicleVin": {
+            "type": "string",
+            "nullable": true,
+            "description": "Vehicle identification number, as typed."
+          },
+          "vehiclePlate": {
+            "type": "string",
+            "nullable": true,
+            "description": "Licence plate, as typed."
+          },
+          "vehiclePlateState": {
+            "type": "string",
+            "nullable": true,
+            "description": "The state the plate is from, as typed."
+          },
+          "purchaseOptionCents": {
+            "type": "number",
+            "nullable": true,
+            "description": "Purchase option price in cents (0 up to the column's limit).",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "lesseeAddress": {
+            "type": "string",
+            "nullable": true,
+            "description": "The driver's address on one line, as typed."
+          },
+          "licenseNumber": {
+            "type": "string",
+            "nullable": true,
+            "description": "Driver's licence number. Sensitive: only in the single draft response, never in a list (B94)."
+          },
+          "licenseState": {
+            "type": "string",
+            "nullable": true,
+            "description": "The state that issued the licence, as typed."
+          },
+          "dateOfBirth": {
+            "type": "string",
+            "nullable": true,
+            "description": "Driver's date of birth, a real day written `YYYY-MM-DD`. Sensitive: only in the single draft response (B94).",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "totalRateCents": {
+            "type": "number",
+            "description": "The weekly or daily rate in cents, 1 to 1,000,000 ($10,000): the one number the disclosure is calculated from.",
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          "startDate": {
+            "type": "string",
+            "description": "First day of the term, a real day written `YYYY-MM-DD`.",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "termMonths": {
+            "type": "number",
+            "description": "Length of the term in months, 1 to 60 (the client's contracts use 18).",
+            "minimum": 1,
+            "maximum": 60
+          },
+          "securityDepositCents": {
+            "type": "number",
+            "description": "One-time charge: security deposit, cents (0 to 1,000,000)."
+          },
+          "documentationFeeCents": {
+            "type": "number",
+            "description": "One-time charge: documentation fee, cents."
+          },
+          "insuranceStartFeeCents": {
+            "type": "number",
+            "description": "One-time charge: insurance policy start fee, cents."
+          },
+          "otherOneTimeCents": {
+            "type": "number",
+            "description": "One-time charge: other, cents."
+          },
+          "holdVehicleCents": {
+            "type": "number",
+            "description": "One-time charge: hold vehicle payment, cents."
+          },
+          "excessMileageCents": {
+            "type": "number",
+            "description": "Recurring charge: excess mileage, cents per mile."
+          },
+          "insuranceExcessCents": {
+            "type": "number",
+            "description": "Recurring charge: insurance excess, cents per month."
+          },
+          "otherRecurringCents": {
+            "type": "number",
+            "description": "Recurring charge: other, cents."
+          }
+        },
+        "required": [
+          "schedule",
+          "totalRateCents",
+          "startDate",
+          "termMonths",
+          "securityDepositCents",
+          "documentationFeeCents",
+          "insuranceStartFeeCents",
+          "otherOneTimeCents",
+          "holdVehicleCents",
+          "excessMileageCents",
+          "insuranceExcessCents",
+          "otherRecurringCents"
         ]
       },
       "DriverOnboardingDto": {

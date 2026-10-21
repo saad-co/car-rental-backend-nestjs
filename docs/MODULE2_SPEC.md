@@ -1,7 +1,7 @@
 # Module 2 Spec — Driver Contracts and E-Signature
 
 Contracts (vehicle lease agreements) are filled in from our data, sent to the driver to sign online, and the signed copy
-lands on the driver's file. Started 2026-10-20. Decisions: D70 (signing provider), D71 (rate calculation).
+lands on the driver's file. Started 2026-10-20. Decisions: D70 (signing provider), D71 (rate calculation), D72 (company signature), D73 (contract details).
 
 **Scope rule:** keep it simple. Build the steps below one at a time; everything under "Later" waits until the client asks
 for it after using the first version.
@@ -37,7 +37,7 @@ for it after using the first version.
 | # | Step | Done when |
 |---|---|---|
 | 1 | **Rate calculator.** A contract draft on the driver: admin types schedule (daily or weekly), total rate, start date, term, one-time and recurring charges; the system calculates the breakdown, totals, amount due at pickup and end date (D71). | Admin creates, edits and deletes a draft from the driver page; numbers match the sheet. |
-| 2 | **Contract details.** Company (from a list), vehicle (typed: model, VIN, plate, state), purchase option price on the draft. Driver details come from the driver and application. | Draft holds every value the contract header needs. |
+| 2 | **Contract details.** Company (from a fixed list of five, D73), vehicle (typed: model, VIN, plate, plate state) and purchase option price on the draft. The driver's name, email and phone come from the driver record; the address, licence number, licence state and date of birth are typed on the draft (the driver record and the website form do not hold them). All optional, nothing checked beyond a length limit; completeness is checked when sending (step 3). | Draft holds every value the contract header needs. |
 | 3 | **Send for signing (firma, D70).** The client's Illinois Google Doc, exported as PDF with `{{MARKER}}` texts where values go, is the template (firma anchor tags); "Send" creates a signing request with the draft's values as locked fields; the driver signs from an email link; the company's signature is its **entity name, preprinted on the contract before the driver signs** (D72), so the driver is the only signer. Values sent are frozen on the contract. | A test-mode contract is signed end to end. |
 | 4 | **Track and file.** firma webhooks move the status (sent, viewed, signed, declined, expired); a scheduled check catches events firma could not deliver (it tries only 3 times); the signed PDF and certificate are copied into our storage; "Contract signed" (D56) is ticked automatically. | Status on the driver page; signed PDF opens from the driver's file. |
 
@@ -53,3 +53,48 @@ renewal, contract charges posted to the ledger, billing settings taken from the 
 3. **California and Tennessee:** not asked now; only when the client wants those contracts.
 4. **firma account:** not asked now. We build and test on our own free test account; the client's account is set up at
    go-live.
+
+## 4. Sources
+Why each field and flow step exists, so anything in the demo can be explained (workspace `CLAUDE.md`, 2026-10-21). Rows are
+added in the task that builds the field. **Status:** *client-confirmed* = the client said it or accepted it; *from a
+document* = read from a client document (a sample contract, the rate sheet, the scope PDF) but never confirmed by the client
+as a requirement; *our suggestion* = ours, to be shown to the client. "Sample contract" = the five samples received
+2026-10-19.
+
+### Flow
+| Flow step | Source | Status |
+|---|---|---|
+| Admin creates the draft from the driver page, numbers worked out by the system (step 1, built) | Saad's message, 2026-10-19: the client asked for "an applet" that does this | client-confirmed |
+| Send for signing (step 3, planned) | Scope PDF, Module 2 ("sends it for signature"); signing provider chosen by the client (D70) | client-confirmed |
+| The company's signature is its entity name, printed before the driver signs (step 3, planned) | Client message via Saad, 2026-10-21 (D72) | client-confirmed |
+| Track the status and file the signed PDF; "Contract signed" ticked automatically (step 4, planned) | Scope PDF, Module 2 (status at each stage, signed PDF and audit trail stored, driver activated); D56 | from a document |
+
+### Step 1 fields (rate calculator, D71)
+| Field | Source | Status |
+|---|---|---|
+| Payment schedule, weekly or daily | Sample contracts (weekly and daily rate lines) | from a document |
+| Total rate | Rate sheet cell B8, the one typed number; Saad's "applet" message | client-confirmed |
+| The five lines as 42 / 30 / 13 / 10 / 5 % of the total (Illinois) | Rate sheet formulas | from a document |
+| Rounding: cents rounded half up, base takes the remainder so the lines add up | Ours (D71); the sheet only had whole-cent results | our suggestion |
+| Start date, term in months (default 18), end date = start + term | Sample contracts, header "lease term with start and end date"; all samples run 18 months | from a document |
+| One-time charges: security deposit, documentation fee, insurance policy start fee, other, hold vehicle payment | Sample contract header | from a document |
+| Recurring charges: excess mileage per mile, insurance excess per month, other | Sample contract header | from a document |
+| Payment = total rate; amount due at pickup = first payment + one-time charges; recurring total | Our reading of the rate sheet and the samples ($409 + $200 = $609 and similar), D71, B91 question 2 | our suggestion |
+| Lease disclosure summary shown beside the form | Sample contract's rate disclosure block | from a document |
+| Live preview while typing | Ours | our suggestion |
+| Largest rate or charge $10,000; term from 1 to 60 months | Ours (step 1, already deployed) | our suggestion |
+| One draft per driver; a draft can be deleted | Ours (step 1, already deployed) | our suggestion |
+
+### Step 2 fields (contract details, D73)
+| Field | Source | Status |
+|---|---|---|
+| Company, chosen from a list of five (name and address as the "Lessor:" line) | Sample contracts, "Lessor:" lines | from a document |
+| The company name printed as its signature | Client message via Saad, 2026-10-21 (D72) | client-confirmed |
+| Vehicle model, VIN, plate, plate state | Sample contract header | from a document |
+| Purchase option price | Section 15 of the sample contracts (not in the rate sheet) | from a document |
+| Driver's address, licence number, licence state, date of birth | Sample contract header | from a document |
+| Effective date: not a separate field, it is the start date from step 1; step 3 prints it in both places (the "Effective Date" line and the first date of the lease term) | "Effective Date" line under the title of each sample contract; equals the lease term start in all five samples; the rate sheet has no effective-date cell. Settled in planning chat 07, 2026-10-21 | from a document |
+| Details typed on the draft, not stored on the driver | Abulkalam, planning chat 07, 2026-10-21 (the driver record and website form do not hold them) | our suggestion |
+| All details optional; only a length limit on each | Ours: the client asked for the values, not for rules about them | our suggestion |
+| Licence number and date of birth kept out of lists and logs (encryption planned, B94) | Ours: personal data | our suggestion |
+| Company list fixed by the migration, no screen to change it (B93) | Ours: five companies, simplest first | our suggestion |

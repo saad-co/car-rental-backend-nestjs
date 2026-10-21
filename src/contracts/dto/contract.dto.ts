@@ -1,10 +1,15 @@
 import { applyDecorators } from "@nestjs/common";
 import { ApiProperty } from "@nestjs/swagger";
+import { Transform } from "class-transformer";
 import {
   IsEnum,
   IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
   Matches,
   Max,
+  MaxLength,
   Min,
   registerDecorator,
   type ValidationOptions,
@@ -47,11 +52,32 @@ function Charge(): PropertyDecorator {
 }
 
 /**
- * Body of `POST /contracts/calculate`, `POST /drivers/:driverId/contracts` and `PUT /contracts/:id`: everything the admin
- * types for a contract (D71). All money is whole cents (spec rule 1). A PUT replaces all of it, so every field is
- * required; send 0 for a charge that does not apply.
+ * A text detail of the contract (step 2): optional, trimmed, and an empty box is stored as nothing. The only rule is the
+ * length limit of its column; the client did not ask for a format.
  */
-export class ContractInputDto {
+function OptionalText(maxLength: number): PropertyDecorator {
+  return applyDecorators(
+    ApiProperty({ type: String, nullable: true, required: false }),
+    Transform(({ value }: { value: unknown }) =>
+      typeof value === "string" ? value.trim() || null : value,
+    ),
+    IsOptional(),
+    IsString({ message: "This must be text." }),
+    MaxLength(maxLength, {
+      message: `This can be at most ${maxLength} characters.`,
+    }),
+  );
+}
+
+/** The largest value of the `integer` column that holds the purchase option price (about $21 million). */
+const MAX_INTEGER_CENTS = 2_147_483_647;
+
+/**
+ * Body of `POST /contracts/calculate`: the numbers the contract's calculation is made from (D71). This is also the first
+ * half of a saved draft's body (`ContractInputDto`). All money is whole cents (spec rule 1). The calculate route takes
+ * only these fields, because unknown fields are refused.
+ */
+export class ContractNumbersInputDto {
   /** How often the driver pays: weekly or daily. */
   @ApiProperty({ enum: ContractSchedule, enumName: "ContractSchedule" })
   @IsEnum(ContractSchedule, { message: "Choose weekly or daily." })
@@ -107,6 +133,78 @@ export class ContractInputDto {
   /** Recurring charge: other, cents. */
   @Charge()
   otherRecurringCents: number;
+}
+
+/**
+ * Body of `POST /drivers/:driverId/contracts` and `PUT /contracts/:id`: the numbers (D71) and the details of step 2. A PUT
+ * replaces all of it: a detail that is left out or empty is cleared. Nothing is required; completeness is checked when
+ * the contract is sent (step 3).
+ */
+export class ContractInputDto extends ContractNumbersInputDto {
+  /** The Lessor: the id of a company from `GET /contracts/companies`. */
+  @ApiProperty({
+    type: String,
+    format: "uuid",
+    nullable: true,
+    required: false,
+  })
+  @IsOptional()
+  @IsUUID(undefined, { message: "Choose a company from the list." })
+  companyId?: string | null;
+
+  /** Vehicle model, as typed. */
+  @OptionalText(100)
+  vehicleModel?: string | null;
+
+  /** Vehicle identification number, as typed. */
+  @OptionalText(50)
+  vehicleVin?: string | null;
+
+  /** Licence plate, as typed. */
+  @OptionalText(20)
+  vehiclePlate?: string | null;
+
+  /** The state the plate is from, as typed. */
+  @OptionalText(50)
+  vehiclePlateState?: string | null;
+
+  /** Purchase option price in cents (0 up to the column's limit). */
+  @ApiProperty({ type: Number, nullable: true, required: false })
+  @IsOptional()
+  @IsInt({ message: "The purchase option must be a whole number of cents." })
+  @Min(0, { message: "The purchase option cannot be negative." })
+  @Max(MAX_INTEGER_CENTS, { message: "The purchase option is too large." })
+  purchaseOptionCents?: number | null;
+
+  /** The driver's address on one line, as typed. */
+  @OptionalText(300)
+  lesseeAddress?: string | null;
+
+  /** Driver's licence number. Sensitive: only in the single draft response, never in a list (B94). */
+  @OptionalText(50)
+  licenseNumber?: string | null;
+
+  /** The state that issued the licence, as typed. */
+  @OptionalText(50)
+  licenseState?: string | null;
+
+  /** Driver's date of birth, a real day written `YYYY-MM-DD`. Sensitive: only in the single draft response (B94). */
+  @ApiProperty({ type: String, nullable: true, required: false })
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: "The date must be YYYY-MM-DD." })
+  @IsCalendarDay({
+    message: "The date of birth must be a real day, written YYYY-MM-DD.",
+  })
+  dateOfBirth?: string | null;
+}
+
+/** One company of the fixed list the Lessor is chosen from. */
+export class ContractCompanyDto {
+  id: string;
+  /** The name as printed on the contract, and as the company's signature (D72). */
+  name: string;
+  /** The address on one line, as printed on the contract. */
+  address: string;
 }
 
 /** The numbers worked out from the inputs (D71); never stored, always recalculated. All money in whole cents. */

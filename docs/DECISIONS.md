@@ -860,3 +860,23 @@ total rate"), and calculated totals cannot drift like the hand-typed ones in the
   entity name in a script-style font, in the Lessor's signature block (the PDF template marker approach of D70). firma's
   automatic organization seal stays a fallback if the text field looks wrong.
 **Why:** removes the countersigning step and the wait for a second signer, so a contract is complete the moment the driver signs.
+
+### D73 — 2026-10-21 — Contract details: a fixed company list, the rest typed on the draft with no rules (Module 2 step 2; Abulkalam, from planning chat 07)
+- **Company:** table `contract_companies` (`name`, `address`; no state column, no active flag), seeded by the migration with the five
+  "Lessor:" lines of the sample contracts, names as the spec has them. Unique on name + address because Gonzo Enterprises Inc has two
+  addresses. The name is printed as the company's signature (D72). No screen to change the list yet (B93).
+- **Vehicle, purchase option, driver details:** typed on the draft: vehicle model, VIN, plate, plate state; purchase option price (cents);
+  the driver's address (one line), licence number, licence state, date of birth. The driver record and the website form do not hold the
+  licence number, licence state or date of birth, so nothing changes there; the driver's name, email and phone are read from the driver
+  when the contract is sent (step 3).
+- **No rules the client did not ask for:** every new column is optional; text is trimmed and an empty box is stored as nothing; the only
+  checks are the database's own (a length limit per column, the date of birth a real day, the purchase option a whole non-negative number
+  of cents the column can hold, the company one of the list). No VIN, plate or state format, no list of states, no price cap, no age rule,
+  no address prefill from the application. Completeness is checked when sending (step 3).
+- **Personal data:** licence number and date of birth are in the single-draft response only (the admin edits them there), never in a list
+  response and never in a log line; a test checks the drivers list and the driver page. They are stored as plain text for now;
+  **encryption is planned (B94)** and comes before real driver data is typed into a contract. Demos use made-up values.
+- **Step 1's checks stay** (the $10,000 caps, 1 to 60 months, one draft per driver): already deployed, removing them needs a migration for
+  no gain. `MODULE2_SPEC.md` section 4 lists them as "our suggestion".
+**Why:** the client asked for the values on the contract, not for rules about them; fewer rules means nothing to explain or defend in the
+demo, and the data we hold about drivers' identity stays as small and as quiet as possible.

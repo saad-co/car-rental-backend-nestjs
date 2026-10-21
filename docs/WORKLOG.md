@@ -4,6 +4,37 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-21 — Module 2 step 2: contract details (D73, B93, B94)
+- **Branch** `feature/contracts-details` in both repos, worktrees `wt-contracts-details-backend` / `-frontend` (slot 3: backend :5003,
+  frontend :5176, databases `car_rental_contracts_details` / `_test`). **Not committed, not merged, not deployed.**
+- **Backend:** table `contract_companies` (`name`, `address`; no state, no active flag) seeded with the five "Lessor:" lines by migration
+  `AddContractDetails`; ten optional columns on `contracts` (company FK, vehicle model / VIN / plate / plate state, purchase option cents,
+  address, licence number, licence state, date of birth); `GET /contracts/companies`; `POST /contracts/calculate` now takes only the
+  numeric fields (`ContractNumbersInputDto`), the saved draft takes the details too (blank = nothing, trimmed, length limits, a real date
+  of birth, a whole non-negative purchase option, a company from the list). `openapi.json` exported. No format rules, caps or prefill (D73).
+- **Frontend:** three cards on the contract page (Company with its address under the choice, Vehicle with the purchase option price,
+  Driver details); `ContractCard` shared; `useContractCompanies`; `readContractForm` also returns `numbersInput`, so typing a detail never
+  asks for new numbers; client regenerated from the worktree's `openapi.json`.
+- **Docs:** `MODULE2_SPEC.md` step 2 row fixed and a new section 4 "Sources" (flow, step 1 fields, step 2 fields; step 1's caps and the
+  one-draft index listed as "our suggestion"); D73; B93 (companies screen, CA / TN rows); B94 (encrypt licence number and date of birth).
+- **Verified:** migration run, revert, run, and `migration:generate` finds no drift; backend lint (3 old warnings), build, unit 149, e2e 329
+  (23 new in `contracts.e2e-spec`: the five companies, save and reload, update clears, unknown company, trimming, no format rules, 13
+  refusals, edges, the drivers list and driver page hold no licence number or date of birth, a used company cannot be deleted); frontend
+  lint (2 old warnings), prettier, build. Real requests: `GET /contracts/companies` and `POST /contracts/calculate` give 401 without a
+  login. **Browser** (throwaway local admin, driver "Sim Test", made-up values only): three cards; five companies, the two Gonzo ones told
+  apart by address; "abc" as purchase option marks the box and blocks Save; nine detail edits send no extra `calculate`; save (201), reload
+  keeps every value, database row correct (`2500000` cents); phone width with no sideways scroll; delete; driver page shows no licence number
+  or date of birth. Console clean, no failed requests.
+- **Not done:** nothing is sent to firma (steps 3, 4). A company cannot be un-chosen once chosen (the list has no empty option); only
+  changed to another. Workspace `CLAUDE.md` "Current focus" to update when merged.
+- **Local only:** `.claude/launch.json` in the workspace root (not in either repo) starts the two slot 3 servers; the worktree `.env` holds
+  a throwaway admin (`qa-admin@test.local`), not Abulkalam's.
+- **Merge order / shared files:** no other feature in flight; backend first, then frontend. Backend shared: `contracts.module.ts`,
+  `data-source.ts`, `openapi.json`, `contracts.service.ts`, `contracts.controller.ts`, `contract.entity.ts`, `dto/contract.dto.ts`, the
+  migration, the docs. Frontend shared: `schema.d.ts`, `queryClient.ts`, `ContractDraft.tsx`, `contractForm.ts`, `contracts.queries.ts`.
+
+---
+
 ### 2026-10-20 — Staging deploy: contract draft and rate calculator (Module 2 step 1, D71)
 - **Merged:** backend PR #26 (`8a823bc`) and frontend PR #19 (`9166de4`) into `dev`, branch `feature/contracts`.
 - **Deployed** to Railway staging by hand from the `deploy-*` worktrees (detached at `origin/dev`, clean): backend `8a823bc`,
