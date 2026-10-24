@@ -6,7 +6,7 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ### 2026-10-24 — Quick fixes: no login text on approval, admin-added drivers approved on save (D78, D79, B99)
 - **Branch** `fix/quick-fixes` in both repos, worktrees `wt-quick-fixes-backend` / `-frontend` (slot 2: backend :5002, frontend :5175, databases
-  `car_rental_quick_fixes` / `_test`). Rebased on `origin/dev` `693a451` (backend) / `08698b1` (frontend) on 2026-10-24. **Not committed yet.**
+  `car_rental_quick_fixes` / `_test`). Rebased on `origin/dev` `693a451` (backend) / `08698b1` (frontend) on 2026-10-24. Merged into `dev` 2026-10-24 (backend PR #34 `595d997`, frontend PR #25 `c7ed624`).
 - **Backend:** `approve()` sends only the approval text (login text paused, D78; `driver-welcome.text.ts` kept, unused); `ConfigService` removed from
   `ApplicationsService`. `createManual()` approves what it saves (D79): `assertCanBecomeDriver` (shared with `approve`) and a textable-phone check run
   before files are stored; a failed approval leaves the application pending ("Application saved, but not approved: ...") and a repeat of the same
@@ -17,6 +17,7 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 - **Verified:** backend lint (3 old warnings), build, unit 276, e2e 407 (approve: one text, no password; manual: approved on save, duplicate email / phone
   and bad phone store nothing, approval failure then retry); frontend lint, build. **Not done:** UI walkthrough in the browser; real `live` send.
 - **Note:** drivers approved now cannot log in (B99).
+- **Deployed to staging 2026-10-24** (by the deploy steps, backend then frontend): backend `595d997`, frontend `c7ed624`. No new migration ("No migrations are pending"); both deployments SUCCESS, backend started with no errors in the log, frontend login page 200, backend `/docs` 200 and `/applications` 401 without a token. Staging `SMS_MODE` is `live`: a test "Add driver" there sends a real approval text.
 
 ---
 
