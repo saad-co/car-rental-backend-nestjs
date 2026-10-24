@@ -37,6 +37,8 @@ export interface ContractSentValues {
   recipientName: string;
   recipientEmail: string;
   values: Record<string, string>;
+  /** The application document (the driver's licence file) drawn on the contract's last page (D76); the picture itself is not copied. */
+  licenseDocumentId?: string;
 }
 
 /** How often the driver pays the rate. */

@@ -26,7 +26,7 @@ export class ContractCompany {
   @Column({ type: "varchar", length: 300 })
   address: string;
 
-  /** The two-letter state whose contract text this company uses (`IL`, `CA`). Only the Illinois one is built (step 3). */
+  /** The two-letter state whose contract text this company uses (`IL`, `CA`). Illinois and California are built (D74, D76); Tennessee is not. */
   @Column({ type: "char", length: 2 })
   state: string;
 

@@ -241,6 +241,9 @@ export class ContractSentValuesDto {
   /** Every value as printed on the contract, by marker name (`LESSEE_NAME`, `TOTAL_RATE`, ...). */
   @ApiProperty({ type: "object", additionalProperties: { type: "string" } })
   values: Record<string, string>;
+  /** The application document (the driver's licence file) drawn on the contract's last page (D76). Absent on contracts sent before it. */
+  @ApiProperty({ required: false })
+  licenseDocumentId?: string;
 }
 
 /** A saved contract: what was typed, the numbers calculated from it, and its bookkeeping. */

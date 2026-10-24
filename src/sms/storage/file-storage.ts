@@ -6,6 +6,9 @@ export interface FileStorage {
   /** Stores `body` under `key` (overwrites). Throws on any failure. */
   put(key: string, body: Buffer, contentType: string | null): Promise<void>;
 
+  /** The file's bytes. Throws when the key does not exist or on any other failure. */
+  get(key: string): Promise<Buffer>;
+
   /** A link that opens the file for `expiresInSeconds`, then stops working. Nothing is public. */
   presignGet(key: string, expiresInSeconds: number): Promise<string>;
 

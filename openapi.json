@@ -1523,7 +1523,7 @@
             }
           }
         },
-        "summary": "`POST /contracts/:id/send`: sends the draft to the driver to sign (firma) and freezes it. `400` values still empty\n(`missing`); `404` unknown id; `409` already sent, or not an Illinois company; `502` firma refused; `503` no firma key.",
+        "summary": "`POST /contracts/:id/send`: sends the draft to the driver to sign (firma) and freezes it. `400` values still empty\n(`missing`); `404` unknown id; `409` already sent, or its company's state has no contract yet; `502` firma refused; `503` no firma key.",
         "tags": [
           "Contracts"
         ]
@@ -3842,6 +3842,10 @@
               "type": "string"
             },
             "description": "Every value as printed on the contract, by marker name (`LESSEE_NAME`, `TOTAL_RATE`, ...)."
+          },
+          "licenseDocumentId": {
+            "type": "string",
+            "description": "The application document (the driver's licence file) drawn on the contract's last page (D76). Absent on contracts sent before it."
           },
           "template": {
             "type": "string",

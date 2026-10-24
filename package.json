@@ -64,9 +64,11 @@
     "imapflow": "^2.3.0",
     "mailparser": "^3.9.37",
     "nodemailer": "^10.0.16",
+    "pdf-lib": "^1.17.1",
     "pg": "^8.23.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "sharp": "^0.35.5",
     "typeorm": "^1.1.1"
   },
   "devDependencies": {

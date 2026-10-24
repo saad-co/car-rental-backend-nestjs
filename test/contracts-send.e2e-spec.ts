@@ -5,8 +5,15 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from "@nestjs/common";
+import { PDFDocument } from "pdf-lib";
+import sharp from "sharp";
 import type { DataSource } from "typeorm";
 import { ContractCompany } from "../src/contracts/contract-company.entity.js";
+import {
+  buildAnchors,
+  templateFor,
+} from "../src/contracts/contract-template.js";
+import { buildContractValues } from "../src/contracts/contract-values.js";
 import { ContractsService } from "../src/contracts/contracts.service.js";
 import type { ContractInputDto } from "../src/contracts/dto/contract.dto.js";
 import {
@@ -22,6 +29,7 @@ import {
   type FirmaSendRequest,
   type FirmaSent,
 } from "../src/firma/firma-client.js";
+import type { FileStorage } from "../src/sms/storage/file-storage.js";
 import { openTestDatabase } from "./test-database.js";
 
 /** A firma in memory: records every request, answers with a numbered id, and can be told to fail. */
@@ -48,22 +56,57 @@ class FakeFirma implements FirmaClient {
   }
 }
 
+/** Our bucket in memory. */
+class FakeStorage implements FileStorage {
+  files = new Map<string, Buffer>();
+  put(key: string, body: Buffer) {
+    this.files.set(key, body);
+    return Promise.resolve();
+  }
+  get(key: string) {
+    const body = this.files.get(key);
+    return body
+      ? Promise.resolve(body)
+      : Promise.reject(new Error(`no file ${key}`));
+  }
+  presignGet(key: string) {
+    return Promise.resolve(`https://bucket.test/${key}?signed`);
+  }
+  delete(key: string) {
+    this.files.delete(key);
+    return Promise.resolve();
+  }
+}
+
+/** A made-up licence picture: flat grey, nothing personal. */
+const licencePicture = () =>
+  sharp({
+    create: { width: 900, height: 600, channels: 3, background: "#888888" },
+  })
+    .jpeg()
+    .toBuffer();
+
 describe("Send a contract for signing (Module 2 step 3, D74, test database)", () => {
   let db: DataSource;
   let firma: FakeFirma;
+  let storage: FakeStorage;
   let contracts: ContractsService;
   let admin: string;
   let driverId: string;
   let ashwoodId: string;
   let ukiahId: string;
 
-  const serviceWith = (client: FakeFirma | null): ContractsService =>
+  const serviceWith = (
+    client: FakeFirma | null,
+    bucket: FakeStorage | null = storage,
+  ): ContractsService =>
     new ContractsService(
       db.getRepository(Contract),
       db.getRepository(Driver),
       db.getRepository(ContractCompany),
       db,
       client,
+      bucket,
     );
 
   /** A complete draft: the Ashwood sample's numbers, made-up personal data. */
@@ -95,12 +138,43 @@ describe("Send a contract for signing (Module 2 step 3, D74, test database)", ()
     ...over,
   });
 
-  const newDriver = async (n: number): Promise<string> => {
+  /** The licence file on a driver's application, as the application flow leaves it (D54, D68). Returns the document's id. */
+  const addLicence = async (
+    forDriver: string,
+    body: Buffer,
+    over: { status?: string } = {},
+  ): Promise<string> => {
+    const [{ id: applicationId }] = (await db.query(
+      `INSERT INTO applications (request_id, first_name, last_name, email, phone, payload, status, driver_id)
+       VALUES (gen_random_uuid(), 'Test', 'Driver', $1, '3125550101', '{}', 'approved', $2) RETURNING id`,
+      [`application-${forDriver}@test.test`, forDriver],
+    )) as [{ id: string }];
+    const key = `application-documents/${applicationId}/license.bin`;
+    storage.files.set(key, body);
+    const pending = over.status === "pending";
+    // A website copy that is not in our bucket yet has its website path and no stored file; an admin upload is always stored.
+    const [{ id }] = (await db.query(
+      `INSERT INTO application_documents (application_id, kind, origin, source_path, status, storage_key, size_bytes)
+       VALUES ($1, 'license', $2, $3, $4, $5, $6) RETURNING id`,
+      [
+        applicationId,
+        pending ? "website" : "admin",
+        pending ? "site/licence.png" : null,
+        pending ? "pending" : "stored",
+        pending ? null : key,
+        pending ? null : body.length,
+      ],
+    )) as [{ id: string }];
+    return id;
+  };
+
+  const newDriver = async (n: number, withLicence = true): Promise<string> => {
     const [{ id }] = (await db.query(
       `INSERT INTO drivers (first_name, last_name, email, phone)
        VALUES ('Test', 'Driver', $1, $2) RETURNING id`,
       [`driver${n}@test.test`, `+1312555010${n}`],
     )) as [{ id: string }];
+    if (withLicence) await addLicence(id, await licencePicture());
     return id;
   };
 
@@ -127,6 +201,7 @@ describe("Send a contract for signing (Module 2 step 3, D74, test database)", ()
     [{ id: admin }] = (await db.query(
       `INSERT INTO users (email, password_hash, role) VALUES ('alice@admin.test', 'x', 'admin') RETURNING id`,
     )) as [{ id: string }];
+    storage = new FakeStorage();
     driverId = await newDriver(1);
     [{ id: ashwoodId }] = (await db.query(
       `SELECT id FROM contract_companies WHERE name = 'Ashwood Holdings LLC'`,
@@ -271,14 +346,140 @@ describe("Send a contract for signing (Module 2 step 3, D74, test database)", ()
       expect((await row(id)).status).toBe("draft");
     });
 
-    it("refuses a Californian company with 409: only the Illinois contract is built", async () => {
+    it("sends a Californian contract with the California template and its own anchors", async () => {
       const id = await newDraft({ companyId: ukiahId });
 
-      await expect(contracts.sendForSigning(id, admin)).rejects.toThrow(
-        "Only the Illinois contract is built yet.",
+      const sent = await contracts.sendForSigning(id, admin);
+
+      expect(sent.sentValues?.template).toBe("california-lease.pdf");
+      expect(sent.sentValues?.values.COMPANY_NAME).toBe(
+        "Gonzo Enterprises Inc",
       );
-      expect(firma.requests).toHaveLength(0);
-      expect((await row(id)).status).toBe("draft");
+      const [request] = firma.requests;
+      const contract = await db.getRepository(Contract).findOneByOrFail({ id });
+      const values = buildContractValues(
+        contract,
+        {
+          name: "Gonzo Enterprises Inc",
+          address: sent.sentValues!.values.COMPANY_ADDRESS,
+        },
+        {
+          firstName: "Test",
+          lastName: "Driver",
+          email: "driver1@test.test",
+          phone: "+13125550101",
+        },
+      );
+      expect(request.anchors).toEqual(buildAnchors(values, templateFor("CA")!));
+      expect(request.anchors.map((a) => a.anchor)).toContain(
+        "{{COMPANY_SIGN}}",
+      );
+    });
+
+    it("refuses a company whose state has no contract yet with 409", async () => {
+      const [{ id: tennesseeId }] = (await db.query(
+        `INSERT INTO contract_companies (name, address, state)
+         VALUES ('Volunteer LLC', '1 Test St, Nashville TN 37201', 'TN') RETURNING id`,
+      )) as [{ id: string }];
+      try {
+        const id = await newDraft({ companyId: tennesseeId });
+
+        await expect(contracts.sendForSigning(id, admin)).rejects.toThrow(
+          "There is no contract for TN yet.",
+        );
+        expect(firma.requests).toHaveLength(0);
+        expect((await row(id)).status).toBe("draft");
+      } finally {
+        // The company list is fixed by a migration: leave it as found (the next test reads it).
+        await db.query("TRUNCATE contracts CASCADE");
+        await db.query("DELETE FROM contract_companies WHERE id = $1", [
+          tennesseeId,
+        ]);
+      }
+    });
+
+    describe("the driver's licence on the last page (D76)", () => {
+      const imagesOnLastPage = async (pdf: Buffer): Promise<number> => {
+        const doc = await PDFDocument.load(pdf);
+        const page = doc.getPage(doc.getPageCount() - 1);
+        const xobjects = page.node
+          .Resources()
+          ?.lookup(doc.context.obj("XObject"));
+        return xobjects && "entries" in xobjects
+          ? (xobjects as unknown as { entries(): unknown[] }).entries().length
+          : 0;
+      };
+
+      it("draws the application's licence file into the PDF firma gets, and records which file it was", async () => {
+        const id = await newDraft();
+        const [{ id: documentId }] = (await db.query(
+          `SELECT id FROM application_documents WHERE kind = 'license'`,
+        )) as [{ id: string }];
+
+        const sent = await contracts.sendForSigning(id, admin);
+
+        expect(sent.sentValues?.licenseDocumentId).toBe(documentId);
+        const [request] = firma.requests;
+        expect(await imagesOnLastPage(request.pdf)).toBeGreaterThan(0);
+      });
+
+      it("blocks the send when the driver has no licence file, and changes nothing", async () => {
+        const other = await newDriver(2, false);
+        const id = await newDraft({}, other);
+
+        await expect(contracts.sendForSigning(id, admin)).rejects.toThrow(
+          "The driver's licence is not on file: add it to the application first.",
+        );
+        expect(firma.requests).toHaveLength(0);
+        expect((await row(id)).status).toBe("draft");
+      });
+
+      it("blocks the send while the licence file is still pending (not in our bucket yet)", async () => {
+        const other = await newDriver(2, false);
+        await addLicence(other, await licencePicture(), { status: "pending" });
+        const id = await newDraft({}, other);
+
+        await expect(contracts.sendForSigning(id, admin)).rejects.toThrow(
+          ConflictException,
+        );
+        expect(firma.requests).toHaveLength(0);
+      });
+
+      it("blocks the send when the file is not a picture or a PDF, without putting it in the message", async () => {
+        const other = await newDriver(2, false);
+        await addLicence(other, Buffer.from("secret words, not an image"));
+        const id = await newDraft({}, other);
+
+        const failure = await contracts.sendForSigning(id, admin).then(
+          () => null,
+          (error: unknown) => error,
+        );
+
+        expect(failure).toBeInstanceOf(ConflictException);
+        expect((failure as Error).message).toMatch(/cannot be read/);
+        expect((failure as Error).message).not.toMatch(/secret/);
+        expect(firma.requests).toHaveLength(0);
+        expect((await row(id)).status).toBe("draft");
+      });
+
+      it("answers 502 when the bucket cannot give the file", async () => {
+        const id = await newDraft();
+        storage.files.clear();
+
+        await expect(contracts.sendForSigning(id, admin)).rejects.toThrow(
+          BadGatewayException,
+        );
+        expect(firma.requests).toHaveLength(0);
+      });
+
+      it("answers 503 when no file storage is set up", async () => {
+        const id = await newDraft();
+
+        await expect(
+          serviceWith(firma, null).sendForSigning(id, admin),
+        ).rejects.toThrow(ServiceUnavailableException);
+        expect((await row(id)).status).toBe("draft");
+      });
     });
 
     it("sends for each of the four Illinois companies", async () => {

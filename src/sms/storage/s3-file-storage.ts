@@ -63,6 +63,15 @@ export class S3FileStorage implements FileStorage {
     );
   }
 
+  async get(key: string): Promise<Buffer> {
+    const result = await this.client.send(
+      new GetObjectCommand({ Bucket: this.options.bucket, Key: key }),
+    );
+    if (!result.Body)
+      throw new Error(`The bucket returned no body for ${key}.`);
+    return Buffer.from(await result.Body.transformToByteArray());
+  }
+
   presignGet(key: string, expiresInSeconds: number): Promise<string> {
     return getSignedUrl(
       this.client,

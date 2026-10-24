@@ -9,6 +9,7 @@ import {
 import type { ConfigService } from "@nestjs/config";
 import { createHmac } from "node:crypto";
 import type { Request } from "express";
+import sharp from "sharp";
 import type { DataSource } from "typeorm";
 import { IS_PUBLIC_KEY } from "../src/auth/public.decorator.js";
 import { ROLES_KEY } from "../src/auth/roles.decorator.js";
@@ -121,6 +122,12 @@ class FakeStorage implements FileStorage {
     this.files.set(key, { body, contentType });
     return Promise.resolve();
   }
+  get(key: string) {
+    const file = this.files.get(key);
+    return file
+      ? Promise.resolve(file.body)
+      : Promise.reject(new Error(`no file ${key}`));
+  }
   presignGet(key: string) {
     return Promise.resolve(`https://bucket.test/${key}?signed`);
   }
@@ -209,12 +216,33 @@ describe("Track and file a signed contract (Module 2 step 4, D75, test database)
     dateOfBirth: "1983-04-04",
   });
 
+  /** Sending draws the licence file of the driver's application on the contract (D76), so every driver has one. */
   const newDriver = async (n: number): Promise<string> => {
     const [{ id }] = (await db.query(
       `INSERT INTO drivers (first_name, last_name, email, phone)
        VALUES ('Test', 'Driver', $1, $2) RETURNING id`,
       [`driver${n}@test.test`, `+1312555010${n}`],
     )) as [{ id: string }];
+    const [{ id: applicationId }] = (await db.query(
+      `INSERT INTO applications (request_id, first_name, last_name, email, phone, payload, status, driver_id)
+       VALUES (gen_random_uuid(), 'Test', 'Driver', $1, '3125550101', '{}', 'approved', $2) RETURNING id`,
+      [`application-${id}@test.test`, id],
+    )) as [{ id: string }];
+    const key = `application-documents/${applicationId}/license.png`;
+    // Put straight in the bucket's map, so the puts the tests count are only the signed files'.
+    storage.files.set(key, {
+      body: await sharp({
+        create: { width: 90, height: 60, channels: 3, background: "#888888" },
+      })
+        .png()
+        .toBuffer(),
+      contentType: "image/png",
+    });
+    await db.query(
+      `INSERT INTO application_documents (application_id, kind, origin, status, storage_key, size_bytes)
+       VALUES ($1, 'license', 'admin', 'stored', $2, 100)`,
+      [applicationId, key],
+    );
     return id;
   };
 
@@ -287,12 +315,12 @@ describe("Track and file a signed contract (Module 2 step 4, D75, test database)
     [{ id: admin }] = (await db.query(
       `INSERT INTO users (email, password_hash, role) VALUES ('alice@admin.test', 'x', 'admin') RETURNING id`,
     )) as [{ id: string }];
+    storage = new FakeStorage();
     driverId = await newDriver(1);
     [{ id: ashwoodId }] = (await db.query(
       `SELECT id FROM contract_companies WHERE name = 'Ashwood Holdings LLC'`,
     )) as [{ id: string }];
     firma = new FakeFirma();
-    storage = new FakeStorage();
     build();
     contractsService = new ContractsService(
       db.getRepository(Contract),
@@ -300,6 +328,7 @@ describe("Track and file a signed contract (Module 2 step 4, D75, test database)
       db.getRepository(ContractCompany),
       db,
       firma,
+      storage,
     );
   });
 

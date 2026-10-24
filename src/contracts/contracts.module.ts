@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { TypeOrmModule } from "@nestjs/typeorm";
+import { ApplicationDocument } from "../applications/documents/application-document.entity.js";
 import { Driver } from "../drivers/driver.entity.js";
 import { DriversModule } from "../drivers/drivers.module.js";
 import { FileStorageModule } from "../sms/storage/file-storage.module.js";
@@ -23,7 +24,13 @@ import { FirmaWebhookController } from "./firma-webhook.controller.js";
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Contract, ContractCompany, Driver, User]),
+    TypeOrmModule.forFeature([
+      Contract,
+      ContractCompany,
+      Driver,
+      User,
+      ApplicationDocument,
+    ]),
     // Signing ticks the driver's "Contract signed" step; the signed files go to the shared private bucket.
     DriversModule,
     FileStorageModule,

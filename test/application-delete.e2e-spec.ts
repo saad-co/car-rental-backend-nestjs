@@ -24,6 +24,9 @@ class FakeStorage implements FileStorage {
     this.files.add(key);
     return Promise.resolve();
   }
+  get(key: string) {
+    return Promise.reject(new Error(`no file ${key}`));
+  }
   presignGet(key: string) {
     return Promise.resolve(`https://bucket.test/${key}?signed`);
   }
