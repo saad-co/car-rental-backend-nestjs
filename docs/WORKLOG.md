@@ -4,9 +4,44 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-24 — Contract fixes and the California contract (D76, B95, B98)
+- **Branch** `feature/contracts-fixes` in both repos, worktrees `wt-contracts-fixes-backend` / `-frontend` (slot 1: backend :5001, frontend :5174,
+  databases `car_rental_contracts_fixes` / `_test`). **Not committed yet.**
+- **Why:** the first signed contract on staging had stray marks (", ," ". ."), a ragged disclosure table, wrapped lines, an empty "Driver License"
+  page, and California was refused. Spike first (S1-S6, D76): firma never removes marker text (the box is the only cover), left-aligns text, keeps
+  spaces, shrinks too-long text; `pdf-lib` and `sharp` are safe; an 11.5 MB PDF is refused.
+- **Backend:** per-state templates (`template-kit.ts`, `contract-template.ts`, `templates/illinois-placements.ts` / `california-placements.ts`,
+  `california-lease.pdf`, a new `illinois-lease.pdf`); distinct and shorter markers; boxes that cover whole markers; amounts right-aligned by padding;
+  `contract-licence.ts` (`placeLicence`: pdf-lib + sharp); `FileStorage.get` (+ S3 and the test fakes); `ContractsService.sendForSigning` picks the
+  template by the company's state and draws the application's licence (409 / 502 / 503 as in D76); `sentValues.licenseDocumentId`; `pdf-lib` and
+  `sharp` added; `openapi.json` re-exported. No migration.
+- **Frontend:** `schema.d.ts` regenerated from the worktree's `openapi.json`; one comment. The send error shows the API's own sentence, so the
+  licence messages need no screen change.
+- **California:** from the client's sample by a script that prints counts only; no real value left (checked); the rate split is the same as Illinois
+  (checked line by line, D71 follow-up in D76). Source: the client's California sample and Abulkalam's decision (MODULE2_SPEC Sources).
+- **Verified:** backend lint (same 3 old warnings), build, unit 276, e2e 404 (send: California sends with its own anchors, a state without a template
+  is refused, the licence is drawn / missing / pending / unreadable / bucket down / no bucket); frontend lint (2 old warnings), build. **Real test-mode
+  sends** (firma test key, made-up data, signed on firma's page, PDFs read): Illinois and California, 41 of 41 anchors accepted with no warning; every
+  value lands where asked; no stray mark; amounts right-aligned; one line each for the licence, vehicle, plate and email lines; the licence picture in its
+  slot; Illinois email and phone keep their 1.55% / 1.64% shift, California none. **UI walkthrough** (local backend :5001 and frontend :5174, throwaway admin, two fake drivers, local MinIO, firma test key): a driver with no licence file gets "The driver's licence is not on file: add it to the application first." in the send dialog and nothing reaches firma; a driver with a licence sends a California contract ("Sent for signing", `california-lease.pdf`, `licenseDocumentId` saved); console shows only the expected 409 / 502.
+- **Not done:** HEIC licences are refused with a message (B98); the licence picture is not encrypted (B94); Tennessee has no template; the check on staging after deploy. Docs: D76, B95, B91, B93, B98, MODULE2_SPEC Sources.
+- **Before deploy:** backend then frontend as always; no migration; `S3_*` must be set (the licence is read from the bucket).
+- **Shared files:** backend `contracts.*`, `contract-template.ts` and the new files, `sms/storage/*`, five e2e fakes, `openapi.json`, `package.json`;
+  frontend `schema.d.ts`, `contracts.queries.ts`. The ledger work (slot 3) touches none of them.
+
+---
+
+### 2026-10-24 — Staging deploy of Module 2 steps 3 and 4
+- Backend `73e6c1e`, frontend `71aa5aa` deployed to staging by hand from `dev`; `FIRMA_API_KEY` (test key) and `FIRMA_WEBHOOK_SECRET` set, the
+  webhook created in firma (`https://backend-production-1f569.up.railway.app/webhooks/firma`; viewed, completed, expired, cancelled, recipient declined).
+- **Verified by Abulkalam:** a contract for Saad's email was sent, signed, the status and the signed files followed, "Contract signed" ticked by itself,
+  **the real webhook worked**. Found afterwards: the cosmetic problems fixed in the entry above.
+
+---
+
 ### 2026-10-21 — Module 2 step 4: track a sent contract and file the signed copy (D75, B96)
 - **Branch** `feature/contracts-track` in both repos, worktrees `wt-contracts-track-backend` / `-frontend` (slot 3: backend :5003, frontend
-  :5176, databases `car_rental_contracts_track` / `_test`). **Not committed, not merged, not deployed.**
+  :5176, databases `car_rental_contracts_track` / `_test`). **Merged into `dev` (backend PR #31 `73e6c1e`, frontend PR #22 `71aa5aa`); deployed to staging 2026-10-24, the real firma webhook verified.**
 - **Spike first (passed, plan corrected, all in D75):** firma's `status` is flags; "viewed" is visible by polling (`/audit`, first signer
   `document_viewed`); the PDF links need no key, work 1 hour and fill about 20 seconds after signing; declined, cancelled and expired seen.
 - **Backend:** migration `AddContractTracking` (5 statuses, `status_updated_at`, `signed_at`, `signed_pdf_key`, `certificate_key`,
@@ -42,7 +77,7 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ### 2026-10-21 — Module 2 step 3: send a contract for signing (D74, B95)
 - **Branch** `feature/contracts-send` in both repos, worktrees `wt-contracts-send-backend` / `-frontend` (slot 3: backend :5003, frontend
-  :5176, databases `car_rental_contracts_send` / `_test`). **Not committed, not merged, not deployed.**
+  :5176, databases `car_rental_contracts_send` / `_test`). **Merged into `dev` (backend `556f082`, frontend `eedf3d0`); deployed to staging 2026-10-24 with step 4.**
 - **Spike first (passed):** five anchors on the real PDF with the firma test key, then the full build. Findings and firma's limits are in D74.
 - **Template:** the Ashwood PDF with markers, stored at `src/contracts/templates/illinois-lease.pdf` (copied into `dist` by `nest-cli.json`
   `assets`). Its last page held a real driver's licence photo as an image: removed before storing (checked, no image data or personal text left).

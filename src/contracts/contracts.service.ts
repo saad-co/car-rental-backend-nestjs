@@ -9,7 +9,7 @@ import {
   ServiceUnavailableException,
 } from "@nestjs/common";
 import { InjectDataSource, InjectRepository } from "@nestjs/typeorm";
-import { DataSource, Repository } from "typeorm";
+import { DataSource, EntityManager, Repository } from "typeorm";
 import { isUniqueViolation } from "../database/postgres-errors.js";
 import { Driver } from "../drivers/driver.entity.js";
 import {
@@ -17,12 +17,21 @@ import {
   FirmaError,
   type FirmaClient,
 } from "../firma/firma-client.js";
+import {
+  ApplicationDocument,
+  ApplicationDocumentKind,
+  ApplicationDocumentStatus,
+} from "../applications/documents/application-document.entity.js";
+import type { FileStorage } from "../sms/storage/file-storage.js";
+import { FILE_STORAGE } from "../sms/storage/file-storage.module.js";
 import { ContractCompany } from "./contract-company.entity.js";
 import { contractNumbers, type ContractMathInput } from "./contract-math.js";
+import { LicenceError, placeLicence } from "./contract-licence.js";
 import {
   buildAnchors,
-  ILLINOIS_TEMPLATE_FILE,
-  loadIllinoisTemplate,
+  loadTemplate,
+  templateFor,
+  type ContractTemplate,
 } from "./contract-template.js";
 import { buildContractValues, missingForSend } from "./contract-values.js";
 import {
@@ -58,9 +67,6 @@ interface DetailColumns {
 /** Everything the admin types for a contract as a plain object. */
 type InputColumns = NumberColumns & DetailColumns;
 
-/** The only contract text that is built; the other states wait for their templates (B95). */
-const BUILT_STATE = "IL";
-
 /**
  * Contract drafts (Module 2 step 1, D71): the admin types the inputs, the numbers are calculated by `contract-math.ts`
  * and never stored. A driver has at most one draft (a database index); a draft is not a record yet, so it may be deleted.
@@ -82,6 +88,9 @@ export class ContractsService {
     /** Null when `FIRMA_API_KEY` is not set: sending then answers 503. */
     @Inject(FIRMA_CLIENT)
     private readonly firma: FirmaClient | null,
+    /** Our private bucket; null when `S3_*` is not set: sending then answers 503 (the licence is read from it). */
+    @Inject(FILE_STORAGE)
+    private readonly storage: FileStorage | null,
   ) {}
 
   /** The calculated numbers for some inputs, without saving anything (the page calls this while the admin types). */
@@ -185,7 +194,7 @@ export class ContractsService {
    * finds the contract already sent. If firma refuses, nothing is saved and the contract stays a draft.
    * @throws ServiceUnavailableException no firma key is set.
    * @throws NotFoundException no contract with this id.
-   * @throws ConflictException it is not a draft any more, or its company's contract is not built yet.
+   * @throws ConflictException it is not a draft any more, or its company's state has no contract yet.
    * @throws BadRequestException values are still empty (`missing` lists them).
    * @throws BadGatewayException firma refused or did not answer (its own message is passed on).
    */
@@ -210,14 +219,17 @@ export class ContractsService {
       const company = contract.companyId
         ? await manager.findOneBy(ContractCompany, { id: contract.companyId })
         : null;
-      if (company && company.state !== BUILT_STATE) {
-        throw new ConflictException("Only the Illinois contract is built yet.");
+      const template = company ? templateFor(company.state) : undefined;
+      if (company && !template) {
+        throw new ConflictException(
+          `There is no contract for ${company.state} yet.`,
+        );
       }
       const driver = await manager.findOneByOrFail(Driver, {
         id: contract.driverId,
       });
       const missing = missingForSend(contract, company, driver);
-      if (missing.length > 0 || !company) {
+      if (missing.length > 0 || !company || !template) {
         throw new BadRequestException({
           statusCode: 400,
           message: `Fill in before sending: ${missing.join(", ")}.`,
@@ -226,17 +238,18 @@ export class ContractsService {
       }
 
       const values = buildContractValues(contract, company, driver);
+      const licence = await this.drawLicence(manager, driver.id, template);
       let firmaId: string;
       try {
         ({ signingRequestId: firmaId } = await firma.createAndSend({
           name: `Vehicle Lease Agreement - ${company.name}`,
-          pdf: loadIllinoisTemplate(),
+          pdf: licence.pdf,
           recipient: {
             firstName: driver.firstName,
             lastName: driver.lastName,
             email: driver.email,
           },
-          anchors: buildAnchors(values),
+          anchors: buildAnchors(values, template),
         }));
       } catch (error) {
         if (error instanceof FirmaError) {
@@ -256,10 +269,11 @@ export class ContractsService {
           sentById: adminId,
           firmaSigningRequestId: firmaId,
           sentValues: {
-            template: ILLINOIS_TEMPLATE_FILE,
+            template: template.file,
             recipientName: `${driver.firstName} ${driver.lastName}`,
             recipientEmail: driver.email,
             values: { ...values },
+            licenseDocumentId: licence.documentId,
           },
         });
       } catch (error) {
@@ -277,6 +291,63 @@ export class ContractsService {
       `Contract ${id} sent for signing (firma ${sent.firmaSigningRequestId}) by admin ${adminId}.`,
     );
     return this.toDto(sent);
+  }
+
+  /**
+   * The template PDF with the driver's licence drawn on its last page (D76): the licence file is the one on the driver's
+   * application (the first step of a driver's life, D26). Nothing here is ever logged or put in a message but the driver's id.
+   * @throws ServiceUnavailableException no file storage is set up.
+   * @throws ConflictException the application has no stored licence file, or it cannot be read as a picture or PDF.
+   * @throws BadGatewayException the bucket could not give the file.
+   */
+  private async drawLicence(
+    manager: EntityManager,
+    driverId: string,
+    template: ContractTemplate,
+  ): Promise<{ pdf: Buffer; documentId: string }> {
+    const storage = this.storage;
+    if (!storage) {
+      throw new ServiceUnavailableException(
+        "File storage is not set up (S3_*): the driver's licence is read from it.",
+      );
+    }
+    const document = await manager.findOne(ApplicationDocument, {
+      where: {
+        kind: ApplicationDocumentKind.license,
+        status: ApplicationDocumentStatus.stored,
+        application: { driverId },
+      },
+    });
+    if (!document?.storageKey) {
+      throw new ConflictException(
+        "The driver's licence is not on file: add it to the application first.",
+      );
+    }
+    let body: Buffer;
+    try {
+      body = await storage.get(document.storageKey);
+    } catch (error) {
+      this.logger.error(
+        `could not read the licence file of driver ${driverId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw new BadGatewayException(
+        "The driver's licence file could not be read from storage.",
+      );
+    }
+    try {
+      return {
+        pdf: await placeLicence(
+          loadTemplate(template.file),
+          { body },
+          template.licenceSlot,
+        ),
+        documentId: document.id,
+      };
+    } catch (error) {
+      if (error instanceof LicenceError)
+        throw new ConflictException(error.message);
+      throw error;
+    }
   }
 
   private async findDraft(id: string): Promise<Contract> {

@@ -80,7 +80,7 @@ export class ContractsController {
 
   /**
    * `POST /contracts/:id/send`: sends the draft to the driver to sign (firma) and freezes it. `400` values still empty
-   * (`missing`); `404` unknown id; `409` already sent, or not an Illinois company; `502` firma refused; `503` no firma key.
+   * (`missing`); `404` unknown id; `409` already sent, or its company's state has no contract yet; `502` firma refused; `503` no firma key.
    */
   @Post("contracts/:id/send")
   @HttpCode(HttpStatus.OK)
