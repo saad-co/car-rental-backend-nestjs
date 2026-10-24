@@ -22,14 +22,14 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 ---
 
 ### 2026-10-24 — Signed files saved soon after the signing (D77)
-- **Branch** `feature/contracts-save-files` in both repos (slot-1 worktrees `wt-contracts-fixes-backend` / `-frontend`). **Not committed yet.**
+- **Branch** `feature/contracts-save-files` in both repos (slot-1 worktrees `wt-contracts-fixes-backend` / `-frontend`, removed after the merge). **Merged into `dev` 2026-10-24 (backend PR #33 `693a451`, frontend PR #24 `08698b1`); deployed to staging 2026-10-24 (staging is now at the quick-fixes deploy, backend `595d997`, frontend `c7ed624`, which contains it).**
 - **Why:** on staging the signed contract waited for the 5-minute job ("being saved" for up to 5 minutes, and the page did not refresh).
 - **Backend:** `ContractTrackingService.saveDocumentsSoon` (tries after 30 s, +30 s, +60 s; one loop per contract; never throws) called by the firma webhook
   when a contract turns signed, not awaited; the job is unchanged and stays the fallback. **Frontend:** the contract query looks again every 15 s while
   a signed contract's files are not saved.
 - **Verified:** backend lint (same 3 old warnings), build, e2e `contracts-track` 42 (6 new: first try, second try, gives up and the job still saves,
   skipped cases, one loop per contract, the webhook answers at once); frontend lint (2 old warnings), build. Full unit and e2e re-run before the PR.
-- **Not done:** the timers are in memory, so a restart inside the first 2 minutes leaves it to the job; no migration. Staging check after deploy.
+- **Not done:** the timers are in memory, so a restart inside the first 2 minutes leaves it to the job; no migration. The staging check (sign a contract, the page shows "saved on file" within about a minute without a reload) is Abulkalam's to confirm.
 
 ---
 
