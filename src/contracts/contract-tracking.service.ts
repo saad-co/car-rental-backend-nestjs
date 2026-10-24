@@ -21,6 +21,12 @@ import { ContractDocumentsDto } from "./dto/contract.dto.js";
 export type DocumentsOutcome = "saved" | "not-ready" | "failed" | "skipped";
 
 /**
+ * When `saveDocumentsSoon` tries, counted from the signing event: about 30 s (firma needs about 20 s to make the files),
+ * then 30 s and 60 s later. After the last try the 5-minute job takes over.
+ */
+export const FILES_RETRY_DELAYS_MS = [30_000, 30_000, 60_000];
+
+/**
  * Follows a sent contract through firma and files the signed copy (Module 2 step 4, D75).
  *
  * **One function decides the status: `refreshFromFirma`.** It asks firma, the authority, for the signing request and applies
@@ -175,6 +181,40 @@ export class ContractTrackingService {
         .getRepository(Contract)
         .update(contractId, { documentsError: reason });
       return "failed";
+    }
+  }
+
+  /** Contracts whose `saveDocumentsSoon` loop is running, so a second signing event does not start a second one. */
+  private readonly savingSoon = new Set<string>();
+
+  /**
+   * Called by the webhook when a contract turns signed: waits, then tries `saveDocuments`, so the files are on file within
+   * about a minute instead of at the next 5-minute job run. Stops at the first "saved" or "skipped"; after "not-ready" or
+   * "failed" it waits for the next delay. Never throws, and the caller must not await it (the webhook has 5 seconds).
+   *
+   * The waits are timers in this process's memory (unref'd, so they never keep it alive): a deploy or restart inside the
+   * window drops them, and the scheduled job then saves the files as it always did. That is why the job stays.
+   *
+   * @returns the outcome of the last try, or "skipped" when a loop for this contract is already running.
+   */
+  async saveDocumentsSoon(
+    contractId: string,
+    delaysMs: number[] = FILES_RETRY_DELAYS_MS,
+  ): Promise<DocumentsOutcome> {
+    if (this.savingSoon.has(contractId)) return "skipped";
+    this.savingSoon.add(contractId);
+    try {
+      let outcome: DocumentsOutcome = "skipped";
+      for (const delay of delaysMs) {
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, delay).unref();
+        });
+        outcome = await this.saveDocuments(contractId);
+        if (outcome === "saved" || outcome === "skipped") break;
+      }
+      return outcome;
+    } finally {
+      this.savingSoon.delete(contractId);
     }
   }
 

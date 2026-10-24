@@ -760,6 +760,119 @@ describe("Track and file a signed contract (Module 2 step 4, D75, test database)
     });
   });
 
+  describe("the signed files, saved soon after the signing (D77)", () => {
+    /** A contract that is signed in our database, with firma saying `setup` about its files. */
+    const signedContract = async (setup: (firmaId: string) => void) => {
+      const { id, firmaId } = await sentContract();
+      setup(firmaId);
+      await tracking.refreshFromFirma(id);
+      return { id, firmaId };
+    };
+
+    it("saves the files on the first try when firma has them", async () => {
+      const { id } = await signedContract((firmaId) =>
+        firma.setSigned(firmaId),
+      );
+
+      await expect(tracking.saveDocumentsSoon(id, [1, 1])).resolves.toBe(
+        "saved",
+      );
+
+      expect((await contractRow(id)).signed_pdf_key).toBe(
+        `contracts/${id}/signed.pdf`,
+      );
+      expect(firma.downloads).toHaveLength(2);
+    });
+
+    it("tries again when firma has no links yet, and saves on the second try", async () => {
+      const { id, firmaId } = await signedContract((firmaId) =>
+        firma.set(firmaId, {
+          status: "finished",
+          endedAt: new Date("2026-10-22T15:00:00Z"),
+        }),
+      );
+      // firma has the files by the time it is asked the second time.
+      const lookup = firma.getSigningRequest.bind(firma);
+      let asked = 0;
+      firma.getSigningRequest = async (...args) => {
+        const state = await lookup(...args);
+        if (++asked === 1) firma.setSigned(firmaId);
+        return state;
+      };
+
+      await expect(tracking.saveDocumentsSoon(id, [1, 1])).resolves.toBe(
+        "saved",
+      );
+
+      expect(asked).toBe(2);
+      expect((await contractRow(id)).signed_pdf_key).not.toBeNull();
+    });
+
+    it("gives up after its last try, records the reason, and leaves the rest to the job", async () => {
+      const { id, firmaId } = await signedContract((firmaId) =>
+        firma.setSigned(firmaId),
+      );
+      firma.files.set(
+        `https://files.test/${firmaId}/final.pdf`,
+        new FirmaError("The download from firma broke off.", null),
+      );
+
+      await expect(tracking.saveDocumentsSoon(id, [1, 1])).resolves.toBe(
+        "failed",
+      );
+
+      const row = await contractRow(id);
+      expect(row.signed_pdf_key).toBeNull();
+      expect(row.documents_error).toContain("broke off");
+      expect(firma.lookups.filter((l) => l.id === firmaId).length).toBe(3); // the signing check plus two tries
+      firma.setSigned(firmaId);
+      await job.run(); // the scheduled job still saves them
+      expect((await contractRow(id)).signed_pdf_key).not.toBeNull();
+    });
+
+    it("does nothing for a contract that is not signed or is already saved", async () => {
+      const { id: waiting } = await sentContract();
+      await expect(tracking.saveDocumentsSoon(waiting, [1])).resolves.toBe(
+        "skipped",
+      );
+
+      const { id } = await signedContract((firmaId) =>
+        firma.setSigned(firmaId),
+      );
+      await tracking.saveDocuments(id);
+      const downloads = firma.downloads.length;
+      await expect(tracking.saveDocumentsSoon(id, [1])).resolves.toBe(
+        "skipped",
+      );
+      expect(firma.downloads).toHaveLength(downloads);
+    });
+
+    it("runs one loop per contract when the event arrives twice", async () => {
+      const { id } = await signedContract((firmaId) =>
+        firma.setSigned(firmaId),
+      );
+
+      const [first, second] = await Promise.all([
+        tracking.saveDocumentsSoon(id, [5]),
+        tracking.saveDocumentsSoon(id, [5]),
+      ]);
+
+      expect([first, second].sort()).toEqual(["saved", "skipped"]);
+      expect(firma.downloads).toHaveLength(2);
+    });
+
+    it("the webhook answers at once and does not wait for the files", async () => {
+      const { id, firmaId } = await sentContract();
+      firma.setSigned(firmaId);
+
+      const answer = await deliver(event("signing_request.completed", firmaId));
+
+      expect(answer).toEqual({ result: "refreshed: signed" });
+      expect(firma.downloads).toHaveLength(0); // the first try is about 30 seconds away
+      expect((await contractRow(id)).signed_pdf_key).toBeNull();
+    });
+  });
+
   describe("Contract signed on the driver", () => {
     it("keeps an admin's earlier tick: its date and admin stay", async () => {
       await driversService.setOnboardingStep(

@@ -16,6 +16,7 @@ import type { Request } from "express";
 import { Public } from "../auth/public.decorator.js";
 import { verifyFirmaSignature } from "../firma/verify-firma-signature.js";
 import { ContractTrackingService } from "./contract-tracking.service.js";
+import { ContractStatus } from "./contract.entity.js";
 
 /** firma wants an answer within 5 seconds: each of our calls to firma gets this much. */
 const WEBHOOK_LOOKUP_TIMEOUT_MS = 3_000;
@@ -90,6 +91,10 @@ export class FirmaWebhookController {
       this.logger.log(
         `firma ${type} for contract ${contract.id} (${firmaId}): now ${status}.`,
       );
+      // firma makes the files about 20 s after the signing, too late for this answer: save them in the background (D77).
+      if (status === ContractStatus.signed) {
+        void this.tracking.saveDocumentsSoon(contract.id);
+      }
       return { result: `refreshed: ${status}` };
     } catch (error) {
       // The service already logged the reason with the contract id. 500 makes firma try again.
