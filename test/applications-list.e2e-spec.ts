@@ -1,4 +1,3 @@
-import type { ConfigService } from "@nestjs/config";
 import type { MessageTemplatesService } from "../src/message-templates/message-templates.service.js";
 import { plainToInstance } from "class-transformer";
 import { validateSync } from "class-validator";
@@ -67,7 +66,6 @@ describe("GET /applications: search, status and pages (test database)", () => {
       new PasswordService(),
       {} as SmsService,
       {} as ApplicationAlertService,
-      { getOrThrow: () => "https://app.test" } as unknown as ConfigService,
       null,
       {} as MessageTemplatesService,
     );

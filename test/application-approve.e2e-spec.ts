@@ -2,7 +2,6 @@ import {
   BadRequestException,
   ServiceUnavailableException,
 } from "@nestjs/common";
-import type { ConfigService } from "@nestjs/config";
 import type { DataSource } from "typeorm";
 import {
   Application,
@@ -72,7 +71,6 @@ describe("Approve and decline send texts (test database)", () => {
       {
         notifyInBackground: () => undefined,
       } as unknown as ApplicationAlertService,
-      { getOrThrow: () => "https://app.test" } as unknown as ConfigService,
       null,
       new MessageTemplatesService(db.getRepository(MessageTemplate)),
     );
@@ -124,36 +122,32 @@ describe("Approve and decline send texts (test database)", () => {
     await db.destroy();
   });
 
-  describe("approve (B71, D52)", () => {
-    it("dry_run: sends the approved template filled in, then the login; the password in it works", async () => {
+  describe("approve (B71, D78)", () => {
+    it("dry_run: sends only the approved template filled in (no login text, D78) and creates the login", async () => {
       const approved = await service("dry_run").approve(applicationId, adminId);
 
       expect(approved.status).toBe("approved");
       expect(quo.sent).toEqual([]); // dry run: nothing leaves
 
-      const [approvedText, loginText] = await texts();
-      expect(approvedText).toMatchObject({
-        body: "Approved: Pat Applicant",
-        status: "composed",
-        mode: "dry_run",
-        contact_phone: "+13057210909",
-      });
-      expect(loginText.body).toContain("Email: pat@test.dev");
-      expect(loginText.body).toContain("https://app.test/driver/login");
+      expect(await texts()).toEqual([
+        expect.objectContaining({
+          body: "Approved: Pat Applicant",
+          status: "composed",
+          mode: "dry_run",
+          contact_phone: "+13057210909",
+        }),
+      ]);
 
-      // The password in the text is the one that opens the account, and the email needs no confirmation.
-      const password = /Temporary password: (\S+)/.exec(loginText.body)![1];
+      // The login exists (nobody knows its password yet) and the email needs no confirmation.
       const [user] = (await db.query(
-        `SELECT password_hash, must_change_password, email_verified_at, role FROM users WHERE email = 'pat@test.dev'`,
+        `SELECT must_change_password, email_verified_at, role FROM users WHERE email = 'pat@test.dev'`,
       )) as [
         {
-          password_hash: string;
           must_change_password: boolean;
           email_verified_at: Date | null;
           role: string;
         },
       ];
-      expect(await passwords.verify(password, user.password_hash)).toBe(true);
       expect(user).toMatchObject({
         must_change_password: true,
         role: "driver",
@@ -180,13 +174,13 @@ describe("Approve and decline send texts (test database)", () => {
       expect((await texts())[0].body).toBe("Approved: Pat Applicant");
     });
 
-    it("with a message: sends exactly the admin's edited text, placeholders filled in, then the login", async () => {
+    it("with a message: sends exactly the admin's edited text, placeholders filled in", async () => {
       await service("dry_run").approve(applicationId, adminId, {
         message: "Welcome {firstName}!\nCall us at 555-0100.",
       });
-      const [approvedText, loginText] = await texts();
-      expect(approvedText.body).toBe("Welcome Pat!\nCall us at 555-0100.");
-      expect(loginText.body).toContain("Temporary password:");
+      const sent = await texts();
+      expect(sent).toHaveLength(1);
+      expect(sent[0].body).toBe("Welcome Pat!\nCall us at 555-0100.");
     });
 
     it("a message with an unknown placeholder is refused and nothing is approved", async () => {
@@ -199,15 +193,12 @@ describe("Approve and decline send texts (test database)", () => {
       expect(await count("sms_messages")).toBe(0);
     });
 
-    it("live: sends both texts through Quo to the application's phone", async () => {
+    it("live: sends the approved text through Quo to the application's phone, and nothing else", async () => {
       await service("live").approve(applicationId, adminId);
 
-      expect(quo.sent.map((s) => s.to)).toEqual([
-        "+13057210909",
-        "+13057210909",
+      expect(quo.sent).toEqual([
+        { to: "+13057210909", text: "Approved: Pat Applicant" },
       ]);
-      expect(quo.sent[0].text).toBe("Approved: Pat Applicant");
-      expect(quo.sent[1].text).toContain("Temporary password:");
     });
 
     it("off: refuses and creates nothing", async () => {
@@ -232,19 +223,6 @@ describe("Approve and decline send texts (test database)", () => {
       expect((error as Error).message).toContain("nothing was approved");
       expect((error as Error).message).toContain("no credits");
       expect(await count("users WHERE role = 'driver'")).toBe(0);
-      expect(await count("drivers")).toBe(0);
-      expect(await statusOf()).toBe("pending");
-    });
-
-    it("live: when the login text fails after the approved text, nothing is approved", async () => {
-      quo.failSend = new QuoApiError(402, "Subscription expired");
-      quo.failAfter = 1; // the approved text goes out, the login text fails
-
-      const error = await service("live")
-        .approve(applicationId, adminId)
-        .catch((e: unknown) => e);
-
-      expect((error as Error).message).toContain("The login text");
       expect(await count("drivers")).toBe(0);
       expect(await statusOf()).toBe("pending");
     });

@@ -927,3 +927,25 @@ demo, and the data we hold about drivers' identity stays as small and as quiet a
 - **The job stays.** The waits are timers in the server's memory: a deploy or restart inside those 2 minutes drops them, and a missed webhook never starts them. The 5-minute job is what cannot be skipped (D75); this only makes the usual case fast.
 - **Screen:** the contract query also looks again every 15 s while a contract is signed and its files are not saved, so the banner turns to "saved" and the links appear without a reload (before, it looked again only while the contract waited for the driver).
 **Why:** a driver or admin who has just signed should see the file in about a minute, not up to five, and without reloading. No new state is stored, so no migration.
+
+### D78 — 2026-10-24 — The login text (email and temporary password) is no longer sent on approval (changes D52; Abulkalam)
+- Approving an application (from its page, or by "Add driver", D79) sends **one** text: the approval template. The second, fixed text with the driver's
+  email and temporary password is gone for now. Removed from `ApplicationsService.approve`; `driver-welcome.text.ts` stays, unused, so bringing it back is a
+  small change (B99). No setting: the client asked to skip it for the time being, and a switch nobody asked for is not built.
+- **Consequence:** the driver's login is still created (role `driver`, `mustChangePassword`, email verified) with a random password nobody sees, so **a driver
+  approved now cannot log in**. There is no password-reset or "set your password" route yet. `dry_run` no longer shows credentials in the chat either.
+- `SMS_MODE` still governs the approval text: `off` refuses the approval, `live` really sends it (also on staging). `ConfigService` / `WEB_APP_URL` are no
+  longer used by `ApplicationsService` (the login link was the only use); the env variable itself stays.
+
+### D79 — 2026-10-24 — An admin-added application is approved on save; "Add driver" on the Drivers page (partly replaces D68; Abulkalam, the client's request)
+- The client wants to add a driver quickly, so `POST /applications/manual` now **approves the application it saves**, through the same `approve()` (one code
+  path, as D68 wanted). The response gains `driverId`. The same form serves "Add application" (Applications page) and "Add driver" (Drivers page,
+  route `/admin/drivers/new`); both approve, and after saving the admin lands on the new driver's page.
+- **Checked before anything is stored:** a valid, textable US phone, no driver with this email or phone, no login with this email (`assertCanBecomeDriver`,
+  shared with `approve`), so a bad form saves nothing and uploads no files.
+- **Approval still fails after saving** (the approval text could not be sent: Quo down, `SMS_MODE=off`): the application stays `pending`, the answer is the
+  approval's error prefixed "Application saved, but not approved:", and sending the same `request_id` again (the form keeps it) retries the approval
+  without storing anything twice. Approving from the application's page also works.
+- The approval text is the first "approved" template (no choice or edit dialog on this path). The staff alert text for a new application still goes out
+  as before (D53).
+- **Known trade-off:** saving the form is final (no review step), and with D78 the new driver has no way to log in yet.

@@ -2,7 +2,6 @@ import {
   BadRequestException,
   ServiceUnavailableException,
 } from "@nestjs/common";
-import type { ConfigService } from "@nestjs/config";
 import { plainToInstance } from "class-transformer";
 import { validateSync } from "class-validator";
 import type { DataSource } from "typeorm";
@@ -21,7 +20,7 @@ import type {
   QuoMessage,
   QuoMessagePage,
 } from "../src/sms/quo/quo-client.js";
-import { SmsService } from "../src/sms/sms.service.js";
+import { SmsService, type SmsDeps } from "../src/sms/sms.service.js";
 import type { FileStorage } from "../src/sms/storage/file-storage.js";
 import { PasswordService } from "../src/users/password.service.js";
 import { openTestDatabase, seedTestTemplates } from "./test-database.js";
@@ -138,9 +137,12 @@ describe("an admin adds an application by hand (D68, test database)", () => {
   let alerted: number;
   let adminId: string;
 
-  const build = (bucket: FileStorage | null = storage) => {
+  const build = (
+    bucket: FileStorage | null = storage,
+    mode: SmsDeps["mode"] = "dry_run",
+  ) => {
     const sms = new SmsService(db, {
-      mode: "dry_run",
+      mode,
       quo: new FakeQuo(),
       phoneNumberId: "PNtest",
       storage: null,
@@ -155,7 +157,6 @@ describe("an admin adds an application by hand (D68, test database)", () => {
           alerted++;
         },
       } as unknown as ApplicationAlertService,
-      { getOrThrow: () => "https://app.test" } as unknown as ConfigService,
       bucket,
       new MessageTemplatesService(db.getRepository(MessageTemplate)),
     );
@@ -296,7 +297,7 @@ describe("an admin adds an application by hand (D68, test database)", () => {
     });
   });
 
-  it("stores the application in the website's shape, with its three documents and an alert", async () => {
+  it("stores the application in the website's shape, with its three documents and an alert, and approves it", async () => {
     const result = await build().createManual(
       fieldsOf(),
       {
@@ -312,7 +313,7 @@ describe("an admin adds an application by hand (D68, test database)", () => {
       result.id,
     ])) as Record<string, unknown>[];
     expect(row).toMatchObject({
-      status: "pending",
+      status: "approved",
       first_name: "Pat",
       email: "pat.applicant@test.dev",
       phone: "3057210909",
@@ -378,6 +379,8 @@ describe("an admin adds an application by hand (D68, test database)", () => {
     const covered = await service.createManual(
       fieldsOf({
         request_id: "22222222-2222-4222-8222-222222222222",
+        email: "second@test.dev",
+        phone: "(305) 721-0910",
         has_startup_funds: "yes",
         capital: "999",
       }),
@@ -484,7 +487,11 @@ describe("an admin adds an application by hand (D68, test database)", () => {
       adminId,
     );
 
-    expect(again).toEqual({ id: first.id, created: false });
+    expect(again).toEqual({
+      id: first.id,
+      created: false,
+      driverId: first.driverId,
+    });
     expect(await applicationCount()).toBe(1);
     expect(storage.files.size).toBe(1);
     expect(alerted).toBe(1);
@@ -510,28 +517,120 @@ describe("an admin adds an application by hand (D68, test database)", () => {
     expect(alerted).toBe(1);
   });
 
-  it("is then approved like any application: a driver in onboarding with a login", async () => {
-    const service = build();
-    const { id } = await service.createManual(
-      fieldsOf(),
-      licenseOnly(),
-      adminId,
-    );
+  describe("approved straight away (D79)", () => {
+    const driverRows = async () =>
+      (await db.query(
+        `SELECT d.id, d.status, d.phone, d.email, u.role FROM drivers d JOIN users u ON u.id = d.user_id`,
+      )) as {
+        id: string;
+        status: string;
+        phone: string;
+        email: string;
+        role: string;
+      }[];
+    const textCount = async () =>
+      (
+        (await db.query(`SELECT COUNT(*)::int AS n FROM sms_messages`)) as [
+          { n: number },
+        ]
+      )[0].n;
 
-    const detail = await service.findOne(id);
-    expect(detail.createdBy).toEqual({ id: adminId, email: "admin@test.dev" });
+    it("creates the driver in onboarding with a login, and sends the approval text only", async () => {
+      const service = build();
+      const result = await service.createManual(
+        fieldsOf(),
+        licenseOnly(),
+        adminId,
+      );
 
-    const approved = await service.approve(id, adminId);
-    expect(approved).toMatchObject({ status: "approved" });
-    expect(approved.createdBy?.email).toBe("admin@test.dev");
-    const [driver] = (await db.query(
-      `SELECT d.status, d.phone, d.email, u.role FROM drivers d JOIN users u ON u.id = d.user_id`,
-    )) as { status: string; phone: string; email: string; role: string }[];
-    expect(driver).toEqual({
-      status: "onboarding",
-      phone: "+13057210909",
-      email: "pat.applicant@test.dev",
-      role: "driver",
+      const [driver] = await driverRows();
+      expect(driver).toMatchObject({
+        status: "onboarding",
+        phone: "+13057210909",
+        email: "pat.applicant@test.dev",
+        role: "driver",
+      });
+      expect(result.driverId).toBe(driver.id);
+
+      const detail = await service.findOne(result.id);
+      expect(detail).toMatchObject({
+        status: "approved",
+        driverId: driver.id,
+        reviewedById: adminId,
+      });
+      expect(detail.createdBy).toEqual({
+        id: adminId,
+        email: "admin@test.dev",
+      });
+      expect(await textCount()).toBe(1);
+    });
+
+    it("refuses an email a driver already has, before storing anything", async () => {
+      const service = build();
+      await service.createManual(fieldsOf(), licenseOnly(), adminId);
+
+      await expect(
+        service.createManual(
+          fieldsOf({
+            request_id: "33333333-3333-4333-8333-333333333333",
+            phone: "(305) 721-0911",
+          }),
+          licenseOnly(),
+          adminId,
+        ),
+      ).rejects.toThrow("A driver with this email already exists.");
+      expect(await applicationCount()).toBe(1);
+      expect(storage.files.size).toBe(1);
+      expect(alerted).toBe(1);
+    });
+
+    it("refuses a phone a driver already has, before storing anything", async () => {
+      const service = build();
+      await service.createManual(fieldsOf(), licenseOnly(), adminId);
+
+      await expect(
+        service.createManual(
+          fieldsOf({
+            request_id: "33333333-3333-4333-8333-333333333333",
+            email: "other@test.dev",
+          }),
+          licenseOnly(),
+          adminId,
+        ),
+      ).rejects.toThrow("A driver with this phone number already exists.");
+      expect(await applicationCount()).toBe(1);
+    });
+
+    it("refuses a phone that is not a valid US number, before storing anything", async () => {
+      const dto = fieldsOf();
+      dto.phone = "0000000000";
+      await expect(
+        build().createManual(dto, licenseOnly(), adminId),
+      ).rejects.toThrow(BadRequestException);
+      expect(await applicationCount()).toBe(0);
+      expect(storage.files.size).toBe(0);
+    });
+
+    it("when approval fails after saving, the application stays pending and a retry approves it", async () => {
+      // SMS off: approval refuses, so nothing can be approved.
+      await expect(
+        build(storage, "off").createManual(fieldsOf(), licenseOnly(), adminId),
+      ).rejects.toThrow(/Application saved, but not approved/);
+      expect(await applicationCount()).toBe(1);
+      expect(storage.files.size).toBe(1);
+      expect(await driverRows()).toEqual([]);
+
+      // The same request_id again, with texts working: the saved application is approved, nothing is stored twice.
+      const again = await build().createManual(
+        fieldsOf(),
+        licenseOnly(),
+        adminId,
+      );
+      expect(again.created).toBe(false);
+      const [driver] = await driverRows();
+      expect(again.driverId).toBe(driver.id);
+      expect(await applicationCount()).toBe(1);
+      expect(storage.files.size).toBe(1);
     });
   });
 
