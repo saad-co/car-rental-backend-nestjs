@@ -10,7 +10,6 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import { isEmail } from "class-validator";
 import {
@@ -24,11 +23,14 @@ import {
 } from "typeorm";
 import { likePattern, phoneDigits } from "../common/search.js";
 import { isUniqueViolation } from "../database/postgres-errors.js";
-import { driverWelcomeText } from "../drivers/driver-welcome.text.js";
 import { Driver } from "../drivers/driver.entity.js";
 import { toUsE164 } from "../drivers/us-phone.js";
 import { TemplateKind } from "../message-templates/message-template.entity.js";
 import { MessageTemplatesService } from "../message-templates/message-templates.service.js";
+import {
+  invalidUsNumberMessage,
+  isTextableUsNumber,
+} from "../sms/quo/quo-failure-message.js";
 import { SmsContactKind } from "../sms/sms-contact.js";
 import { SmsService } from "../sms/sms.service.js";
 import type { FileStorage } from "../sms/storage/file-storage.js";
@@ -83,8 +85,6 @@ type Submission = Record<string, unknown>;
 @Injectable()
 export class ApplicationsService {
   private readonly logger = new Logger(ApplicationsService.name);
-  /** Base address of the web app, for the login link in the text. */
-  private readonly webAppUrl: string;
 
   constructor(
     @InjectRepository(Application)
@@ -94,14 +94,11 @@ export class ApplicationsService {
     private readonly passwords: PasswordService,
     private readonly sms: SmsService,
     private readonly alerts: ApplicationAlertService,
-    config: ConfigService,
     /** Our file bucket, to remove copied files when an application is deleted. Null when no bucket is set up. */
     @Inject(FILE_STORAGE) private readonly storage: FileStorage | null,
     /** The approved / declined texts the admin edits in Settings (B73). */
     private readonly templates: MessageTemplatesService,
-  ) {
-    this.webAppUrl = config.getOrThrow<string>("WEB_APP_URL");
-  }
+  ) {}
 
   /**
    * Stores a submission from the gonzocar.com form.
@@ -208,18 +205,45 @@ export class ApplicationsService {
    * The `*_storage_path` columns stay null: they are paths in the WEBSITE's bucket, and leaving them empty keeps the
    * document copier away from these rows. The files are `application_documents` rows with `origin = admin`.
    *
-   * @throws BadRequestException a missing licence, or a file that is not a JPG, PNG or PDF of at most 10 MB.
+   * It is then approved straight away (D79): the admin typing it in is the review. What approval would refuse (a
+   * phone that is not a US number, an email or phone a driver or login already has) is checked first, so a bad
+   * form stores nothing. If approval still fails after the application is saved (the approval text could not be
+   * sent), the application stays pending and the error says so; approving it from its page retries.
+   *
+   * @throws BadRequestException a missing licence, a file that is not a JPG, PNG or PDF of at most 10 MB, or a
+   *   phone that is not a valid US number.
+   * @throws ConflictException a driver or login already has this email, or a driver has this phone.
    * @throws ServiceUnavailableException no file bucket is set up.
+   * @throws HttpException the approval failed after saving ("Application saved, but not approved: ...").
    */
   async createManual(
     fields: ManualApplicationDto,
     files: ManualApplicationFiles,
     adminId: string,
-  ): Promise<{ id: string; created: boolean }> {
+  ): Promise<{ id: string; created: boolean; driverId: string | null }> {
     const existing = await this.applications.findOneBy({
       requestId: fields.request_id,
     });
-    if (existing) return { id: existing.id, created: false };
+    if (existing) {
+      // A repeat (double click, retry). If the first try saved it but could not approve it, try again.
+      const driverId =
+        existing.status === ApplicationStatus.pending
+          ? await this.approveSaved(existing.id, adminId)
+          : existing.driverId;
+      return { id: existing.id, created: false, driverId };
+    }
+
+    const phone = await this.assertCanBecomeDriver(
+      this.dataSource.manager,
+      fields.email,
+      fields.phone,
+    );
+    // The approval text goes to this number, so one that cannot get texts would fail the approval after saving.
+    if (!isTextableUsNumber(phone)) {
+      throw new BadRequestException(
+        `${invalidUsNumberMessage(phone)} Check the phone number.`,
+      );
+    }
 
     if (!files.license) {
       throw new BadRequestException(
@@ -240,6 +264,7 @@ export class ApplicationsService {
 
     const applicationId = randomUUID();
     const putKeys: string[] = [];
+    let savedId: string;
     try {
       const stored: {
         kind: ApplicationDocumentKind;
@@ -297,15 +322,46 @@ export class ApplicationsService {
       });
       // Staff are told by text, like for a website application (D53). Not waited for; never throws.
       this.alerts.notifyInBackground(saved);
-      return { id: saved.id, created: true };
+      // Outside this try: a failed approval must not remove the files of an application that is saved.
+      savedId = saved.id;
     } catch (error) {
       await this.removeFiles(putKeys);
       if (isUniqueViolation(error)) {
         // `request_id` is the only unique value an admin's form sets, so this is a repeat that raced us.
+        // The request that won approves it, so this one does not.
         const winner = await this.applications.findOneBy({
           requestId: fields.request_id,
         });
-        if (winner) return { id: winner.id, created: false };
+        if (winner) {
+          return { id: winner.id, created: false, driverId: winner.driverId };
+        }
+      }
+      throw error;
+    }
+    return {
+      id: savedId,
+      created: true,
+      driverId: await this.approveSaved(savedId, adminId),
+    };
+  }
+
+  /**
+   * Approves an application that `createManual` has saved, with the normal approval text (D79).
+   * @returns the new driver's id.
+   * @throws HttpException the reason approval failed, prefixed so the admin knows the application was saved.
+   */
+  private async approveSaved(
+    id: string,
+    adminId: string,
+  ): Promise<string | null> {
+    try {
+      return (await this.approve(id, adminId)).driverId;
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw new HttpException(
+          `Application saved, but not approved: ${error.message}`,
+          error.getStatus(),
+        );
       }
       throw error;
     }
@@ -387,22 +443,18 @@ export class ApplicationsService {
   /**
    * Approves an application, in one transaction:
    * 1. creates the driver's login (`users`, role `driver`) with a generated password, required to
-   *    change it at first login (D26). The email counts as confirmed from the start: the driver
-   *    gets the login by text, which proves the phone, so there is no confirmation link (D52);
+   *    change it at first login (D26). The email counts as confirmed from the start (D52). The
+   *    password is not sent while the login text is paused (D78), so the driver cannot log in yet;
    * 2. creates the Driver, linked to that login;
    * 3. marks the application approved;
    * 4. texts the applicant the approval text (B71, B81: the one the admin picked and edited, or the first "approved"
-   *    template from Settings), then their email and
-   *    temporary password (D52), as two texts through the same chat as every other text: sent when
-   *    SMS_MODE is `live`, saved as "Dry run: not sent" when `dry_run` (the admin can read them in
-   *    the chat and pass them on), refused when `off`. The login text is fixed in code, never a
-   *    template: an edit must never be able to break the credentials.
+   *    template from Settings), through the same chat as every other text: sent when SMS_MODE is
+   *    `live`, saved as "Dry run: not sent" when `dry_run`, refused when `off`. The login text
+   *    (email and temporary password, D52) is no longer sent (D78).
    *
-   * The texts are sent last, inside the transaction: if one fails, everything is rolled back and
+   * The text is sent last, inside the transaction: if it fails, everything is rolled back and
    * the admin can simply try again. (A text that went out before the failure stays in the chat:
-   * it really was sent. The reverse, texts sent but the commit failing, is very unlikely; the
-   * driver would hold a password for an account that does not exist, and approving again sends
-   * a new one.)
+   * it really was sent. The reverse, the text sent but the commit failing, is very unlikely.)
    *
    * @param adminId the admin approving it (stored as the reviewer).
    * @param options.message the approval text to send; the first approved template when missing.
@@ -418,43 +470,19 @@ export class ApplicationsService {
     options: { message?: string } = {},
   ): Promise<ApplicationDetailDto> {
     // Prepared before the transaction: hashing is deliberately slow, and the row lock taken
-    // inside should be held as briefly as possible.
-    const temporaryPassword = this.passwords.generate();
-    const passwordHash = await this.passwords.hash(temporaryPassword);
+    // inside should be held as briefly as possible. The password is not sent to anyone while the
+    // login text is paused (D78), so nobody knows it: the driver cannot log in yet.
+    const passwordHash = await this.passwords.hash(this.passwords.generate());
 
     try {
       const approved = await this.dataSource.transaction(async (manager) => {
         const application = await this.loadForReview(manager, id);
 
-        const phone = toUsE164(application.phone);
-        if (!phone) {
-          throw new BadRequestException(
-            `Phone "${application.phone}" is not a valid US number, so no driver can be created.`,
-          );
-        }
-
-        // Checked first only to give a precise message. The unique constraints on `drivers`
-        // still decide if two approvals race; that case is caught below.
-        const existing = await manager.findOne(Driver, {
-          where: [{ email: application.email }, { phone }],
-        });
-        if (existing) {
-          throw new ConflictException(
-            existing.email === application.email
-              ? "A driver with this email already exists."
-              : "A driver with this phone number already exists.",
-          );
-        }
-
-        // The admin account, or a login left over from an earlier driver, may use this email.
-        const existingLogin = await manager.findOne(User, {
-          where: { email: application.email },
-        });
-        if (existingLogin) {
-          throw new ConflictException(
-            "A login with this email already exists.",
-          );
-        }
+        const phone = await this.assertCanBecomeDriver(
+          manager,
+          application.email,
+          application.phone,
+        );
 
         const user = await manager.save(
           manager.create(User, {
@@ -493,18 +521,6 @@ export class ApplicationsService {
           "The approval text",
           "nothing was approved",
         );
-        await this.sendOrFail(
-          application,
-          driverWelcomeText({
-            firstName: application.firstName,
-            email: application.email,
-            temporaryPassword,
-            loginUrl: `${this.webAppUrl}/driver/login`,
-          }),
-          adminId,
-          "The login text",
-          "nothing was approved",
-        );
         return saved;
       });
       return await this.findOne(approved.id);
@@ -516,6 +532,44 @@ export class ApplicationsService {
       }
       throw error;
     }
+  }
+
+  /**
+   * What approval needs to be true of an applicant's email and phone, checked first only to give a precise message.
+   * The unique constraints on `drivers` still decide if two approvals race; `approve` catches that case.
+   * @returns the phone as E.164 (+1...), as stored on the driver.
+   * @throws BadRequestException if the phone is not a valid US number.
+   * @throws ConflictException if a driver has this email or phone, or a login (an admin's, or one left over from an
+   *   earlier driver) has this email.
+   */
+  private async assertCanBecomeDriver(
+    manager: EntityManager,
+    email: string,
+    rawPhone: string,
+  ): Promise<string> {
+    const phone = toUsE164(rawPhone);
+    if (!phone) {
+      throw new BadRequestException(
+        `Phone "${rawPhone}" is not a valid US number, so no driver can be created.`,
+      );
+    }
+
+    const existing = await manager.findOne(Driver, {
+      where: [{ email }, { phone }],
+    });
+    if (existing) {
+      throw new ConflictException(
+        existing.email === email
+          ? "A driver with this email already exists."
+          : "A driver with this phone number already exists.",
+      );
+    }
+
+    const existingLogin = await manager.findOne(User, { where: { email } });
+    if (existingLogin) {
+      throw new ConflictException("A login with this email already exists.");
+    }
+    return phone;
   }
 
   /**

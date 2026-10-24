@@ -1,5 +1,4 @@
 import { BadRequestException } from "@nestjs/common";
-import type { ConfigService } from "@nestjs/config";
 import { plainToInstance } from "class-transformer";
 import { validateSync } from "class-validator";
 import type { DataSource } from "typeorm";
@@ -84,7 +83,6 @@ describe("Date range on the lists (B82, test database)", () => {
       new PasswordService(),
       {} as SmsService,
       {} as ApplicationAlertService,
-      { getOrThrow: () => "https://app.test" } as unknown as ConfigService,
       null,
       {} as MessageTemplatesService,
     );

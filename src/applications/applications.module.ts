@@ -34,7 +34,7 @@ import {
  * also how `autoLoadEntities` learns which entities exist. `Driver` is listed because
  * `Application` has a relation to it: TypeORM refuses to start if a relation points at an
  * entity it does not know. `UsersModule` (PasswordService) and `SmsModule` are needed by
- * approval, which creates the driver's login and texts it (D52).
+ * approval, which creates the driver's login and texts the applicant the approval text.
  */
 @Module({
   imports: [

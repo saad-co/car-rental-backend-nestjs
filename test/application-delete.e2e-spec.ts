@@ -1,6 +1,5 @@
 import { ConflictException } from "@nestjs/common";
 import type { MessageTemplatesService } from "../src/message-templates/message-templates.service.js";
-import type { ConfigService } from "@nestjs/config";
 import { plainToInstance } from "class-transformer";
 import { validateSync } from "class-validator";
 import type { DataSource } from "typeorm";
@@ -52,7 +51,6 @@ describe("ApplicationsService.deleteMany (test database)", () => {
       new PasswordService(),
       {} as SmsService,
       {} as ApplicationAlertService,
-      { getOrThrow: () => "https://app.test" } as unknown as ConfigService,
       bucket,
       {} as MessageTemplatesService,
     );

@@ -4,6 +4,22 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-24 — Quick fixes: no login text on approval, admin-added drivers approved on save (D78, D79, B99)
+- **Branch** `fix/quick-fixes` in both repos, worktrees `wt-quick-fixes-backend` / `-frontend` (slot 2: backend :5002, frontend :5175, databases
+  `car_rental_quick_fixes` / `_test`). Rebased on `origin/dev` `693a451` (backend) / `08698b1` (frontend) on 2026-10-24. **Not committed yet.**
+- **Backend:** `approve()` sends only the approval text (login text paused, D78; `driver-welcome.text.ts` kept, unused); `ConfigService` removed from
+  `ApplicationsService`. `createManual()` approves what it saves (D79): `assertCanBecomeDriver` (shared with `approve`) and a textable-phone check run
+  before files are stored; a failed approval leaves the application pending ("Application saved, but not approved: ...") and a repeat of the same
+  `request_id` retries it; the response has `driverId`. `openapi.json` re-exported. No migration.
+- **Frontend:** "Add driver" button on the Drivers page (route `/admin/drivers/new`, the same form as "Add application", both approve; lands on the new
+  driver's page); drivers lists refreshed after saving; Settings text no longer promises a second text; `schema.d.ts` regenerated from the worktree's
+  `openapi.json`.
+- **Verified:** backend lint (3 old warnings), build, unit 276, e2e 407 (approve: one text, no password; manual: approved on save, duplicate email / phone
+  and bad phone store nothing, approval failure then retry); frontend lint, build. **Not done:** UI walkthrough in the browser; real `live` send.
+- **Note:** drivers approved now cannot log in (B99).
+
+---
+
 ### 2026-10-24 — Signed files saved soon after the signing (D77)
 - **Branch** `feature/contracts-save-files` in both repos (slot-1 worktrees `wt-contracts-fixes-backend` / `-frontend`). **Not committed yet.**
 - **Why:** on staging the signed contract waited for the 5-minute job ("being saved" for up to 5 minutes, and the page did not refresh).

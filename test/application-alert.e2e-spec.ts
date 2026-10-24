@@ -78,7 +78,6 @@ describe("new-application alert to staff (test database)", () => {
       new PasswordService(),
       sms,
       alerts,
-      config,
       null,
       {} as MessageTemplatesService,
     );
