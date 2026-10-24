@@ -4,9 +4,21 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-24 — Signed files saved soon after the signing (D77)
+- **Branch** `feature/contracts-save-files` in both repos (slot-1 worktrees `wt-contracts-fixes-backend` / `-frontend`). **Not committed yet.**
+- **Why:** on staging the signed contract waited for the 5-minute job ("being saved" for up to 5 minutes, and the page did not refresh).
+- **Backend:** `ContractTrackingService.saveDocumentsSoon` (tries after 30 s, +30 s, +60 s; one loop per contract; never throws) called by the firma webhook
+  when a contract turns signed, not awaited; the job is unchanged and stays the fallback. **Frontend:** the contract query looks again every 15 s while
+  a signed contract's files are not saved.
+- **Verified:** backend lint (same 3 old warnings), build, e2e `contracts-track` 42 (6 new: first try, second try, gives up and the job still saves,
+  skipped cases, one loop per contract, the webhook answers at once); frontend lint (2 old warnings), build. Full unit and e2e re-run before the PR.
+- **Not done:** the timers are in memory, so a restart inside the first 2 minutes leaves it to the job; no migration. Staging check after deploy.
+
+---
+
 ### 2026-10-24 — Contract fixes and the California contract (D76, B95, B98)
 - **Branch** `feature/contracts-fixes` in both repos, worktrees `wt-contracts-fixes-backend` / `-frontend` (slot 1: backend :5001, frontend :5174,
-  databases `car_rental_contracts_fixes` / `_test`). **Not committed yet.**
+  databases `car_rental_contracts_fixes` / `_test`). **Merged into `dev` (backend PR #32 `5953e67`, frontend PR #23 `d1529ea`); deployed to staging 2026-10-24, a California contract sent from the staging UI to a temp inbox, signed and filed.**
 - **Why:** the first signed contract on staging had stray marks (", ," ". ."), a ragged disclosure table, wrapped lines, an empty "Driver License"
   page, and California was refused. Spike first (S1-S6, D76): firma never removes marker text (the box is the only cover), left-aligns text, keeps
   spaces, shrinks too-long text; `pdf-lib` and `sharp` are safe; an 11.5 MB PDF is refused.
