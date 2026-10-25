@@ -5,7 +5,7 @@ import { validateSync } from "class-validator";
 import type { DataSource } from "typeorm";
 import { PaymentAlias } from "../src/aliases/payment-alias.entity.js";
 import { AuthService } from "../src/auth/auth.service.js";
-import { Driver } from "../src/drivers/driver.entity.js";
+import { Driver, DriverLeftReason } from "../src/drivers/driver.entity.js";
 import { DriversService } from "../src/drivers/drivers.service.js";
 import {
   OnboardingStep,
@@ -26,10 +26,18 @@ describe("Driver onboarding, deactivate and reactivate (D56, test database)", ()
   let driverId: string;
 
   const PASSWORD = "Driver-pass-123";
+  const DEPOSIT_CENTS = 50_000;
+  const LEFT = DriverLeftReason.contractEnded;
   const { contract, deposit, vehicle } = OnboardingStep;
 
   const tick = (step: OnboardingStep, done = true) =>
-    drivers.setOnboardingStep(driverId, step, done, adminId);
+    drivers.setOnboardingStep(
+      driverId,
+      step,
+      done,
+      adminId,
+      step === deposit && done ? DEPOSIT_CENTS : undefined,
+    );
 
   beforeAll(async () => {
     db = await openTestDatabase();
@@ -124,7 +132,7 @@ describe("Driver onboarding, deactivate and reactivate (D56, test database)", ()
   it("deactivate: status inactive, steps kept, login refused; steps locked while inactive", async () => {
     await tick(contract);
 
-    const inactive = await drivers.deactivate(driverId, adminId);
+    const inactive = await drivers.deactivate(driverId, LEFT, adminId);
 
     expect(inactive.status).toBe("inactive");
     expect(inactive.onboarding.contractSignedAt).toBeInstanceOf(Date);
@@ -133,14 +141,14 @@ describe("Driver onboarding, deactivate and reactivate (D56, test database)", ()
     );
     await expect(tick(deposit)).rejects.toBeInstanceOf(ConflictException);
     // Deactivating twice changes nothing.
-    expect((await drivers.deactivate(driverId, adminId)).status).toBe(
+    expect((await drivers.deactivate(driverId, LEFT, adminId)).status).toBe(
       "inactive",
     );
   });
 
   it("reactivate: onboarding when steps are missing, active when all are done; login works again", async () => {
     await tick(contract);
-    await drivers.deactivate(driverId, adminId);
+    await drivers.deactivate(driverId, LEFT, adminId);
 
     expect((await drivers.reactivate(driverId, adminId)).status).toBe(
       "onboarding",
@@ -151,7 +159,7 @@ describe("Driver onboarding, deactivate and reactivate (D56, test database)", ()
 
     await tick(deposit);
     await tick(vehicle);
-    await drivers.deactivate(driverId, adminId);
+    await drivers.deactivate(driverId, LEFT, adminId);
     expect((await drivers.reactivate(driverId, adminId)).status).toBe("active");
     // Reactivating a driver who is not inactive changes nothing.
     expect((await drivers.reactivate(driverId, adminId)).status).toBe("active");
@@ -161,7 +169,7 @@ describe("Driver onboarding, deactivate and reactivate (D56, test database)", ()
     await db.query(`UPDATE drivers SET user_id = NULL WHERE id = $1`, [
       driverId,
     ]);
-    expect((await drivers.deactivate(driverId, adminId)).status).toBe(
+    expect((await drivers.deactivate(driverId, LEFT, adminId)).status).toBe(
       "inactive",
     );
     expect((await drivers.reactivate(driverId, adminId)).status).toBe(

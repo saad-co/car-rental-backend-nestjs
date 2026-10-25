@@ -79,7 +79,10 @@ so the two repos cannot silently drift apart.
 **Driver** — `firstName`, `lastName`, `phone` (E.164), `email`, `status` (`onboarding` | `active` | `inactive`, D56),
 `contractSignedAt`, `depositPaidAt`, `vehicleAssignedAt` (onboarding steps, each with the admin who ticked it),
 `billingType` (`daily` | `weekly`), `billingRateCents`, `billingDueWeekday` (weekly only),
-`billingActive`, `smsOptedOut`, `archivedAt` (D80: archived drivers are hidden and not billed or reminded). A driver is created by "Start onboarding" on an approved application, not by approving (D80). New drivers start `onboarding`; `active` only when all three steps are done (CHECK);
+`billingActive`, `smsOptedOut`, `archivedAt` (D80: archived drivers are hidden and not billed or reminded),
+`depositPaidCents` (D82: the deposit amount typed when the deposit step is ticked), `leftReason` (`contract_ended` |
+`bad_driver` | `cooperative_returned_car`), `leftAt` (D81: set when the driver is deactivated or sent to collections),
+`sentToCollectionsAt` (D81: a flag on an inactive driver, shown on the Collections page). A driver is created by "Start onboarding" on an approved application, not by approving (D80). New drivers start `onboarding`; `active` only when all three steps are done (CHECK);
 an `inactive` driver cannot log in.
 
 **PaymentAlias** — links a payment identity to a driver.
@@ -227,6 +230,8 @@ An admin assigns an unmatched payment to a driver. This posts the payment and **
 - **Applications** — hides archived ones (Show: Archived only lists them); Archive / Unarchive next to Delete (D80).
 - **Approved applications** — approved applicants whose onboarding is not finished, with Start onboarding (D80).
 - **Drivers** — only active and inactive drivers, archived ones hidden (D80); list with balance and late status; detail page with profile, billing settings, aliases (add/remove), ledger history, SMS history.
+- **Collections** — drivers sent to collections (D81): how they left, when sent, balance; the admin messages them from the
+  driver page and can remove them. Passing the account to an outside agency is not built.
 - **Payments** — filterable by status and source. Unrecognised bucket with assign-to-driver. Discrepancy list.
 - **Email log** — every processed email with its outcome and reason (verified? extracted? matched to whom?).
 - **Ledger actions** — manual debit/credit with required reason; reverse an entry. Admin only.

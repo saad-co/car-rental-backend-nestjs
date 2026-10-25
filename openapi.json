@@ -1837,6 +1837,15 @@
             }
           },
           {
+            "name": "collections",
+            "required": false,
+            "in": "query",
+            "description": "`true` lists only drivers in collections (D81), newest sent first, and the date range then filters the day they\nwere sent. `false` leaves them out: the Drivers page, since they are on the Collections page. Omitted: no\ncollections filter, which is what the payment pickers need (money from a driver in collections must still be\nassignable to them).",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
             "name": "archived",
             "required": false,
             "in": "query",
@@ -2059,6 +2068,16 @@
             }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeactivateDriverDto"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "",
@@ -2071,7 +2090,79 @@
             }
           }
         },
-        "summary": "`POST /drivers/:id/deactivate`: the driver left (B67). Their login stops working at once.",
+        "summary": "`POST /drivers/:id/deactivate`: the driver left (B67), and how: `reason` is required (D81). Their login stops\nworking at once.",
+        "tags": [
+          "Drivers"
+        ]
+      }
+    },
+    "/drivers/{id}/collections": {
+      "post": {
+        "operationId": "DriversController_sendToCollections",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendToCollectionsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`POST /drivers/:id/collections`: sends the driver to collections (D81). `reason` is needed when no reason is noted\nyet; the driver is then deactivated in the same step. `409` for a driver still in onboarding.",
+        "tags": [
+          "Drivers"
+        ]
+      }
+    },
+    "/drivers/{id}/remove-from-collections": {
+      "post": {
+        "operationId": "DriversController_removeFromCollections",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`POST /drivers/:id/remove-from-collections`: takes the driver out of collections; they stay inactive.",
         "tags": [
           "Drivers"
         ]
@@ -4735,6 +4826,11 @@
             "type": "string",
             "nullable": true
           },
+          "depositPaidCents": {
+            "type": "number",
+            "nullable": true,
+            "description": "The deposit amount in cents typed when the step was ticked (D82); null if not recorded (ticked before this existed)."
+          },
           "vehicleAssignedAt": {
             "format": "date-time",
             "type": "string",
@@ -4744,6 +4840,7 @@
         "required": [
           "contractSignedAt",
           "depositPaidAt",
+          "depositPaidCents",
           "vehicleAssignedAt"
         ]
       },
@@ -4829,6 +4926,28 @@
             "nullable": true,
             "description": "When an admin archived the driver (D80); null = not archived."
           },
+          "leftReason": {
+            "nullable": true,
+            "description": "How the driver left (D81); null if not inactive, or deactivated before reasons existed (\"reason not recorded\").",
+            "enum": [
+              "contract_ended",
+              "bad_driver",
+              "cooperative_returned_car"
+            ],
+            "type": "string"
+          },
+          "leftAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "When the reason was noted; null with no reason."
+          },
+          "sentToCollectionsAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "When an admin sent the driver to collections (D81); null = not in collections."
+          },
           "aliases": {
             "description": "Every payment alias of the driver, grouped by payment method then by value. Empty if none yet.",
             "type": "array",
@@ -4861,6 +4980,9 @@
           "onboarding",
           "createdAt",
           "archivedAt",
+          "leftReason",
+          "leftAt",
+          "sentToCollectionsAt",
           "aliases",
           "paymentCount",
           "lastPaymentAt",
@@ -4908,6 +5030,12 @@
           "done": {
             "type": "boolean",
             "description": "`true` marks the step done (now, by the admin); `false` clears it."
+          },
+          "depositPaidCents": {
+            "type": "number",
+            "description": "The deposit amount in cents (D82). Required when the deposit step is ticked for the first time; may also be sent\nwith an already-ticked deposit to record or correct the amount. Not allowed for the other steps or with `done: false`.",
+            "minimum": 1,
+            "maximum": 2147483647
           }
         },
         "required": [
@@ -4941,6 +5069,35 @@
           "type",
           "value"
         ]
+      },
+      "DeactivateDriverDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "enum": [
+              "contract_ended",
+              "bad_driver",
+              "cooperative_returned_car"
+            ]
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      },
+      "SendToCollectionsDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "enum": [
+              "contract_ended",
+              "bad_driver",
+              "cooperative_returned_car"
+            ]
+          }
+        }
       },
       "InboundEmailProvider": {
         "type": "string",

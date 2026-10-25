@@ -239,6 +239,7 @@ describe("Approved applications, start onboarding, archive (D80, test database)"
         OnboardingStep.deposit,
         true,
         adminId,
+        50_000,
       );
 
       const page = await applications.listApproved(
