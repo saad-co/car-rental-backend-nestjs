@@ -26,4 +26,15 @@ export class ListDriversQueryDto extends ArchivedQueryDto {
   @Transform(queryBoolean)
   @IsBoolean()
   onboarding?: boolean;
+
+  /**
+   * `true` lists only drivers in collections (D81), newest sent first, and the date range then filters the day they
+   * were sent. `false` leaves them out: the Drivers page, since they are on the Collections page. Omitted: no
+   * collections filter, which is what the payment pickers need (money from a driver in collections must still be
+   * assignable to them).
+   */
+  @IsOptional()
+  @Transform(queryBoolean)
+  @IsBoolean()
+  collections?: boolean;
 }

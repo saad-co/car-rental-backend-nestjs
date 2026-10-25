@@ -25,7 +25,11 @@ import { ContractsController } from "../src/contracts/contracts.controller.js";
 import { ContractsService } from "../src/contracts/contracts.service.js";
 import type { ContractInputDto } from "../src/contracts/dto/contract.dto.js";
 import { FirmaWebhookController } from "../src/contracts/firma-webhook.controller.js";
-import { Driver, DriverStatus } from "../src/drivers/driver.entity.js";
+import {
+  Driver,
+  DriverLeftReason,
+  DriverStatus,
+} from "../src/drivers/driver.entity.js";
 import { DriversService } from "../src/drivers/drivers.service.js";
 import { OnboardingStep } from "../src/drivers/dto/set-onboarding-step.dto.js";
 import { PaymentAlias } from "../src/aliases/payment-alias.entity.js";
@@ -288,6 +292,7 @@ describe("Track and file a signed contract (Module 2 step 4, D75, test database)
       OnboardingStep.deposit,
       true,
       admin,
+      50_000,
     );
     await driversService.setOnboardingStep(
       driverId,
@@ -894,7 +899,11 @@ describe("Track and file a signed contract (Module 2 step 4, D75, test database)
 
     it("gives an inactive driver the date but leaves them inactive", async () => {
       await tickDepositAndVehicle();
-      await driversService.deactivate(driverId, admin);
+      await driversService.deactivate(
+        driverId,
+        DriverLeftReason.contractEnded,
+        admin,
+      );
       const { firmaId } = await sentContract();
       firma.setSigned(firmaId);
 

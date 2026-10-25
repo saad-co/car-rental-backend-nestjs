@@ -1,6 +1,6 @@
 import { AliasType } from "../../aliases/normalize-alias.js";
 import { AliasSource } from "../../aliases/payment-alias.entity.js";
-import { DriverStatus } from "../driver.entity.js";
+import { DriverLeftReason, DriverStatus } from "../driver.entity.js";
 
 /** One payment alias of a driver: a name, handle or company they pay from, under a payment method. */
 export class DriverAliasDto {
@@ -20,6 +20,8 @@ export class DriverAliasDto {
 export class DriverOnboardingDto {
   contractSignedAt: Date | null;
   depositPaidAt: Date | null;
+  /** The deposit amount in cents typed when the step was ticked (D82); null if not recorded (ticked before this existed). */
+  depositPaidCents: number | null;
   vehicleAssignedAt: Date | null;
 }
 
@@ -38,6 +40,12 @@ export class DriverDto {
   createdAt: Date;
   /** When an admin archived the driver (D80); null = not archived. */
   archivedAt: Date | null;
+  /** How the driver left (D81); null if not inactive, or deactivated before reasons existed ("reason not recorded"). */
+  leftReason: DriverLeftReason | null;
+  /** When the reason was noted; null with no reason. */
+  leftAt: Date | null;
+  /** When an admin sent the driver to collections (D81); null = not in collections. */
+  sentToCollectionsAt: Date | null;
   /** Every payment alias of the driver, grouped by payment method then by value. Empty if none yet. */
   aliases: DriverAliasDto[];
   /** Number of payments assigned to this driver. */

@@ -15,7 +15,7 @@ import { isUniqueViolation } from "../database/postgres-errors.js";
 import { likePattern, phoneDigits } from "../common/search.js";
 import { Payment } from "../payments/payment.entity.js";
 import { User } from "../users/user.entity.js";
-import { Driver, DriverStatus } from "./driver.entity.js";
+import { Driver, DriverLeftReason, DriverStatus } from "./driver.entity.js";
 import { AddAliasDto } from "./dto/add-alias.dto.js";
 import { DriverDto, DriverListDto } from "./dto/driver.dto.js";
 import { ListDriversQueryDto } from "./dto/list-drivers-query.dto.js";
@@ -61,8 +61,22 @@ export class DriversService {
         onboarding: DriverStatus.onboarding,
       });
     }
-    // The "Since" day: when the driver was created (B82).
-    addDateRange(builder, "d.createdAt", query);
+    // The Collections page (D81): only drivers sent to collections, the latest first, dated by the day they were sent.
+    if (query.collections) {
+      builder
+        .andWhere("d.sentToCollectionsAt IS NOT NULL")
+        .orderBy("d.sentToCollectionsAt", "DESC")
+        .addOrderBy("d.id", "DESC");
+    } else if (query.collections === false) {
+      // The Drivers page leaves them out: they are on the Collections page (D81).
+      builder.andWhere("d.sentToCollectionsAt IS NULL");
+    }
+    // The "Since" day: when the driver was created (B82); on the Collections page, when they were sent.
+    addDateRange(
+      builder,
+      query.collections ? "d.sentToCollectionsAt" : "d.createdAt",
+      query,
+    );
     if (query.search) {
       const digits = phoneDigits(query.search);
       builder.andWhere(
@@ -112,7 +126,12 @@ export class DriversService {
    * One transaction with the driver's row locked (`FOR UPDATE`): two admins ticking the last two steps at the same
    * moment both see the other's change, so the driver always ends up with the right status.
    *
+   * The deposit step also takes the amount paid (`depositPaidCents`, D82): required the first time it is ticked, kept
+   * with the step, cleared when the step is un-ticked. Sending an amount with an already-ticked deposit records or
+   * corrects it (the way to fill in drivers ticked before amounts existed).
+   *
    * @throws NotFoundException unknown driver.
+   * @throws BadRequestException the deposit is ticked without an amount, or an amount comes with another step or an un-tick.
    * @throws ConflictException the driver is inactive (reactivate first).
    */
   async setOnboardingStep(
@@ -120,7 +139,16 @@ export class DriversService {
     step: OnboardingStep,
     done: boolean,
     adminId: string,
+    depositPaidCents?: number,
   ): Promise<DriverDto> {
+    if (
+      depositPaidCents !== undefined &&
+      (step !== OnboardingStep.deposit || !done)
+    ) {
+      throw new BadRequestException(
+        "An amount goes only with ticking the deposit step.",
+      );
+    }
     await this.drivers.manager.transaction(async (manager) => {
       const driver = await this.lockDriver(manager, id);
       if (driver.status === DriverStatus.inactive) {
@@ -130,11 +158,20 @@ export class DriversService {
       }
       const [at, by] = STEP_FIELDS[step];
       if (done && driver[at] === null) {
+        if (step === OnboardingStep.deposit && depositPaidCents === undefined) {
+          throw new BadRequestException("Enter the deposit amount paid.");
+        }
         driver[at] = new Date();
         driver[by] = adminId;
+        if (step === OnboardingStep.deposit) {
+          driver.depositPaidCents = depositPaidCents ?? null;
+        }
+      } else if (done && depositPaidCents !== undefined) {
+        driver.depositPaidCents = depositPaidCents;
       } else if (!done) {
         driver[at] = null;
         driver[by] = null;
+        if (step === OnboardingStep.deposit) driver.depositPaidCents = null;
       }
       driver.status = statusFromSteps(driver);
       await manager.save(driver);
@@ -181,27 +218,38 @@ export class DriversService {
   /**
    * Marks a driver inactive (they left, B67) and turns off their login in the same transaction: `users.active` is
    * read on every request (JwtAuthGuard), so an open session ends at the next click, and logging in is refused.
-   * Steps are kept. Deactivating an inactive driver changes nothing.
+   * Steps are kept. How they left is always noted (D81): `reason` is required and is stored with the date and the admin.
+   * Deactivating a driver who already left with a reason changes nothing (the first reason stands); an inactive driver
+   * from before reasons existed gets the reason noted now.
    *
    * @throws NotFoundException unknown driver.
    */
-  async deactivate(id: string, adminId: string): Promise<DriverDto> {
+  async deactivate(
+    id: string,
+    reason: DriverLeftReason,
+    adminId: string,
+  ): Promise<DriverDto> {
     await this.drivers.manager.transaction(async (manager) => {
       const driver = await this.lockDriver(manager, id);
-      if (driver.status === DriverStatus.inactive) return;
-      driver.status = DriverStatus.inactive;
-      await manager.save(driver);
-      if (driver.userId) {
-        await manager.update(User, driver.userId, { active: false });
+      if (
+        driver.status === DriverStatus.inactive &&
+        driver.leftReason !== null
+      ) {
+        return;
       }
-      this.logger.log(`Admin ${adminId} deactivated driver ${id}.`);
+      await this.leave(manager, driver, reason, adminId);
+      await manager.save(driver);
+      this.logger.log(
+        `Admin ${adminId} deactivated driver ${id}; reason ${reason}.`,
+      );
     });
     return this.findOne(id);
   }
 
   /**
    * Brings an inactive driver back: `active` if all three steps are still done, otherwise `onboarding`. Their login
-   * works again. Reactivating a driver who is not inactive changes nothing.
+   * works again. How they left and any collections flag are cleared (D81): they are back in the fleet. Reactivating a
+   * driver who is not inactive changes nothing.
    *
    * @throws NotFoundException unknown driver.
    */
@@ -209,16 +257,100 @@ export class DriversService {
     await this.drivers.manager.transaction(async (manager) => {
       const driver = await this.lockDriver(manager, id);
       if (driver.status !== DriverStatus.inactive) return;
+      const previous = `reason ${driver.leftReason ?? "not recorded"}, ${driver.sentToCollectionsAt ? "was in collections" : "not in collections"}`;
       driver.status = statusFromSteps(driver);
+      driver.leftReason = null;
+      driver.leftAt = null;
+      driver.leftById = null;
+      driver.sentToCollectionsAt = null;
+      driver.sentToCollectionsById = null;
       await manager.save(driver);
       if (driver.userId) {
         await manager.update(User, driver.userId, { active: true });
       }
       this.logger.log(
-        `Admin ${adminId} reactivated driver ${id}; status ${driver.status}.`,
+        `Admin ${adminId} reactivated driver ${id}; status ${driver.status} (before: ${previous}).`,
       );
     });
     return this.findOne(id);
+  }
+
+  /**
+   * Sends a driver to collections (D81): a flag on an inactive driver, shown on the Collections page. A driver who has
+   * not been deactivated yet (or was deactivated before reasons existed) is deactivated here in the same transaction,
+   * which needs `reason`: "we always have to note how they left". A driver who already has a reason keeps it. Nothing
+   * checks the balance; the admin decides. Sending a driver already in collections changes nothing.
+   *
+   * @throws NotFoundException unknown driver.
+   * @throws ConflictException the driver is still in onboarding.
+   * @throws BadRequestException no reason is noted yet and none was sent.
+   */
+  async sendToCollections(
+    id: string,
+    reason: DriverLeftReason | undefined,
+    adminId: string,
+  ): Promise<DriverDto> {
+    await this.drivers.manager.transaction(async (manager) => {
+      const driver = await this.lockDriver(manager, id);
+      if (driver.status === DriverStatus.onboarding) {
+        throw new ConflictException(
+          "This driver is still in onboarding: collections are for drivers who left.",
+        );
+      }
+      if (driver.sentToCollectionsAt !== null) return;
+      if (driver.leftReason === null) {
+        if (reason === undefined) {
+          throw new BadRequestException("Say how the driver left.");
+        }
+        await this.leave(manager, driver, reason, adminId);
+      }
+      driver.sentToCollectionsAt = new Date();
+      driver.sentToCollectionsById = adminId;
+      await manager.save(driver);
+      this.logger.log(`Admin ${adminId} sent driver ${id} to collections.`);
+    });
+    return this.findOne(id);
+  }
+
+  /**
+   * Takes a driver out of collections (D81), for example once they have paid. They stay inactive with the reason they
+   * left. Removing a driver who is not in collections changes nothing.
+   *
+   * @throws NotFoundException unknown driver.
+   */
+  async removeFromCollections(id: string, adminId: string): Promise<DriverDto> {
+    await this.drivers.manager.transaction(async (manager) => {
+      const driver = await this.lockDriver(manager, id);
+      if (driver.sentToCollectionsAt === null) return;
+      driver.sentToCollectionsAt = null;
+      driver.sentToCollectionsById = null;
+      await manager.save(driver);
+      this.logger.log(
+        `Admin ${adminId} removed driver ${id} from collections.`,
+      );
+    });
+    return this.findOne(id);
+  }
+
+  /**
+   * Marks the (locked) driver as left, inside the caller's transaction: inactive, login off, and the reason, date and
+   * admin noted unless a reason is already there. Does not save the driver; the caller does.
+   */
+  private async leave(
+    manager: EntityManager,
+    driver: Driver,
+    reason: DriverLeftReason,
+    adminId: string,
+  ): Promise<void> {
+    driver.status = DriverStatus.inactive;
+    if (driver.leftReason === null) {
+      driver.leftReason = reason;
+      driver.leftAt = new Date();
+      driver.leftById = adminId;
+    }
+    if (driver.userId) {
+      await manager.update(User, driver.userId, { active: false });
+    }
   }
 
   /**
@@ -445,10 +577,14 @@ export class DriversService {
       onboarding: {
         contractSignedAt: driver.contractSignedAt,
         depositPaidAt: driver.depositPaidAt,
+        depositPaidCents: driver.depositPaidCents,
         vehicleAssignedAt: driver.vehicleAssignedAt,
       },
       createdAt: driver.createdAt,
       archivedAt: driver.archivedAt,
+      leftReason: driver.leftReason,
+      leftAt: driver.leftAt,
+      sentToCollectionsAt: driver.sentToCollectionsAt,
     };
   }
 }

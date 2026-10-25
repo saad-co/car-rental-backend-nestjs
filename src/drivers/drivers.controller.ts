@@ -15,6 +15,10 @@ import type { AuthenticatedUser } from "../auth/jwt-auth.guard.js";
 import { DriversService } from "./drivers.service.js";
 import { AddAliasDto } from "./dto/add-alias.dto.js";
 import { DriverDto, DriverListDto } from "./dto/driver.dto.js";
+import {
+  DeactivateDriverDto,
+  SendToCollectionsDto,
+} from "./dto/leaving.dto.js";
 import { ListDriversQueryDto } from "./dto/list-drivers-query.dto.js";
 import { SetOnboardingStepDto } from "./dto/set-onboarding-step.dto.js";
 
@@ -47,7 +51,13 @@ export class DriversController {
     @Body() body: SetOnboardingStepDto,
     @CurrentUser() admin: AuthenticatedUser,
   ): Promise<DriverDto> {
-    return this.drivers.setOnboardingStep(id, body.step, body.done, admin.id);
+    return this.drivers.setOnboardingStep(
+      id,
+      body.step,
+      body.done,
+      admin.id,
+      body.depositPaidCents,
+    );
   }
 
   /**
@@ -74,14 +84,42 @@ export class DriversController {
     return this.drivers.removeAlias(id, aliasId, admin.id);
   }
 
-  /** `POST /drivers/:id/deactivate`: the driver left (B67). Their login stops working at once. */
+  /**
+   * `POST /drivers/:id/deactivate`: the driver left (B67), and how: `reason` is required (D81). Their login stops
+   * working at once.
+   */
   @Post(":id/deactivate")
   @HttpCode(HttpStatus.OK)
   deactivate(
     @Param("id", ParseUUIDPipe) id: string,
+    @Body() body: DeactivateDriverDto,
     @CurrentUser() admin: AuthenticatedUser,
   ): Promise<DriverDto> {
-    return this.drivers.deactivate(id, admin.id);
+    return this.drivers.deactivate(id, body.reason, admin.id);
+  }
+
+  /**
+   * `POST /drivers/:id/collections`: sends the driver to collections (D81). `reason` is needed when no reason is noted
+   * yet; the driver is then deactivated in the same step. `409` for a driver still in onboarding.
+   */
+  @Post(":id/collections")
+  @HttpCode(HttpStatus.OK)
+  sendToCollections(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() body: SendToCollectionsDto,
+    @CurrentUser() admin: AuthenticatedUser,
+  ): Promise<DriverDto> {
+    return this.drivers.sendToCollections(id, body.reason, admin.id);
+  }
+
+  /** `POST /drivers/:id/remove-from-collections`: takes the driver out of collections; they stay inactive. */
+  @Post(":id/remove-from-collections")
+  @HttpCode(HttpStatus.OK)
+  removeFromCollections(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() admin: AuthenticatedUser,
+  ): Promise<DriverDto> {
+    return this.drivers.removeFromCollections(id, admin.id);
   }
 
   /**
