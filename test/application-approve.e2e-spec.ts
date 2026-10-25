@@ -123,10 +123,11 @@ describe("Approve and decline send texts (test database)", () => {
   });
 
   describe("approve (B71, D78)", () => {
-    it("dry_run: sends only the approved template filled in (no login text, D78) and creates the login", async () => {
+    it("dry_run: sends only the approved template filled in (no login text, D78) and creates no driver (D80)", async () => {
       const approved = await service("dry_run").approve(applicationId, adminId);
 
       expect(approved.status).toBe("approved");
+      expect(approved.driverId).toBeNull();
       expect(quo.sent).toEqual([]); // dry run: nothing leaves
 
       expect(await texts()).toEqual([
@@ -138,24 +139,9 @@ describe("Approve and decline send texts (test database)", () => {
         }),
       ]);
 
-      // The login exists (nobody knows its password yet) and the email needs no confirmation.
-      const [user] = (await db.query(
-        `SELECT must_change_password, email_verified_at, role FROM users WHERE email = 'pat@test.dev'`,
-      )) as [
-        {
-          must_change_password: boolean;
-          email_verified_at: Date | null;
-          role: string;
-        },
-      ];
-      expect(user).toMatchObject({
-        must_change_password: true,
-        role: "driver",
-      });
-      expect(user.email_verified_at).not.toBeNull();
-      expect(await count("drivers")).toBe(1);
-      // An approved applicant is a driver in onboarding until contract, deposit and vehicle are done (D56).
-      expect(await count("drivers WHERE status = 'onboarding'")).toBe(1);
+      // Approval is only a status: no login and no driver until "Start onboarding" (D80).
+      expect(await count("users WHERE role = 'driver'")).toBe(0);
+      expect(await count("drivers")).toBe(0);
     });
 
     it("uses the template as edited in Settings", async () => {

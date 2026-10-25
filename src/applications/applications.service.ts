@@ -20,10 +20,11 @@ import {
   IsNull,
   Not,
   Repository,
+  SelectQueryBuilder,
 } from "typeorm";
 import { likePattern, phoneDigits } from "../common/search.js";
 import { isUniqueViolation } from "../database/postgres-errors.js";
-import { Driver } from "../drivers/driver.entity.js";
+import { Driver, DriverStatus } from "../drivers/driver.entity.js";
 import { toUsE164 } from "../drivers/us-phone.js";
 import { TemplateKind } from "../message-templates/message-template.entity.js";
 import { MessageTemplatesService } from "../message-templates/message-templates.service.js";
@@ -60,6 +61,7 @@ import {
   ApplicationDetailDto,
   ApplicationListDto,
   ApplicationListItemDto,
+  ApprovedApplicationListDto,
 } from "./dto/application.dto.js";
 import { DeleteApplicationsResultDto } from "./dto/delete-applications.dto.js";
 import { ListApplicationsQueryDto } from "./dto/list-applications-query.dto.js";
@@ -205,14 +207,16 @@ export class ApplicationsService {
    * The `*_storage_path` columns stay null: they are paths in the WEBSITE's bucket, and leaving them empty keeps the
    * document copier away from these rows. The files are `application_documents` rows with `origin = admin`.
    *
-   * It is then approved straight away (D79): the admin typing it in is the review. What approval would refuse (a
-   * phone that is not a US number, an email or phone a driver or login already has) is checked first, so a bad
-   * form stores nothing. If approval still fails after the application is saved (the approval text could not be
-   * sent), the application stays pending and the error says so; approving it from its page retries.
+   * It is then approved straight away (D79): the admin typing it in is the review. Approving creates no driver
+   * (D80), so "Add application" ends approved; "Add driver" (`startOnboarding`) also creates the driver, as before.
+   * What those steps would refuse (a phone that is not a US number, and for "Add driver" an email or phone a driver
+   * or login already has) is checked first, so a bad form stores nothing. If a step still fails after the application
+   * is saved (the approval text could not be sent), the application stays as far as it got and the error says so;
+   * repeating the same request, or approving it from its page, retries.
    *
    * @throws BadRequestException a missing licence, a file that is not a JPG, PNG or PDF of at most 10 MB, or a
    *   phone that is not a valid US number.
-   * @throws ConflictException a driver or login already has this email, or a driver has this phone.
+   * @throws ConflictException ("Add driver" only) a driver or login already has this email, or a driver has this phone.
    * @throws ServiceUnavailableException no file bucket is set up.
    * @throws HttpException the approval failed after saving ("Application saved, but not approved: ...").
    */
@@ -220,24 +224,38 @@ export class ApplicationsService {
     fields: ManualApplicationDto,
     files: ManualApplicationFiles,
     adminId: string,
+    startOnboarding = false,
   ): Promise<{ id: string; created: boolean; driverId: string | null }> {
     const existing = await this.applications.findOneBy({
       requestId: fields.request_id,
     });
     if (existing) {
-      // A repeat (double click, retry). If the first try saved it but could not approve it, try again.
-      const driverId =
-        existing.status === ApplicationStatus.pending
-          ? await this.approveSaved(existing.id, adminId)
-          : existing.driverId;
+      // A repeat (double click, retry). If the first try saved it but could not finish, try again.
+      const unfinished =
+        existing.status === ApplicationStatus.pending ||
+        (startOnboarding &&
+          existing.status === ApplicationStatus.approved &&
+          existing.driverId === null);
+      const driverId = unfinished
+        ? await this.approveSaved(existing.id, adminId, startOnboarding)
+        : existing.driverId;
       return { id: existing.id, created: false, driverId };
     }
 
-    const phone = await this.assertCanBecomeDriver(
-      this.dataSource.manager,
-      fields.email,
-      fields.phone,
-    );
+    // "Add driver" also creates the driver now, so what that needs is checked first and a bad form stores nothing.
+    // "Add application" only approves, which needs just a phone the approval text can reach.
+    const phone = startOnboarding
+      ? await this.assertCanBecomeDriver(
+          this.dataSource.manager,
+          fields.email,
+          fields.phone,
+        )
+      : toUsE164(fields.phone);
+    if (!phone) {
+      throw new BadRequestException(
+        `Phone "${fields.phone}" is not a valid US number.`,
+      );
+    }
     // The approval text goes to this number, so one that cannot get texts would fail the approval after saving.
     if (!isTextableUsNumber(phone)) {
       throw new BadRequestException(
@@ -341,25 +359,41 @@ export class ApplicationsService {
     return {
       id: savedId,
       created: true,
-      driverId: await this.approveSaved(savedId, adminId),
+      driverId: await this.approveSaved(savedId, adminId, startOnboarding),
     };
   }
 
   /**
-   * Approves an application that `createManual` has saved, with the normal approval text (D79).
-   * @returns the new driver's id.
-   * @throws HttpException the reason approval failed, prefixed so the admin knows the application was saved.
+   * Finishes an application that `createManual` has saved (D79, D80): approves it with the normal approval text and,
+   * for "Add driver", starts onboarding. Each part runs only if it is still to do, so a retry after a half-finished
+   * first try picks up where it stopped.
+   * @returns the new driver's id; null for "Add application" (no driver is created by approving).
+   * @throws HttpException the reason it failed, prefixed so the admin knows the application was saved.
    */
   private async approveSaved(
     id: string,
     adminId: string,
+    startOnboarding: boolean,
   ): Promise<string | null> {
+    let step = "not approved";
     try {
-      return (await this.approve(id, adminId)).driverId;
+      let application = await this.findOne(id);
+      if (application.status === ApplicationStatus.pending) {
+        application = await this.approve(id, adminId);
+      }
+      if (
+        startOnboarding &&
+        application.status === ApplicationStatus.approved &&
+        application.driverId === null
+      ) {
+        step = "approved, but the driver was not created";
+        application = await this.startOnboarding(id, adminId);
+      }
+      return application.driverId;
     } catch (error) {
       if (error instanceof HttpException) {
         throw new HttpException(
-          `Application saved, but not approved: ${error.message}`,
+          `Application saved, but ${step}: ${error.message}`,
           error.getStatus(),
         );
       }
@@ -394,6 +428,67 @@ export class ApplicationsService {
     if (query.status) {
       builder.andWhere("a.status = :status", { status: query.status });
     }
+    this.applyCommonFilters(builder, query);
+    const [rows, total] = await builder.getManyAndCount();
+    return {
+      items: rows.map((row) => this.toListItem(row)),
+      total,
+      page: query.page,
+      limit: query.limit,
+    };
+  }
+
+  /**
+   * One page of the Approved applications page (D80), newest first: approved applications whose onboarding is not
+   * finished, that is, the driver has not been created yet ("Start onboarding" not pressed) or is still in
+   * `onboarding`. Once the driver is `active` (or `inactive`) the application is on the Drivers page instead.
+   * Same search, "received" days and archived switch as `list`; `status` does not apply here.
+   */
+  async listApproved(
+    query: ListApplicationsQueryDto,
+  ): Promise<ApprovedApplicationListDto> {
+    const builder = this.applications
+      .createQueryBuilder("a")
+      .leftJoinAndSelect("a.driver", "d")
+      .where("a.status = :approved", { approved: ApplicationStatus.approved })
+      .andWhere("(d.id IS NULL OR d.status = :onboarding)", {
+        onboarding: DriverStatus.onboarding,
+      })
+      .orderBy("a.createdAt", "DESC")
+      .addOrderBy("a.id", "DESC")
+      .skip((query.page - 1) * query.limit)
+      .take(query.limit);
+    this.applyCommonFilters(builder, query);
+    const [rows, total] = await builder.getManyAndCount();
+    return {
+      items: rows.map((row) =>
+        // Not a spread: `toListItem` returns a class instance (lint rule `no-misused-spread`).
+        Object.assign(this.toListItem(row), {
+          driver: row.driver
+            ? {
+                id: row.driver.id,
+                status: row.driver.status,
+                contractSignedAt: row.driver.contractSignedAt,
+                depositPaidAt: row.driver.depositPaidAt,
+                vehicleAssignedAt: row.driver.vehicleAssignedAt,
+              }
+            : null,
+        }),
+      ),
+      total,
+      page: query.page,
+      limit: query.limit,
+    };
+  }
+
+  /** The filters both application lists share: archived switch (D80), "received" days (B82) and the search (B75). */
+  private applyCommonFilters(
+    builder: SelectQueryBuilder<Application>,
+    query: ListApplicationsQueryDto,
+  ): void {
+    builder.andWhere(
+      query.archived ? "a.archivedAt IS NOT NULL" : "a.archivedAt IS NULL",
+    );
     // The "received" day: when the application came in (B82).
     addDateRange(builder, "a.createdAt", query);
     if (query.search) {
@@ -416,13 +511,6 @@ export class ApplicationsService {
         { pattern: likePattern(query.search) },
       );
     }
-    const [rows, total] = await builder.getManyAndCount();
-    return {
-      items: rows.map((row) => this.toListItem(row)),
-      total,
-      page: query.page,
-      limit: query.limit,
-    };
   }
 
   /**
@@ -441,27 +529,20 @@ export class ApplicationsService {
   }
 
   /**
-   * Approves an application, in one transaction:
-   * 1. creates the driver's login (`users`, role `driver`) with a generated password, required to
-   *    change it at first login (D26). The email counts as confirmed from the start (D52). The
-   *    password is not sent while the login text is paused (D78), so the driver cannot log in yet;
-   * 2. creates the Driver, linked to that login;
-   * 3. marks the application approved;
-   * 4. texts the applicant the approval text (B71, B81: the one the admin picked and edited, or the first "approved"
-   *    template from Settings), through the same chat as every other text: sent when SMS_MODE is
-   *    `live`, saved as "Dry run: not sent" when `dry_run`, refused when `off`. The login text
-   *    (email and temporary password, D52) is no longer sent (D78).
+   * Approves an application (D80): the status becomes `approved` and the applicant is texted the approval text
+   * (B71, B81: the one the admin picked and edited, or the first "approved" template from Settings), through the same
+   * chat as every other text: sent when SMS_MODE is `live`, saved as "Dry run: not sent" when `dry_run`, refused when
+   * `off`. **No driver and no login are created**: many approved applicants never pick up a car. The driver is created
+   * later by `startOnboarding`.
    *
-   * The text is sent last, inside the transaction: if it fails, everything is rolled back and
-   * the admin can simply try again. (A text that went out before the failure stays in the chat:
-   * it really was sent. The reverse, the text sent but the commit failing, is very unlikely.)
+   * One transaction; the text is sent last, inside it: if it fails, the approval is rolled back and the admin can
+   * simply try again. (A text that went out before the failure stays in the chat: it really was sent. The reverse,
+   * the text sent but the commit failing, is very unlikely.)
    *
    * @param adminId the admin approving it (stored as the reviewer).
    * @param options.message the approval text to send; the first approved template when missing.
    * @throws NotFoundException if there is no application with this id.
-   * @throws ConflictException if it is already approved, if a driver or login already has
-   *   this email, or a driver has this phone.
-   * @throws BadRequestException if the phone is not a valid US number.
+   * @throws ConflictException if it is already approved.
    * @throws ServiceUnavailableException if a text could not be sent (nothing approved).
    */
   async approve(
@@ -469,21 +550,85 @@ export class ApplicationsService {
     adminId: string,
     options: { message?: string } = {},
   ): Promise<ApplicationDetailDto> {
-    // Prepared before the transaction: hashing is deliberately slow, and the row lock taken
-    // inside should be held as briefly as possible. The password is not sent to anyone while the
-    // login text is paused (D78), so nobody knows it: the driver cannot log in yet.
+    const approved = await this.dataSource.transaction(async (manager) => {
+      const application = await this.loadForReview(manager, id);
+      application.status = ApplicationStatus.approved;
+      application.reviewedById = adminId;
+      application.reviewedAt = new Date();
+      const saved = await manager.save(application);
+
+      await this.sendOrFail(
+        application,
+        await this.templates.render(
+          TemplateKind.application_approved,
+          this.templateValues(application),
+          options.message,
+        ),
+        adminId,
+        "The approval text",
+        "nothing was approved",
+      );
+      return saved;
+    });
+    return this.findOne(approved.id);
+  }
+
+  /**
+   * Starts onboarding for an approved application (D80), in one transaction with the application's row locked:
+   * 1. creates the driver's login (`users`, role `driver`) with a generated password, required to change it at first
+   *    login (D26). The email counts as confirmed from the start (D52). The password is not sent while the login text
+   *    is paused (D78), so the driver cannot log in yet;
+   * 2. creates the Driver, linked to that login, in `onboarding` (D56);
+   * 3. links the driver to the application. From here the contract, deposit, vehicle, ledger and payments all work on
+   *    the driver, as before. The driver is `active`, and moves from the Approved applications page to Drivers, when
+   *    the three onboarding steps are done.
+   *
+   * The admin presses it when the applicant says they want to go ahead, or when the deposit arrives (the client's two
+   * triggers, B100). No text is sent.
+   *
+   * @throws NotFoundException if there is no application with this id.
+   * @throws ConflictException if it is not approved, is archived, already has its driver, or a driver or login
+   *   already has this email, or a driver has this phone.
+   * @throws BadRequestException if the phone is not a valid US number.
+   */
+  async startOnboarding(
+    id: string,
+    adminId: string,
+  ): Promise<ApplicationDetailDto> {
+    // Prepared before the transaction: hashing is deliberately slow, and the row lock taken inside should be held as
+    // briefly as possible. Nobody knows this password while the login text is paused (D78).
     const passwordHash = await this.passwords.hash(this.passwords.generate());
 
     try {
-      const approved = await this.dataSource.transaction(async (manager) => {
-        const application = await this.loadForReview(manager, id);
+      await this.dataSource.transaction(async (manager) => {
+        const application = await manager.findOne(Application, {
+          where: { id },
+          lock: { mode: "pessimistic_write" },
+        });
+        if (!application) {
+          throw new NotFoundException("Application not found.");
+        }
+        if (application.status !== ApplicationStatus.approved) {
+          throw new ConflictException(
+            "Only an approved application can start onboarding.",
+          );
+        }
+        if (application.archivedAt !== null) {
+          throw new ConflictException(
+            "This application is archived. Unarchive it first.",
+          );
+        }
+        if (application.driverId !== null) {
+          throw new ConflictException(
+            "Onboarding has already been started for this application.",
+          );
+        }
 
         const phone = await this.assertCanBecomeDriver(
           manager,
           application.email,
           application.phone,
         );
-
         const user = await manager.save(
           manager.create(User, {
             email: application.email,
@@ -493,7 +638,6 @@ export class ApplicationsService {
             emailVerifiedAt: new Date(),
           }),
         );
-
         const driver = await manager.save(
           manager.create(Driver, {
             firstName: application.firstName,
@@ -503,27 +647,12 @@ export class ApplicationsService {
             userId: user.id,
           }),
         );
-
-        application.status = ApplicationStatus.approved;
         application.driverId = driver.id;
-        application.reviewedById = adminId;
-        application.reviewedAt = new Date();
-        const saved = await manager.save(application);
-
-        await this.sendOrFail(
-          application,
-          await this.templates.render(
-            TemplateKind.application_approved,
-            this.templateValues(application),
-            options.message,
-          ),
-          adminId,
-          "The approval text",
-          "nothing was approved",
+        await manager.save(application);
+        this.logger.log(
+          `Admin ${adminId} started onboarding for application ${id}; driver ${driver.id}.`,
         );
-        return saved;
       });
-      return await this.findOne(approved.id);
     } catch (error) {
       if (isUniqueViolation(error)) {
         throw new ConflictException(
@@ -532,6 +661,70 @@ export class ApplicationsService {
       }
       throw error;
     }
+    return this.findOne(id);
+  }
+
+  /**
+   * Archives an application (D80): hidden from the normal list, kept with its documents and text history (unlike
+   * delete, which removes them for good). Works for every status, approved included. Archiving an archived
+   * application changes nothing.
+   *
+   * An approved application whose driver is still in `onboarding` is archived together with that driver, in one
+   * transaction, so it leaves the Approved applications page; the driver keeps everything else. One whose driver is
+   * already `active` or `inactive` is refused: archive the driver instead (the Drivers page).
+   *
+   * @throws NotFoundException unknown application.
+   * @throws ConflictException its driver is active or inactive.
+   */
+  async archive(id: string, adminId: string): Promise<ApplicationDetailDto> {
+    await this.setArchived(id, true, adminId);
+    return this.findOne(id);
+  }
+
+  /** Brings an archived application (and its onboarding driver) back to the lists. Same rules as `archive`. */
+  async unarchive(id: string, adminId: string): Promise<ApplicationDetailDto> {
+    await this.setArchived(id, false, adminId);
+    return this.findOne(id);
+  }
+
+  /** The shared body of `archive` and `unarchive`: one transaction, the application's and driver's rows locked. */
+  private async setArchived(
+    id: string,
+    archived: boolean,
+    adminId: string,
+  ): Promise<void> {
+    await this.dataSource.transaction(async (manager) => {
+      const application = await manager.findOne(Application, {
+        where: { id },
+        lock: { mode: "pessimistic_write" },
+      });
+      if (!application) {
+        throw new NotFoundException("Application not found.");
+      }
+      const driver = application.driverId
+        ? await manager.findOne(Driver, {
+            where: { id: application.driverId },
+            lock: { mode: "pessimistic_write" },
+          })
+        : null;
+      if (driver && driver.status !== DriverStatus.onboarding) {
+        throw new ConflictException(
+          `${application.firstName} ${application.lastName} is already a driver (${driver.status}): ${archived ? "archive" : "unarchive"} the driver instead.`,
+        );
+      }
+      if ((application.archivedAt !== null) === archived) return;
+
+      const at = archived ? new Date() : null;
+      application.archivedAt = at;
+      await manager.save(application);
+      if (driver) {
+        driver.archivedAt = at;
+        await manager.save(driver);
+      }
+      this.logger.log(
+        `Admin ${adminId} ${archived ? "archived" : "unarchived"} application ${id}${driver ? ` and its onboarding driver ${driver.id}` : ""}.`,
+      );
+    });
   }
 
   /**
@@ -858,6 +1051,7 @@ export class ApplicationsService {
       driverId: application.driverId,
       alertedAt: application.alertedAt,
       alertError: application.alertError,
+      archivedAt: application.archivedAt,
       createdBy: application.createdBy
         ? { id: application.createdBy.id, email: application.createdBy.email }
         : null,
@@ -877,6 +1071,7 @@ export class ApplicationsService {
       submittedAt: application.submittedAt,
       receivedAt: application.createdAt,
       alertError: application.alertError,
+      archivedAt: application.archivedAt,
     };
   }
 

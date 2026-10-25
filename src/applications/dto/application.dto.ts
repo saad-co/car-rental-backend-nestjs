@@ -1,3 +1,4 @@
+import { DriverStatus } from "../../drivers/driver.entity.js";
 import { ApplicationStatus } from "../application.entity.js";
 
 /**
@@ -24,6 +25,33 @@ export class ApplicationListItemDto {
   receivedAt: Date;
   /** Why the alert text to staff about this application could not be sent; null if it did not fail. */
   alertError: string | null;
+  /** When an admin archived it (D80); null = not archived. */
+  archivedAt: Date | null;
+}
+
+/** The onboarding driver of an approved application, as the Approved applications page shows it. */
+export class ApprovedApplicationDriverDto {
+  id: string;
+  /** `onboarding` here by definition: a driver who is `active` or `inactive` is on the Drivers page. */
+  status: DriverStatus;
+  /** The three onboarding steps (D56): when each was ticked; null while not done. */
+  contractSignedAt: Date | null;
+  depositPaidAt: Date | null;
+  vehicleAssignedAt: Date | null;
+}
+
+/** One row of the Approved applications page (D80). */
+export class ApprovedApplicationItemDto extends ApplicationListItemDto {
+  /** Null until an admin presses "Start onboarding"; then the driver, while onboarding is not finished. */
+  driver: ApprovedApplicationDriverDto | null;
+}
+
+/** One page of approved applications, newest first. */
+export class ApprovedApplicationListDto {
+  items: ApprovedApplicationItemDto[];
+  total: number;
+  page: number;
+  limit: number;
 }
 
 /** One page of applications, newest first. */
@@ -55,7 +83,7 @@ export class ApplicationDetailDto extends ApplicationListItemDto {
   /** The admin who last reviewed it. Null while pending. */
   reviewedById: string | null;
   reviewedAt: Date | null;
-  /** The driver created on approval. Null unless approved. */
+  /** The driver created by "Start onboarding" (D80). Null until then, and always null unless approved. */
   driverId: string | null;
   /** When the alert text to staff was really sent; null if it was not (off, dry run, or failed). */
   alertedAt: Date | null;

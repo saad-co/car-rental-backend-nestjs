@@ -107,6 +107,14 @@ export class Driver {
   vehicleAssignedBy?: User | null;
 
   /**
+   * When an admin archived the driver (D80); null = not archived. A flag, not a status: an archived driver keeps
+   * `active` or `inactive`, so unarchiving restores it exactly. Archived drivers are hidden from the normal list and
+   * are not billed or reminded (spec sections 7 and 8); payments from them are still matched.
+   */
+  @Column({ name: "archived_at", type: "timestamptz", nullable: true })
+  archivedAt: Date | null;
+
+  /**
    * The driver's login (a `users` row with role `driver`), created on approval. Null for
    * drivers approved before driver logins existed.
    */

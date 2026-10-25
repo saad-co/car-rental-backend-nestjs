@@ -52,6 +52,15 @@ export class DriversService {
     if (query.status) {
       builder.andWhere("d.status = :status", { status: query.status });
     }
+    // Archived drivers are shown only when asked for (D80); drivers still onboarding are on the Approved page.
+    builder.andWhere(
+      query.archived ? "d.archivedAt IS NOT NULL" : "d.archivedAt IS NULL",
+    );
+    if (query.onboarding === false) {
+      builder.andWhere("d.status <> :onboarding", {
+        onboarding: DriverStatus.onboarding,
+      });
+    }
     // The "Since" day: when the driver was created (B82).
     addDateRange(builder, "d.createdAt", query);
     if (query.search) {
@@ -210,6 +219,51 @@ export class DriversService {
       );
     });
     return this.findOne(id);
+  }
+
+  /**
+   * Archives a driver (D80): hidden from the normal Drivers list, no more billing and reminders (spec sections 7 and
+   * 8). Works on `active` and `inactive` drivers directly, with no need to deactivate first. Status, steps and login
+   * are not touched, so unarchiving restores the driver exactly. Their ledger, payments and chat stay, and payments
+   * from them are still matched. Archiving an archived driver changes nothing.
+   *
+   * A driver still in `onboarding` is archived through their approved application (it is the application the
+   * Approved applications page lists).
+   *
+   * @throws NotFoundException unknown driver.
+   * @throws ConflictException the driver is in onboarding.
+   */
+  async archive(id: string, adminId: string): Promise<DriverDto> {
+    await this.setArchived(id, true, adminId);
+    return this.findOne(id);
+  }
+
+  /** Brings an archived driver back to the lists, with the status they had. Same rules as `archive`. */
+  async unarchive(id: string, adminId: string): Promise<DriverDto> {
+    await this.setArchived(id, false, adminId);
+    return this.findOne(id);
+  }
+
+  /** The shared body of `archive` and `unarchive`: one transaction, the driver's row locked. */
+  private async setArchived(
+    id: string,
+    archived: boolean,
+    adminId: string,
+  ): Promise<void> {
+    await this.drivers.manager.transaction(async (manager) => {
+      const driver = await this.lockDriver(manager, id);
+      if (driver.status === DriverStatus.onboarding) {
+        throw new ConflictException(
+          `This driver is still in onboarding: ${archived ? "archive" : "unarchive"} their approved application instead.`,
+        );
+      }
+      if ((driver.archivedAt !== null) === archived) return;
+      driver.archivedAt = archived ? new Date() : null;
+      await manager.save(driver);
+      this.logger.log(
+        `Admin ${adminId} ${archived ? "archived" : "unarchived"} driver ${id}.`,
+      );
+    });
   }
 
   /**
@@ -394,6 +448,7 @@ export class DriversService {
         vehicleAssignedAt: driver.vehicleAssignedAt,
       },
       createdAt: driver.createdAt,
+      archivedAt: driver.archivedAt,
     };
   }
 }

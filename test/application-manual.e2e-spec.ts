@@ -517,7 +517,7 @@ describe("an admin adds an application by hand (D68, test database)", () => {
     expect(alerted).toBe(1);
   });
 
-  describe("approved straight away (D79)", () => {
+  describe("approved straight away (D79, D80)", () => {
     const driverRows = async () =>
       (await db.query(
         `SELECT d.id, d.status, d.phone, d.email, u.role FROM drivers d JOIN users u ON u.id = d.user_id`,
@@ -535,12 +535,36 @@ describe("an admin adds an application by hand (D68, test database)", () => {
         ]
       )[0].n;
 
-    it("creates the driver in onboarding with a login, and sends the approval text only", async () => {
+    it("Add application: approved and the approval text sent, but no driver is created (D80)", async () => {
       const service = build();
       const result = await service.createManual(
         fieldsOf(),
         licenseOnly(),
         adminId,
+      );
+
+      expect(result.driverId).toBeNull();
+      expect(await driverRows()).toEqual([]);
+      const detail = await service.findOne(result.id);
+      expect(detail).toMatchObject({
+        status: "approved",
+        driverId: null,
+        reviewedById: adminId,
+      });
+      expect(detail.createdBy).toEqual({
+        id: adminId,
+        email: "admin@test.dev",
+      });
+      expect(await textCount()).toBe(1);
+    });
+
+    it("Add driver (startOnboarding): also creates the driver in onboarding with a login", async () => {
+      const service = build();
+      const result = await service.createManual(
+        fieldsOf(),
+        licenseOnly(),
+        adminId,
+        true,
       );
 
       const [driver] = await driverRows();
@@ -551,23 +575,16 @@ describe("an admin adds an application by hand (D68, test database)", () => {
         role: "driver",
       });
       expect(result.driverId).toBe(driver.id);
-
-      const detail = await service.findOne(result.id);
-      expect(detail).toMatchObject({
+      expect(await service.findOne(result.id)).toMatchObject({
         status: "approved",
         driverId: driver.id,
-        reviewedById: adminId,
-      });
-      expect(detail.createdBy).toEqual({
-        id: adminId,
-        email: "admin@test.dev",
       });
       expect(await textCount()).toBe(1);
     });
 
-    it("refuses an email a driver already has, before storing anything", async () => {
+    it("Add driver refuses an email a driver already has, before storing anything", async () => {
       const service = build();
-      await service.createManual(fieldsOf(), licenseOnly(), adminId);
+      await service.createManual(fieldsOf(), licenseOnly(), adminId, true);
 
       await expect(
         service.createManual(
@@ -577,6 +594,7 @@ describe("an admin adds an application by hand (D68, test database)", () => {
           }),
           licenseOnly(),
           adminId,
+          true,
         ),
       ).rejects.toThrow("A driver with this email already exists.");
       expect(await applicationCount()).toBe(1);
@@ -584,9 +602,9 @@ describe("an admin adds an application by hand (D68, test database)", () => {
       expect(alerted).toBe(1);
     });
 
-    it("refuses a phone a driver already has, before storing anything", async () => {
+    it("Add driver refuses a phone a driver already has, before storing anything", async () => {
       const service = build();
-      await service.createManual(fieldsOf(), licenseOnly(), adminId);
+      await service.createManual(fieldsOf(), licenseOnly(), adminId, true);
 
       await expect(
         service.createManual(
@@ -596,9 +614,25 @@ describe("an admin adds an application by hand (D68, test database)", () => {
           }),
           licenseOnly(),
           adminId,
+          true,
         ),
       ).rejects.toThrow("A driver with this phone number already exists.");
       expect(await applicationCount()).toBe(1);
+    });
+
+    it("Add application does not need the email or phone to be free of drivers (nothing is created)", async () => {
+      const service = build();
+      await service.createManual(fieldsOf(), licenseOnly(), adminId, true);
+      const result = await service.createManual(
+        fieldsOf({
+          request_id: "33333333-3333-4333-8333-333333333333",
+        }),
+        licenseOnly(),
+        adminId,
+      );
+      expect(result.created).toBe(true);
+      expect(result.driverId).toBeNull();
+      expect(await driverRows()).toHaveLength(1);
     });
 
     it("refuses a phone that is not a valid US number, before storing anything", async () => {
@@ -611,26 +645,51 @@ describe("an admin adds an application by hand (D68, test database)", () => {
       expect(storage.files.size).toBe(0);
     });
 
-    it("when approval fails after saving, the application stays pending and a retry approves it", async () => {
+    it("when approval fails after saving, the application stays pending and a retry approves it and starts onboarding", async () => {
       // SMS off: approval refuses, so nothing can be approved.
       await expect(
-        build(storage, "off").createManual(fieldsOf(), licenseOnly(), adminId),
+        build(storage, "off").createManual(
+          fieldsOf(),
+          licenseOnly(),
+          adminId,
+          true,
+        ),
       ).rejects.toThrow(/Application saved, but not approved/);
       expect(await applicationCount()).toBe(1);
       expect(storage.files.size).toBe(1);
       expect(await driverRows()).toEqual([]);
 
-      // The same request_id again, with texts working: the saved application is approved, nothing is stored twice.
+      // The same request_id again, with texts working: the saved application is finished, nothing is stored twice.
       const again = await build().createManual(
         fieldsOf(),
         licenseOnly(),
         adminId,
+        true,
       );
       expect(again.created).toBe(false);
       const [driver] = await driverRows();
       expect(again.driverId).toBe(driver.id);
       expect(await applicationCount()).toBe(1);
       expect(storage.files.size).toBe(1);
+    });
+
+    it("a repeat of an approved Add application with Add driver starts onboarding on it", async () => {
+      const service = build();
+      const first = await service.createManual(
+        fieldsOf(),
+        licenseOnly(),
+        adminId,
+      );
+      expect(first.driverId).toBeNull();
+      const again = await service.createManual(
+        fieldsOf(),
+        licenseOnly(),
+        adminId,
+        true,
+      );
+      expect(again.created).toBe(false);
+      expect(again.driverId).toBe((await driverRows())[0].id);
+      expect(await textCount()).toBe(1);
     });
   });
 
