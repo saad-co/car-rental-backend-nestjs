@@ -23,6 +23,7 @@ import { ApplicationDocumentCopier } from "./documents/application-document-copi
 import {
   ApplicationDetailDto,
   ApplicationListDto,
+  ApprovedApplicationListDto,
 } from "./dto/application.dto.js";
 import { ApplicationReceivedDto } from "./dto/application-received.dto.js";
 import { ReviewMessageDto } from "./dto/review-message.dto.js";
@@ -34,6 +35,7 @@ import { ListApplicationsQueryDto } from "./dto/list-applications-query.dto.js";
 import { UploadTooLargeFilter } from "./documents/upload-errors.filter.js";
 import { MAX_UPLOAD_BYTES } from "./documents/upload-file.js";
 import { ManualApplicationDto } from "./manual/manual-application.dto.js";
+import { ManualApplicationQueryDto } from "./manual/manual-application-query.dto.js";
 import { ManualApplicationCreatedDto } from "./manual/manual-application-created.dto.js";
 import type { ManualApplicationFiles } from "./manual/manual-payload.js";
 
@@ -72,7 +74,9 @@ export class ApplicationsController {
 
   /**
    * `POST /applications/manual`: an admin types in an application by hand, with its documents (D68). Same fields and
-   * rules as the website form. It is approved straight away (D79): the result carries the new driver's `driverId`.
+   * rules as the website form. It is approved straight away (D79). Approving creates no driver (D80): with
+   * `?startOnboarding=true` ("Add driver") the driver is created too and the result carries its `driverId`; without
+   * it ("Add application") `driverId` is null.
    * Admin only (no `@Public`). Multipart form data: the text fields plus the files `license_file` (required),
    * `rating_file` and `earnings_file` (JPG, PNG or PDF, at most 10 MB each). The file fields end in `_file` because
    * `earnings` is already a text field (weekly earnings).
@@ -157,6 +161,7 @@ export class ApplicationsController {
   })
   createManual(
     @Body() body: ManualApplicationDto,
+    @Query() options: ManualApplicationQueryDto,
     @UploadedFiles()
     files: Partial<
       Record<
@@ -171,7 +176,12 @@ export class ApplicationsController {
       rating: files.rating_file?.[0],
       earnings: files.earnings_file?.[0],
     };
-    return this.applications.createManual(body, single, admin.id);
+    return this.applications.createManual(
+      body,
+      single,
+      admin.id,
+      options.startOnboarding === true,
+    );
   }
 
   /**
@@ -183,6 +193,18 @@ export class ApplicationsController {
   @Get()
   list(@Query() query: ListApplicationsQueryDto): Promise<ApplicationListDto> {
     return this.applications.list(query);
+  }
+
+  /**
+   * `GET /applications/approved`: the Approved applications page (D80): approved applications whose onboarding is not
+   * finished (no driver yet, or the driver is still in onboarding), with the onboarding progress. Same search, dates and
+   * `archived` switch as the main list. Declared before `:id` so "approved" is never read as an id.
+   */
+  @Get("approved")
+  listApproved(
+    @Query() query: ListApplicationsQueryDto,
+  ): Promise<ApprovedApplicationListDto> {
+    return this.applications.listApproved(query);
   }
 
   /**
@@ -217,8 +239,8 @@ export class ApplicationsController {
   }
 
   /**
-   * `POST /applications/:id/approve`: creates the driver and marks the application approved, and texts the
-   * applicant. Optional body `{ "message": "..." }` is the approval text the admin picked and edited (B81); without
+   * `POST /applications/:id/approve`: marks the application approved and texts the applicant. No driver is created
+   * (D80); "Start onboarding" does that. Optional body `{ "message": "..." }` is the approval text the admin picked and edited (B81); without
    * it the first approved template is sent. `400` for an unknown placeholder in it.
    *
    * POST because it is an action with side effects, not an edit of a field. `@HttpCode(200)`
@@ -262,5 +284,42 @@ export class ApplicationsController {
     @CurrentUser() admin: AuthenticatedUser,
   ): Promise<ApplicationDetailDto> {
     return this.applications.setStatus(id, ApplicationStatus.on_hold, admin.id);
+  }
+
+  /**
+   * `POST /applications/:id/start-onboarding`: for an approved application, creates the driver (in onboarding) and
+   * their login (D80). `409` if it is not approved, is archived, already has its driver, or a driver or login already
+   * has this email or phone.
+   */
+  @Post(":id/start-onboarding")
+  @HttpCode(HttpStatus.OK)
+  startOnboarding(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() admin: AuthenticatedUser,
+  ): Promise<ApplicationDetailDto> {
+    return this.applications.startOnboarding(id, admin.id);
+  }
+
+  /**
+   * `POST /applications/:id/archive`: hides the application from the normal list (D80); delete stays separate. An
+   * approved one in onboarding takes its driver with it; `409` if its driver is already active or inactive.
+   */
+  @Post(":id/archive")
+  @HttpCode(HttpStatus.OK)
+  archive(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() admin: AuthenticatedUser,
+  ): Promise<ApplicationDetailDto> {
+    return this.applications.archive(id, admin.id);
+  }
+
+  /** `POST /applications/:id/unarchive`: brings an archived application (and its onboarding driver) back. */
+  @Post(":id/unarchive")
+  @HttpCode(HttpStatus.OK)
+  unarchive(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() admin: AuthenticatedUser,
+  ): Promise<ApplicationDetailDto> {
+    return this.applications.unarchive(id, admin.id);
   }
 }

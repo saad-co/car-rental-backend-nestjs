@@ -4,6 +4,18 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-25 — Feature 13: Approved applications page, archive / unarchive (D80, B100, B102, B103)
+- **Branch** `feature/approved-archive` in both repos, worktrees `wt-approved-archive-backend` / `-frontend` (slot 1; backend :5001, frontend :5174,
+  databases `car_rental_approved_archive` / `_test`; during the walkthrough something else held :5001, so the API ran on :5002 and the frontend `.env` pointed there). Created from `origin/dev` `8a45fec` (backend) / `c7ed624` (frontend). **Not committed, pushed or merged yet** (waiting for Abulkalam's yes).
+- **Backend:** migration `AddArchiveAndApprovedWithoutDriver` (`archived_at` on `applications` and `drivers`; CHECK swapped); `approve()` is a status + the approval text only; new `startOnboarding`, `archive` / `unarchive` for applications and drivers, `GET /applications/approved`; list queries gain `archived` (and drivers `onboarding`); `POST /applications/manual?startOnboarding=`; `openapi.json` re-exported.
+- **Frontend:** sidebar item and page **Approved applications**; **Start onboarding** (list row and application page), **Archive / Unarchive** on the three lists and on both detail pages, **Show: Archived only** filter (`archivedFilter.ts`); Drivers lists only active and inactive; "Add driver" passes `startOnboarding`; `RowActionsMenu` accepts actions with `onClick`; client regenerated from the worktree's `openapi.json`; icon `check-circle.svg` from TailAdmin.
+- **Verified:** migration run, revert, run, no drift; backend lint (3 old warnings), build, unit 276, e2e 440 (new `approved-archive.e2e-spec`: 24 cases; `application-approve` and `application-manual` rewritten for D80); frontend lint (2 old warnings), build. **UI walkthrough** (throwaway local admin, test applications, SMS `dry_run`): sidebar and page; approve creates no driver (dialog wording changed); Start onboarding lands on the new driver (Onboarding 0/3), who shows on Approved applications and not on Drivers; archiving an onboarding applicant archives the driver too, the **Archived only** filter and its chip list it, Unarchive brings it back (from the detail page); Archive / Unarchive an active driver from the Drivers row menu; console clean.
+- **Archived rows read "Archived · was Active"** (Abulkalam, 2026-10-25, after seeing an archived driver badged Active): `ArchivedBadge` in `ApplicationStatusBadge` and `DriverStatusBadge`; checked in the browser on Drivers and Approved applications.
+- **Not done:** B100 items 5, 5b, 6 (ledger charge column and deposit card, leaving options and Collections, more onboarding steps); bulk archive; the check on staging after deploy.
+- **Before deploy:** backend then frontend as always; one migration (adds two nullable columns, no data change). **Shared files with the ledger feature (slot 3):** `drivers.service.ts`, `DriverDetail.tsx`, `schema.d.ts`, `openapi.json`; whichever merges second merges `dev` first and regenerates the client. The two rows B100 and B101 were uncommitted in the main checkout's `BACKLOG.md`: they are carried in this branch's `BACKLOG.md`; discard or merge that local edit when this merges.
+
+---
+
 ### 2026-10-24 — Quick fixes: no login text on approval, admin-added drivers approved on save (D78, D79, B99)
 - **Branch** `fix/quick-fixes` in both repos, worktrees `wt-quick-fixes-backend` / `-frontend` (slot 2: backend :5002, frontend :5175, databases
   `car_rental_quick_fixes` / `_test`). Rebased on `origin/dev` `693a451` (backend) / `08698b1` (frontend) on 2026-10-24. Merged into `dev` 2026-10-24 (backend PR #34 `595d997`, frontend PR #25 `c7ed624`).

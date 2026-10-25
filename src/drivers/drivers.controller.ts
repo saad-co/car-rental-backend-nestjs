@@ -84,6 +84,30 @@ export class DriversController {
     return this.drivers.deactivate(id, admin.id);
   }
 
+  /**
+   * `POST /drivers/:id/archive`: hides the driver from the normal list and stops billing and reminders (D80). Any
+   * `active` or `inactive` driver, no need to deactivate first; drivers are archived, never deleted. `409` for a
+   * driver still in onboarding (archive their approved application instead).
+   */
+  @Post(":id/archive")
+  @HttpCode(HttpStatus.OK)
+  archive(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() admin: AuthenticatedUser,
+  ): Promise<DriverDto> {
+    return this.drivers.archive(id, admin.id);
+  }
+
+  /** `POST /drivers/:id/unarchive`: brings an archived driver back, with the status they had. */
+  @Post(":id/unarchive")
+  @HttpCode(HttpStatus.OK)
+  unarchive(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() admin: AuthenticatedUser,
+  ): Promise<DriverDto> {
+    return this.drivers.unarchive(id, admin.id);
+  }
+
   /** `POST /drivers/:id/reactivate`: back to `active` (all steps done) or `onboarding`; login works again. */
   @Post(":id/reactivate")
   @HttpCode(HttpStatus.OK)

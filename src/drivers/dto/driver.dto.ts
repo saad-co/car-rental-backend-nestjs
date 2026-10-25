@@ -34,8 +34,10 @@ export class DriverDto {
   /** `onboarding` until all three steps are done, then `active`; `inactive` when the driver left (D56). */
   status: DriverStatus;
   onboarding: DriverOnboardingDto;
-  /** When the driver was created (the application's approval). */
+  /** When the driver was created (when onboarding was started on the approved application, D80). */
   createdAt: Date;
+  /** When an admin archived the driver (D80); null = not archived. */
+  archivedAt: Date | null;
   /** Every payment alias of the driver, grouped by payment method then by value. Empty if none yet. */
   aliases: DriverAliasDto[];
   /** Number of payments assigned to this driver. */
