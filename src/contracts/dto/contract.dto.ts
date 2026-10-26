@@ -271,6 +271,11 @@ export class ContractDto extends ContractInputDto {
   /** Why saving the signed files last failed, shown to the admin; null when nothing is wrong. */
   @ApiProperty({ type: String, nullable: true })
   documentsError: string | null;
+  /**
+   * The recurring lines of this contract that are not posted to the ledger by themselves (excess mileage, insurance excess,
+   * other recurring), only the ones with an amount, so the admin sees what is left to charge by hand (D83). Empty when none.
+   */
+  notPostedAutomatically: string[];
   createdAt: Date;
   updatedAt: Date;
 }

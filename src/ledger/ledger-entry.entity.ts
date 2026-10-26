@@ -20,7 +20,7 @@ export enum LedgerDirection {
 
 /** What made the entry. */
 export enum LedgerEntryKind {
-  /** A rent charge from the billing job. Reserved for M2: nothing writes it yet. */
+  /** A rent charge from the contract rent job, or the first rent posted when the contract is signed (D83). */
   rent = "rent",
   /** A confirmed payment credited to its driver. */
   payment = "payment",
@@ -28,6 +28,34 @@ export enum LedgerEntryKind {
   adjustment = "adjustment",
   /** Cancels another entry by the same amount in the opposite direction. */
   reversal = "reversal",
+  /** A one-time charge from a signed contract (security deposit, fees), posted by the system when it is signed (D83). */
+  contract_charge = "contract_charge",
+}
+
+/**
+ * The kinds that are charges when they are debits: what a driver can be credited against, and what the ledger's
+ * "charges" total and filter count. One list, so a new kind of charge cannot be missed in one of the queries.
+ */
+export const CHARGE_KINDS: readonly LedgerEntryKind[] = [
+  LedgerEntryKind.rent,
+  LedgerEntryKind.adjustment,
+  LedgerEntryKind.contract_charge,
+];
+
+/** `CHARGE_KINDS` as the inside of a SQL `IN (...)`, e.g. `'rent', 'adjustment', 'contract_charge'`. Fixed text, no input. */
+export const CHARGE_KINDS_SQL = CHARGE_KINDS.map((kind) => `'${kind}'`).join(
+  ", ",
+);
+
+/** True for a debit of a kind in `CHARGE_KINDS`. */
+export function isCharge(entry: {
+  direction: LedgerDirection;
+  kind: LedgerEntryKind;
+}): boolean {
+  return (
+    entry.direction === LedgerDirection.debit &&
+    CHARGE_KINDS.includes(entry.kind)
+  );
 }
 
 /** Longest description or reason. */

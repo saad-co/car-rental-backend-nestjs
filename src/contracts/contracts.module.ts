@@ -4,12 +4,14 @@ import { TypeOrmModule } from "@nestjs/typeorm";
 import { ApplicationDocument } from "../applications/documents/application-document.entity.js";
 import { Driver } from "../drivers/driver.entity.js";
 import { DriversModule } from "../drivers/drivers.module.js";
+import { LedgerModule } from "../ledger/ledger.module.js";
 import { FileStorageModule } from "../sms/storage/file-storage.module.js";
 import { User } from "../users/user.entity.js";
 import { FIRMA_CLIENT, type FirmaClient } from "../firma/firma-client.js";
 import { FirmaHttpClient } from "../firma/firma-http-client.js";
 import { ContractCompany } from "./contract-company.entity.js";
 import { Contract } from "./contract.entity.js";
+import { ContractRentJob } from "./contract-rent.job.js";
 import { ContractTrackingJob } from "./contract-tracking.job.js";
 import { ContractTrackingService } from "./contract-tracking.service.js";
 import { ContractsController } from "./contracts.controller.js";
@@ -34,12 +36,15 @@ import { FirmaWebhookController } from "./firma-webhook.controller.js";
     // Signing ticks the driver's "Contract signed" step; the signed files go to the shared private bucket.
     DriversModule,
     FileStorageModule,
+    // Signing posts the contract's pickup charges, and the rent job posts rent (step 5, D83).
+    LedgerModule,
   ],
   controllers: [ContractsController, FirmaWebhookController],
   providers: [
     ContractsService,
     ContractTrackingService,
     ContractTrackingJob,
+    ContractRentJob,
     {
       provide: FIRMA_CLIENT,
       inject: [ConfigService],

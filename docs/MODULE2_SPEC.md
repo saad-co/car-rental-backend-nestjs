@@ -1,7 +1,7 @@
 # Module 2 Spec — Driver Contracts and E-Signature
 
 Contracts (vehicle lease agreements) are filled in from our data, sent to the driver to sign online, and the signed copy
-lands on the driver's file. Started 2026-10-20. Decisions: D70 (signing provider), D71 (rate calculation), D72 (company signature), D73 (contract details), D74 (sending), D75 (tracking and filing).
+lands on the driver's file. Started 2026-10-20. Decisions: D70 (signing provider), D71 (rate calculation), D72 (company signature), D73 (contract details), D74 (sending), D75 (tracking and filing), D83 (ledger and rent billing).
 
 **Scope rule:** keep it simple. Build the steps below one at a time; everything under "Later" waits until the client asks
 for it after using the first version.
@@ -40,9 +40,10 @@ for it after using the first version.
 | 2 | **Contract details.** Company (from a fixed list of five, D73), vehicle (typed: model, VIN, plate, plate state) and purchase option price on the draft. The driver's name, email and phone come from the driver record; the address, licence number, licence state and date of birth are typed on the draft (the driver record and the website form do not hold them). All optional, nothing checked beyond a length limit; completeness is checked when sending (step 3). | Draft holds every value the contract header needs. |
 | 3 | **Send for signing (firma, D70, D74).** The client's Illinois Google Doc, exported as PDF with `{{MARKER}}` texts where values go, is the template, stored in our repo (one for all four Illinois companies; the sample driver's licence photo removed). "Send for signing" on the contract page uploads that PDF to firma on every send, with one anchor per marker that makes a locked field holding the draft's value (firma's anchor tags do not work with templates stored in firma); the driver signs from firma's email link; the company's signature is its **entity name printed as a plain locked text before the driver signs** (D72; firma cannot set the font of an anchored field), so the driver is the only signer. Values sent are frozen on the contract; a sent contract cannot be edited or deleted. Send is refused until every value is filled, and for a company whose state has no template (Illinois and California are built, D76). | A test-mode contract is signed end to end (done 2026-10-21 with the firma test key). |
 | 4 | **Track and file (D75).** The contract's status follows firma: sent, viewed (the driver opened it), then signed, declined, expired or cancelled. **One function decides:** it asks firma for the signing request and applies the answer. A firma webhook (`POST /webhooks/firma`, signed) and a 5-minute scheduled check only trigger it, so a lost, repeated or late webhook is harmless (firma tries only 3 times). A contract only moves forward and an end state never changes. When the driver signs, the signed PDF (with firma's certificate page) and the certificate alone are copied into our private bucket, tried by the webhook about 30 seconds after the signing and retried by the 5-minute job (D77; a failure shows on the contract page), and "Contract signed" (D56) is ticked by the system in the same transaction. | Status and date on the contract page and the driver's Contract card; "Open signed contract" and "Certificate" open the saved files; the driver's step says "automatic". |
+| 5 | **Contract charges on the ledger, rent billed from the contract (D83).** When the driver signs, one ledger debit per non-zero one-time charge (security deposit, documentation fee, insurance policy start fee, other, hold vehicle payment) and the first rent, all dated the contract start date, posted in the same transaction as "signed" and the tick. An hourly job then bills rent for every due date (7 days apart weekly, daily for daily contracts) from the signed contract in force that day, only while the driver is `active` and not archived, and never for dates before the driver's `rent_from` day. Unique keys make every posting happen once. Excess mileage, insurance excess and other recurring are listed on the contract page as "not posted automatically". | Signing a test contract gives the driver two debits (deposit and first rent) and a payment of the same total brings the balance to $0.00; the job adds a missing week once and never twice; the contract page says what was added and links to the ledger. |
 
 **Later (not now):** reminders to sign, a vehicle list, the Tennessee version, car swap / rate change /
-renewal, contract charges posted to the ledger, billing settings taken from the contract (M2).
+renewal, late fees, excess mileage and the other recurring charges on the ledger, deposit refund (B19), manual billing settings (dropped, D83).
 
 ## 3. Open questions (minimal, B91)
 1. **Company signature** (settled 2026-10-21, D72): the signature is the name of the entity (Evergreen Holdings LLC, Gonzo, Silver Pine,
@@ -135,3 +136,22 @@ as a requirement; *our suggestion* = ours, to be shown to the client. "Sample co
 | A failed save of the signed files is shown on the contract page and retried | Spec rule 5, no silent failure | from a document |
 | The signed PDF opens through short-lived links from a private bucket | Ours: same as the application documents (D54); the PDF holds the licence number and date of birth (B94) | our suggestion |
 | The contract page refreshes by itself every 30 seconds while the contract waits for the driver | Ours: the status changes without the admin doing anything | our suggestion |
+
+### Step 5 flow (contract charges and rent billing, D83, B105)
+| Field or step | Source | Status |
+|---|---|---|
+| Contract costs go on the driver's ledger when the driver signs | Saad, WhatsApp, 2026-10-21 ("when a driver signs a contract, its costs, daily or weekly rent and whatever else is in the contract, must go on the driver's ledger"); scope PDF: "starts the rent schedule in Module 1" | client-confirmed |
+| Rent starts on the contract start date | Scope PDF, Module 2 ("on the contract start date") | client-confirmed |
+| Billing comes from the signed contract only: no manual billing settings, pause / resume or "Run weekly billing" | Abulkalam, 2026-10-26 (one source of truth: the contract) | our suggestion |
+| Pickup charges as separate entries, one per contract line, zero amounts skipped | Sample contract header lists the lines one by one; Saad: the scope lists items one by one and we connect them | from a document |
+| Security deposit posted as a charge, refundable, so a driver who pays the amount due at pickup ends at $0.00 | Sample contract ("refundable security deposit", "Amount Due at Pickup"); keeps the balance honest (without it the deposit looks like credit). Overrides D60 on deposits; Abulkalam, 2026-10-21 | our suggestion |
+| Pickup charges posted at signing even if the driver is not `active` yet | Sample contract: due at pickup; Saad: "when a driver signs". Amends spec 7 for these charges only; Abulkalam, 2026-10-21 | our suggestion |
+| Rent billed from the signed contract, weekly or daily as the contract says, only while the driver is `active` and not archived | Sample contract ("Weekly Payment" / "Daily Payment"); D56; D80; spec 7 | from a document |
+| A driver is never billed for days they were not active or archived (`rent_from`: set when they become active, are reactivated or unarchived) | D56 and D80 (billing and reminders stop); Abulkalam, 2026-10-26 | our suggestion |
+| Each due date is billed by the contract in force that day; a newer contract takes over on its own start date | Ours: a rate change must leave no gap and no double day | our suggestion |
+| Weekly due day = the weekday of the start date (first payment at pickup, then every 7 days) | Our reading of the contract (first payment at pickup) and the old system (due day defaults to the setup day); Saad confirms in the demo | our suggestion |
+| Rent keeps going past the 18 months until the driver is deactivated | Sample contract ("This Agreement will auto-extend on a weekly basis") | from a document |
+| Hourly job with unique keys, so a missed run is caught up exactly once | Ours: spec rule 3 (idempotency in the database) | our suggestion |
+| Drivers without a signed contract (imported) are not billed by the job | Ours: no contract means no rate; nothing changes for them | our suggestion |
+| Excess mileage, insurance excess, other recurring and late fees are not posted; the contract page lists the non-zero ones | Ours: no client rule yet (spec 12, B10); mileage needs Module 3 | our suggestion |
+| The signed contract page says the pickup charges were added and links to the ledger | Ours: Saad shows the flow to the client | our suggestion |

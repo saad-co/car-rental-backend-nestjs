@@ -1,3 +1,4 @@
+import { chicagoDate } from "../common/chicago-date.js";
 import { addDateRange } from "../common/date-range.js";
 import {
   BadRequestException,
@@ -173,7 +174,11 @@ export class DriversService {
         driver[by] = null;
         if (step === OnboardingStep.deposit) driver.depositPaidCents = null;
       }
+      const wasActive = driver.status === DriverStatus.active;
       driver.status = statusFromSteps(driver);
+      if (driver.status === DriverStatus.active && !wasActive) {
+        startBilling(driver);
+      }
       await manager.save(driver);
       this.logger.log(
         `Admin ${adminId} set onboarding step ${step}=${done} for driver ${id}; status ${driver.status}.`,
@@ -206,7 +211,11 @@ export class DriversService {
     driver.contractSignedAt = signedAt;
     driver.contractSignedById = null;
     if (driver.status !== DriverStatus.inactive) {
+      const wasActive = driver.status === DriverStatus.active;
       driver.status = statusFromSteps(driver);
+      if (driver.status === DriverStatus.active && !wasActive) {
+        startBilling(driver);
+      }
     }
     await manager.save(driver);
     this.logger.log(
@@ -259,6 +268,7 @@ export class DriversService {
       if (driver.status !== DriverStatus.inactive) return;
       const previous = `reason ${driver.leftReason ?? "not recorded"}, ${driver.sentToCollectionsAt ? "was in collections" : "not in collections"}`;
       driver.status = statusFromSteps(driver);
+      if (driver.status === DriverStatus.active) startBilling(driver);
       driver.leftReason = null;
       driver.leftAt = null;
       driver.leftById = null;
@@ -391,6 +401,10 @@ export class DriversService {
       }
       if ((driver.archivedAt !== null) === archived) return;
       driver.archivedAt = archived ? new Date() : null;
+      // An archived driver is not billed (D80), so billing starts again from the day they are brought back.
+      if (!archived && driver.status === DriverStatus.active) {
+        startBilling(driver);
+      }
       await manager.save(driver);
       this.logger.log(
         `Admin ${adminId} ${archived ? "archived" : "unarchived"} driver ${id}.`,
@@ -598,6 +612,14 @@ const STEP_FIELDS = {
   OnboardingStep,
   readonly [keyof Driver, keyof Driver]
 >;
+
+/**
+ * Rent from the signed contract is billed from today on (Module 2 step 5, D83): called whenever a driver becomes `active`
+ * (last step done, reactivated, unarchived), so the days they were not active are never billed. Chicago day, spec rule 4.
+ */
+function startBilling(driver: Driver): void {
+  driver.rentFrom = chicagoDate(new Date());
+}
 
 /**
  * `active` when all three steps are done, otherwise `onboarding` (D56). The database CHECK

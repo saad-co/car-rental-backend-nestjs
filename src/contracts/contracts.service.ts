@@ -25,6 +25,7 @@ import {
 import type { FileStorage } from "../sms/storage/file-storage.js";
 import { FILE_STORAGE } from "../sms/storage/file-storage.module.js";
 import { ContractCompany } from "./contract-company.entity.js";
+import { notPostedAutomatically } from "./contract-ledger.js";
 import { contractNumbers, type ContractMathInput } from "./contract-math.js";
 import { LicenceError, placeLicence } from "./contract-licence.js";
 import {
@@ -419,6 +420,7 @@ export class ContractsService {
       signedAt: row.signedAt,
       documentsSaved: row.signedPdfKey !== null && row.certificateKey !== null,
       documentsError: row.documentsError,
+      notPostedAutomatically: notPostedAutomatically(row),
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };

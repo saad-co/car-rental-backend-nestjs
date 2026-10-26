@@ -4,6 +4,41 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-26 — Module 2 step 5: contract charges on the ledger, rent billed from the signed contract (D83, B105)
+- **Branch** `feature/contracts-ledger` in both repos, worktrees `wt-contracts-ledger-backend` / `-frontend` (slot 3: backend :5003, frontend
+  :5176, databases `car_rental_contracts_ledger` / `_test`), fast-forwarded to `origin/dev` (features 13 and 14) before the work was finished.
+  **Not committed, not merged, not deployed.** Billing comes from the signed contract only (Abulkalam, 2026-10-26): no manual billing settings.
+- **Backend:** migrations `AddContractChargeKind` (`1792640000000`, enum value `contract_charge`) and `AddDriverRentFrom` (`1792650000000`,
+  `drivers.rent_from`); `CHARGE_KINDS` / `isCharge` in `ledger-entry.entity.ts` used by every ledger query; `LedgerService.postSystemDebits`
+  (insert, skip keys already there); `src/contracts/contract-ledger.ts` (pure: `pickupEntries`, `rentDueDates`, `rentSchedule`, `rentDebit`,
+  `notPostedAutomatically`); `ContractTrackingService.refreshFromFirma` posts the pickup entries in the same transaction as `signed` and the
+  tick; `ContractRentJob` (hourly, advisory lock `7_302_004`, only `active` and not archived drivers, from `rent_from`, each due date billed by
+  the contract in force that day); `DriversService` sets `rent_from` when a driver becomes active, is reactivated or unarchived;
+  `ContractDto.notPostedAutomatically`; `openapi.json` exported (route order changed because `ContractsModule` now imports `LedgerModule`; the
+  content differs only by the new field and enum value).
+- **Frontend:** "Contract charge" label; the signed banner says "The pickup charges ($X) were added to the driver's ledger", **View ledger**
+  and a yellow "Not posted automatically yet: ..." note; client regenerated from the worktree's `openapi.json`.
+- **Verified:** migrations run, revert, run and `migration:generate` shows no drift (both); backend build, lint (3 old warnings), prettier, unit
+  307, e2e 501 (new `contracts-ledger.e2e-spec` 36 tests: posting at signing, balance $609.00 then $0.00, all lines, daily, onboarding driver,
+  two refreshes plus the job at once, rollback and retry, `rent_from` on every way of becoming active, catch-up after downtime, double and
+  concurrent runs, dates before `rent_from`, Chicago midnight, 18 months and after, onboarding / inactive / archived / no `rent_from` / sent only
+  / imported drivers, each driver's own contract, a newer contract with no gap, a future one, deactivate then reactivate and archive then
+  unarchive never bill the gap, charge filter, credit against the deposit, weekly summary, aging, reversal, key clash); frontend lint (2 old
+  warnings), prettier, build. **Local walkthrough:** a contract (weekly $409, deposit $200) was sent through firma's test key; a **simulated**
+  signed contract on a second fake driver showed the banner, View ledger, the yellow note, and the ledger with "Contract charge" and "Rent" in
+  the Charge column and "Owes $609.00"; ticking deposit and vehicle made the driver active with `rent_from` today, the job posted one rent debit
+  and the second run posted nothing. Console clean, requests 200.
+- **Not done:** the real signature of the sent test contract (the signing link is only in the email to the developer's address); late fees, excess
+  mileage, insurance excess, other recurring, deposit refund (B105). A payment recorded through the UI was not driven in the browser (e2e covers it).
+- **Before deploy:** nothing new to set; migrations run in the pre-deploy step. Staging has drivers already active: the migration fills
+  `rent_from` from their latest onboarding step; none has a signed contract yet, so nothing is billed until one signs.
+- **Shared files:** backend `ledger.service.ts`, `ledger-entry.entity.ts`, `ledger-ref.ts`, `contract-tracking.service.ts`, `contracts.module.ts`,
+  `contracts.service.ts`, `dto/contract.dto.ts`, `driver.entity.ts`, `drivers.service.ts`, `openapi.json`, docs; frontend `schema.d.ts`,
+  `ledgerLabels.ts`, `ContractStatusBanner.tsx`. No other feature in flight. Local only: `.claude/launch.json` in the workspace root starts the
+  slot 3 servers, the worktree `.env` holds a throwaway admin.
+
+---
+
 ### 2026-10-26 — Feature 14: leaving a driver, Collections, deposit-paid card (D81, D82, B100, B104)
 - **Branch** `feature/leaving-collections` in both repos, worktrees `wt-leaving-collections-backend` / `-frontend` (slot 1: backend :5001, frontend :5174,
   databases `car_rental_leaving_collections` / `_test`). Created from `origin/dev` `19fdb54` (backend) / `5c3c198` (frontend). Rebase on `origin/dev` was a no-op (`dev` had not moved). **Merged into `dev`:** backend [#39](https://github.com/saad-co/car-rental-backend-nestjs/pull/39) (`49c4bb1`), frontend [#27](https://github.com/saad-co/car-rental-frontend-reactjs/pull/27) (`d191195`). Also in this branch, after testing with Abulkalam: drivers in collections are not on Drivers (`?collections=false`), the Drivers page defaults to the Active filter, "Driver" is used only for active and inactive people, links read "View details" (B104 items 7-9).

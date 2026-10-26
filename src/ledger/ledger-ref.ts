@@ -2,7 +2,7 @@ import { LedgerDirection, LedgerEntryKind } from "./ledger-entry.entity.js";
 
 /**
  * The short reference an admin sees and says aloud ("CH-1042"): the type's letters and the entry's number. CH is a
- * charge (a debit: rent or a manual charge), CR a credit entered by hand, PM a payment, RV a reversal.
+ * charge (a debit: rent, a contract charge or a manual charge), CR a credit entered by hand, PM a payment, RV a reversal.
  * The number is the database's `entry_no`; one number is one entry, whatever the letters say.
  */
 export function ledgerRef(

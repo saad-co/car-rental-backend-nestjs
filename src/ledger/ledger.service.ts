@@ -19,6 +19,8 @@ import {
   PaymentStatus,
 } from "../payments/payment.entity.js";
 import {
+  CHARGE_KINDS_SQL,
+  isCharge,
   LedgerDirection,
   LedgerEntry,
   LedgerEntryKind,
@@ -49,6 +51,15 @@ import {
   LedgerEntryDto,
   MAX_BACKDATE_DAYS,
 } from "./dto/ledger-entry.dto.js";
+
+/** One debit for `postSystemDebits`: `key` is the unique idempotency key, `effectiveDate` a Chicago day `YYYY-MM-DD`. */
+export interface SystemDebitInput {
+  key: string;
+  amountCents: number;
+  kind: LedgerEntryKind;
+  description: string;
+  effectiveDate: string;
+}
 
 /** Most periods one summary request may cover (two years of weeks). */
 const MAX_SUMMARY_PERIODS = 104;
@@ -201,6 +212,41 @@ export class LedgerService {
   }
 
   /**
+   * Writes debits made by the system (no admin) inside the caller's transaction: the contract charges and rent of
+   * Module 2 step 5 (D83). Each has a unique `key` (the ledger's idempotency key), and a key that is already in the
+   * ledger is skipped, so signing and the rent job can both post the same due date and only one entry ever exists.
+   * Plain SQL for the same reason as `addManualEntry`: `ON CONFLICT DO NOTHING` on the key only, values as parameters.
+   *
+   * @returns how many entries were written (the rest already existed).
+   */
+  async postSystemDebits(
+    manager: EntityManager,
+    driverId: string,
+    debits: SystemDebitInput[],
+  ): Promise<number> {
+    if (debits.length === 0) return 0;
+    const rows = (await manager.query(
+      `INSERT INTO ledger_entries
+         (driver_id, direction, amount_cents, kind, description, effective_date, created_by_id, idempotency_key)
+       SELECT $1, 'debit', t.amount_cents, t.kind::ledger_entry_kind, t.description, t.effective_date::date, NULL, t.idempotency_key
+       FROM unnest($2::int[], $3::text[], $4::text[], $5::text[], $6::text[])
+         WITH ORDINALITY AS t(amount_cents, kind, description, effective_date, idempotency_key, position)
+       ORDER BY t.position
+       ON CONFLICT (idempotency_key) DO NOTHING
+       RETURNING id`,
+      [
+        driverId,
+        debits.map((d) => d.amountCents),
+        debits.map((d) => d.kind),
+        debits.map((d) => d.description),
+        debits.map((d) => d.effectiveDate),
+        debits.map((d) => d.key),
+      ],
+    )) as { id: string }[];
+    return rows.length;
+  }
+
+  /**
    * Locks a charge for a credit against it and checks it can take one: on this driver, a debit (rent or a manual
    * charge), not reversed.
    * @throws NotFoundException no such charge on this driver.
@@ -216,11 +262,7 @@ export class LedgerService {
       lock: { mode: "pessimistic_write" },
     });
     if (!charge) throw new NotFoundException("Charge not found.");
-    if (
-      charge.direction !== LedgerDirection.debit ||
-      (charge.kind !== LedgerEntryKind.adjustment &&
-        charge.kind !== LedgerEntryKind.rent)
-    ) {
+    if (!isCharge(charge)) {
       throw new BadRequestException("Only a charge can be credited against.");
     }
     if (await manager.existsBy(LedgerEntry, { reversalOfId: charge.id })) {
@@ -577,7 +619,7 @@ export class LedgerService {
     switch (query.type) {
       case LedgerTypeFilter.charges:
         conditions.push(
-          "h.direction = 'debit' AND h.kind IN ('rent', 'adjustment')",
+          `h.direction = 'debit' AND h.kind IN (${CHARGE_KINDS_SQL})`,
         );
         break;
       case LedgerTypeFilter.credits:
@@ -619,10 +661,7 @@ export class LedgerService {
   /** One row of `listPage`'s query as the API returns it. */
   private toRowDto(row: RawLedgerRow): LedgerRowDto {
     const reversed = row.reversed_by_id !== null;
-    const isCharge =
-      row.direction === LedgerDirection.debit &&
-      (row.kind === LedgerEntryKind.adjustment ||
-        row.kind === LedgerEntryKind.rent);
+    const charge = isCharge(row);
     const left = row.amount_cents - row.applied_cents;
     return {
       id: row.id,
@@ -675,7 +714,7 @@ export class LedgerService {
         !reversed &&
         row.payment_source === PaymentSource.manual &&
         row.payment_status === PaymentStatus.confirmed,
-      creditableCents: isCharge && !reversed && left > 0 ? left : null,
+      creditableCents: charge && !reversed && left > 0 ? left : null,
     };
   }
 
@@ -774,10 +813,7 @@ export class LedgerService {
           .findOneBy({ id: entry.paymentId })
       : null;
 
-    const isCharge =
-      entry.direction === LedgerDirection.debit &&
-      (entry.kind === LedgerEntryKind.adjustment ||
-        entry.kind === LedgerEntryKind.rent);
+    const charge = isCharge(entry);
     const left =
       entry.amountCents -
       appliedCredits
@@ -799,7 +835,7 @@ export class LedgerService {
         occurredAt: payment.occurredAt,
         status: payment.status,
       },
-      creditableCents: isCharge && !reversedBy && left > 0 ? left : null,
+      creditableCents: charge && !reversedBy && left > 0 ? left : null,
       canVoidPayment:
         entry.kind === LedgerEntryKind.payment &&
         !reversedBy &&
@@ -856,7 +892,7 @@ export class LedgerService {
     )) as [{ opening: string }];
     const totals = (await this.dataSource.query(
       `SELECT date_trunc($2, effective_date::timestamp)::date::text AS start,
-         COALESCE(SUM(amount_cents) FILTER (WHERE kind IN ('rent', 'adjustment') AND direction = 'debit'), 0)::bigint AS charges,
+         COALESCE(SUM(amount_cents) FILTER (WHERE kind IN (${CHARGE_KINDS_SQL}) AND direction = 'debit'), 0)::bigint AS charges,
          COALESCE(SUM(amount_cents) FILTER (WHERE kind = 'payment'), 0)::bigint AS payments,
          COALESCE(SUM(amount_cents) FILTER (WHERE kind = 'adjustment' AND direction = 'credit'), 0)::bigint AS credits,
          COALESCE(SUM(${SIGNED}) FILTER (WHERE kind = 'reversal'), 0)::bigint AS reversals,

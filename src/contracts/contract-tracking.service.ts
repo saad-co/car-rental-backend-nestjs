@@ -13,6 +13,8 @@ import {
   type FileStorage,
 } from "../sms/storage/file-storage.js";
 import { FILE_STORAGE } from "../sms/storage/file-storage.module.js";
+import { LedgerService } from "../ledger/ledger.service.js";
+import { pickupEntries } from "./contract-ledger.js";
 import { isEndState, nextContractStatus } from "./contract-status.js";
 import { Contract, ContractStatus } from "./contract.entity.js";
 import { ContractDocumentsDto } from "./dto/contract.dto.js";
@@ -47,6 +49,7 @@ export class ContractTrackingService {
     /** Null when there is no bucket: nothing can be saved. */
     @Inject(FILE_STORAGE) private readonly storage: FileStorage | null,
     private readonly drivers: DriversService,
+    private readonly ledger: LedgerService,
   ) {}
 
   /** The contract that belongs to a firma signing request, or null (the webhook may name a request that is not ours). */
@@ -115,6 +118,17 @@ export class ContractTrackingService {
       await manager.update(Contract, contractId, changes);
       if (next === ContractStatus.signed) {
         await this.drivers.recordContractSigned(manager, locked.driverId, at);
+        // The pickup charges (deposit, fees, first rent) go on the driver's ledger in the same transaction (D83): if
+        // posting fails the contract stays `sent`: the error reaches the caller (the job logs it and tries again; the webhook
+        // answers 500 so firma retries).
+        const posted = await this.ledger.postSystemDebits(
+          manager,
+          locked.driverId,
+          pickupEntries(locked),
+        );
+        this.logger.log(
+          `Contract ${contractId}: ${posted} pickup entr${posted === 1 ? "y" : "ies"} posted to the ledger of driver ${locked.driverId}.`,
+        );
       }
       this.logger.log(
         `Contract ${contractId} (firma ${firmaId}): ${locked.status} -> ${next}.`,
