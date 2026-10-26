@@ -150,6 +150,15 @@ export class Driver {
   archivedAt: Date | null;
 
   /**
+   * The Chicago day (`YYYY-MM-DD`) from which rent may be billed from the signed contract (Module 2 step 5, D83). Set to
+   * today whenever the driver becomes `active`: the last onboarding step is done, they are reactivated, or they are
+   * unarchived. The rent job never posts a due date before it, so a gap (left and came back, archived and unarchived) is
+   * never billed. Null for a driver who was never active: nothing is billed.
+   */
+  @Column({ name: "rent_from", type: "date", nullable: true })
+  rentFrom: string | null;
+
+  /**
    * How the driver left, when it was noted and by whom (D81). Set when they are deactivated or sent to collections;
    * cleared on reactivation. Null for drivers deactivated before this existed ("reason not recorded").
    */

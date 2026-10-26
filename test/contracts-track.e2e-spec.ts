@@ -43,6 +43,7 @@ import {
   type FirmaSent,
 } from "../src/firma/firma-client.js";
 import type { FileStorage } from "../src/sms/storage/file-storage.js";
+import { LedgerService } from "../src/ledger/ledger.service.js";
 import { openTestDatabase } from "./test-database.js";
 
 const SECRET = "a-made-up-webhook-secret";
@@ -190,7 +191,13 @@ describe("Track and file a signed contract (Module 2 step 4, D75, test database)
       db.getRepository(PaymentAlias),
       db.getRepository(Payment),
     );
-    tracking = new ContractTrackingService(db, firma, bucket, driversService);
+    tracking = new ContractTrackingService(
+      db,
+      firma,
+      bucket,
+      driversService,
+      new LedgerService(db),
+    );
     job = new ContractTrackingJob(db, tracking);
     webhook = new FirmaWebhookController(tracking, config(SECRET));
   };
