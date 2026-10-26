@@ -7,7 +7,8 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 ### 2026-10-26 — Module 2 step 5: contract charges on the ledger, rent billed from the signed contract (D83, B105)
 - **Branch** `feature/contracts-ledger` in both repos, worktrees `wt-contracts-ledger-backend` / `-frontend` (slot 3: backend :5003, frontend
   :5176, databases `car_rental_contracts_ledger` / `_test`), fast-forwarded to `origin/dev` (features 13 and 14) before the work was finished.
-  **Not committed, not merged, not deployed.** Billing comes from the signed contract only (Abulkalam, 2026-10-26): no manual billing settings.
+  **Merged into `dev` 2026-10-26 (backend PR #41 `e2efe4a`, frontend PR #28 `a5537fa`) and deployed to staging the same day** (by the deploy steps, backend then frontend; the frontend's first `railway up` failed on a temporary DNS error and was repeated). Billing comes from the signed contract only (Abulkalam, 2026-10-26): no manual billing settings.
+- **Checked on staging (read only):** `railway logs` shows `AddContractChargeKind` and `AddDriverRentFrom` executed and the app started with no errors; backend `/docs` 200, frontend `/admin` 200, `POST /contracts/calculate` without a token 401; the deployed bundle holds the new banner text. **Not yet done on staging:** a real signed contract (send, sign from the email, ledger shows the deposit and first rent, then the rent job): Abulkalam tests it there. The staging database was not queried.
 - **Backend:** migrations `AddContractChargeKind` (`1792640000000`, enum value `contract_charge`) and `AddDriverRentFrom` (`1792650000000`,
   `drivers.rent_from`); `CHARGE_KINDS` / `isCharge` in `ledger-entry.entity.ts` used by every ledger query; `LedgerService.postSystemDebits`
   (insert, skip keys already there); `src/contracts/contract-ledger.ts` (pure: `pickupEntries`, `rentDueDates`, `rentSchedule`, `rentDebit`,
