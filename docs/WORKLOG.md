@@ -6,7 +6,7 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ### 2026-10-27 — Feature 15: archive an application and its driver together (D84, B107)
 - **Branch** `feature/linked-archive` in both repos, worktrees `wt-linked-archive-backend` / `-frontend` (slot 1: backend :5001, frontend :5174,
-  databases `car_rental_linked_archive` / `_test`), from `origin/dev` (backend `6e10a86`, frontend `a5537fa`). **Not committed, not merged, not deployed.**
+  databases `car_rental_linked_archive` / `_test`), from `origin/dev` (backend `6e10a86`, frontend `a5537fa`). **Merged into `dev` 2026-10-27 (backend PR #44 `d3c86f0`, frontend PR #29 `7727a77`) and deployed to staging the same day.**
 - **Backend:** `ApplicationsService.setArchived` / `DriversService.setArchived` archive and unarchive the pair in one transaction (application row locked first, then
   the driver, in both); the two 409s are gone; `startBilling` exported and reused; `list` joins the driver and leaves out applications whose driver is `active` or
   `inactive` unless `becameDriver=true` (400 together with `archived=true`); `ApplicationListItemDto.driverStatus`, `DriverDto.applicationId`; data migration
@@ -22,9 +22,10 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
   Unarchive on the driver page brings the application back (`rent_from` = today); Show: Archived only lists the other one. Console: no app errors (a 401 before
   sign-in and 503s from Quo chat, "Quo is not connected" locally).
 - **Not done:** `tsc --noEmit` also lists 3 type errors in `test/contracts.e2e-spec.ts` (an untouched file, `ContractSchedule`); the Drivers and Collections row Archive has no
-  confirm dialog; staging needs the migration run by the deploy (pre-deploy command) and a look at which applications it archives.
-- **Shared files:** backend `openapi.json`, docs; frontend `src/api/schema.d.ts`, `archivedFilter.ts`. No other feature in flight. Local servers left running on :5001 / :5174 with
-  test data (Active, Inactive, Onboarding, NoDriver, Pending); the throwaway admin is in the worktree `.env`.
+  confirm dialog; a look at which applications the backfill archived on staging is still to do (the staging database was not queried).
+- **Deployed to staging (2026-10-27, by the deploy steps, backend then frontend):** backend deployment `dd5191fe` and frontend `373eb2d2`, both SUCCESS in `car-rental-staging`. **Checked read only:** `railway logs` shows `LinkedArchiveBackfill1792660000000` executed and the app started with no errors; backend `/docs` 200, `GET /applications` without a token 401, frontend `/admin` 200, the deployed bundle holds "Became drivers"; no errors in either service's logs. **Not checked on staging:** archiving a real application with an active driver (the client's case), and which applications the backfill archived. The feature branch's docs commit `fdac6f6` was not in the merge, so this entry replaces its "committed, PRs open" wording.
+- **Shared files:** backend `openapi.json`, docs; frontend `src/api/schema.d.ts`, `archivedFilter.ts`. No other feature in flight. Local worktrees `wt-linked-archive-*` (slot 1, servers on :5001 / :5174, test data
+  Active, Inactive, Onboarding, NoDriver, Pending) are kept until the developer says the chat is finished.
 
 ---
 
