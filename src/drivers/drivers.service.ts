@@ -14,6 +14,7 @@ import { AliasType, normalizeAliasValue } from "../aliases/normalize-alias.js";
 import { AliasSource, PaymentAlias } from "../aliases/payment-alias.entity.js";
 import { isUniqueViolation } from "../database/postgres-errors.js";
 import { likePattern, phoneDigits } from "../common/search.js";
+import { Application } from "../applications/application.entity.js";
 import { Payment } from "../payments/payment.entity.js";
 import { User } from "../users/user.entity.js";
 import { Driver, DriverLeftReason, DriverStatus } from "./driver.entity.js";
@@ -364,16 +365,15 @@ export class DriversService {
   }
 
   /**
-   * Archives a driver (D80): hidden from the normal Drivers list, no more billing and reminders (spec sections 7 and
-   * 8). Works on `active` and `inactive` drivers directly, with no need to deactivate first. Status, steps and login
-   * are not touched, so unarchiving restores the driver exactly. Their ledger, payments and chat stay, and payments
-   * from them are still matched. Archiving an archived driver changes nothing.
+   * Archives a driver (D80, D84): hidden from the normal Drivers list, no more billing and reminders (spec sections 7
+   * and 8). Works on a driver in any status, with no need to deactivate first. Status, steps and login are not
+   * touched, so unarchiving restores the driver exactly. Their ledger, payments and chat stay, and payments from them
+   * are still matched. Archiving an archived driver changes nothing.
    *
-   * A driver still in `onboarding` is archived through their approved application (it is the application the
-   * Approved applications page lists).
+   * The application they came from (`applications.driver_id`, D84) is archived in the same transaction. A driver with
+   * no application (imported, D44) is archived alone.
    *
    * @throws NotFoundException unknown driver.
-   * @throws ConflictException the driver is in onboarding.
    */
   async archive(id: string, adminId: string): Promise<DriverDto> {
     await this.setArchived(id, true, adminId);
@@ -386,28 +386,36 @@ export class DriversService {
     return this.findOne(id);
   }
 
-  /** The shared body of `archive` and `unarchive`: one transaction, the driver's row locked. */
+  /**
+   * The shared body of `archive` and `unarchive` (D84): one transaction, the application's row (if any) and then the
+   * driver's row locked. `ApplicationsService.setArchived` locks in the same order, application first, so an admin
+   * pressing Archive on the Applications page and another on the Drivers page cannot wait on each other forever.
+   */
   private async setArchived(
     id: string,
     archived: boolean,
     adminId: string,
   ): Promise<void> {
     await this.drivers.manager.transaction(async (manager) => {
+      const application = await manager.findOne(Application, {
+        where: { driverId: id },
+        lock: { mode: "pessimistic_write" },
+      });
       const driver = await this.lockDriver(manager, id);
-      if (driver.status === DriverStatus.onboarding) {
-        throw new ConflictException(
-          `This driver is still in onboarding: ${archived ? "archive" : "unarchive"} their approved application instead.`,
-        );
-      }
       if ((driver.archivedAt !== null) === archived) return;
-      driver.archivedAt = archived ? new Date() : null;
+      const at = archived ? new Date() : null;
+      driver.archivedAt = at;
       // An archived driver is not billed (D80), so billing starts again from the day they are brought back.
       if (!archived && driver.status === DriverStatus.active) {
         startBilling(driver);
       }
       await manager.save(driver);
+      if (application) {
+        application.archivedAt = at;
+        await manager.save(application);
+      }
       this.logger.log(
-        `Admin ${adminId} ${archived ? "archived" : "unarchived"} driver ${id}.`,
+        `Admin ${adminId} ${archived ? "archived" : "unarchived"} driver ${id}${application ? ` and its application ${application.id}` : ""}.`,
       );
     });
   }
@@ -554,6 +562,14 @@ export class DriversService {
     const balanceByDriver = new Map(
       balances.map((b) => [b.driverId, Number(b.balance)]),
     );
+    // The application each driver came from (D84), for the "View application" link: one query for the page.
+    const applications = await this.drivers.manager.find(Application, {
+      select: { id: true, driverId: true },
+      where: { driverId: In(ids) },
+    });
+    const applicationByDriver = new Map(
+      applications.map((a) => [a.driverId, a.id]),
+    );
 
     return rows.map((row) => {
       const summary = summaryByDriver.get(row.id);
@@ -570,6 +586,7 @@ export class DriversService {
         paymentCount: summary ? Number(summary.count) : 0,
         lastPaymentAt: summary ? new Date(summary.last) : null,
         balanceCents: balanceByDriver.get(row.id) ?? 0,
+        applicationId: applicationByDriver.get(row.id) ?? null,
       };
     });
   }
@@ -579,7 +596,11 @@ export class DriversService {
     driver: Driver,
   ): Omit<
     DriverDto,
-    "aliases" | "paymentCount" | "lastPaymentAt" | "balanceCents"
+    | "aliases"
+    | "paymentCount"
+    | "lastPaymentAt"
+    | "balanceCents"
+    | "applicationId"
   > {
     return {
       id: driver.id,
@@ -617,7 +638,7 @@ const STEP_FIELDS = {
  * Rent from the signed contract is billed from today on (Module 2 step 5, D83): called whenever a driver becomes `active`
  * (last step done, reactivated, unarchived), so the days they were not active are never billed. Chicago day, spec rule 4.
  */
-function startBilling(driver: Driver): void {
+export function startBilling(driver: Driver): void {
   driver.rentFrom = chicagoDate(new Date());
 }
 

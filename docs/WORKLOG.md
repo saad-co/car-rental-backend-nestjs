@@ -4,6 +4,30 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-10-27 — Feature 15: archive an application and its driver together (D84, B107)
+- **Branch** `feature/linked-archive` in both repos, worktrees `wt-linked-archive-backend` / `-frontend` (slot 1: backend :5001, frontend :5174,
+  databases `car_rental_linked_archive` / `_test`), from `origin/dev` (backend `6e10a86`, frontend `a5537fa`). **Not committed, not merged, not deployed.**
+- **Backend:** `ApplicationsService.setArchived` / `DriversService.setArchived` archive and unarchive the pair in one transaction (application row locked first, then
+  the driver, in both); the two 409s are gone; `startBilling` exported and reused; `list` joins the driver and leaves out applications whose driver is `active` or
+  `inactive` unless `becameDriver=true` (400 together with `archived=true`); `ApplicationListItemDto.driverStatus`, `DriverDto.applicationId`; data migration
+  `LinkedArchiveBackfill` (`1792660000000`); `openapi.json` exported.
+- **Frontend:** the Applications list's Show filter has **Became drivers** (`?show=driver`), confirm dialogs on Archive (application list and detail when the driver
+  is active or inactive; driver detail when there is an application), the driver detail's Archive is no longer hidden for onboarding drivers and links to **View application**,
+  the application detail says "View driver"; the archive hooks refresh the applications and drivers queries; client regenerated from the worktree's `openapi.json`.
+- **Verified:** backend build, prettier, lint (3 old warnings), unit 307, e2e 515 (`approved-archive.e2e-spec` 38 tests: pair archive from both pages, both statuses,
+  onboarding, imported driver without application, same archive time, `rent_from` on unarchive, both pages at the same instant, list views, bad / clashing query values,
+  backfill); migration run, revert, run, `migration:generate` shows no drift; frontend build, prettier, lint (2 old warnings). **Browser walkthrough** (local, throwaway
+  admin): default list hides the active and inactive drivers' applications and shows the onboarding, no-driver and pending ones; Show: Became drivers lists the two; Archive
+  from the list row and from the detail page asks first and archives both (the banner says "together with its driver"); the driver page shows Archived and View application;
+  Unarchive on the driver page brings the application back (`rent_from` = today); Show: Archived only lists the other one. Console: no app errors (a 401 before
+  sign-in and 503s from Quo chat, "Quo is not connected" locally).
+- **Not done:** `tsc --noEmit` also lists 3 type errors in `test/contracts.e2e-spec.ts` (an untouched file, `ContractSchedule`); the Drivers and Collections row Archive has no
+  confirm dialog; staging needs the migration run by the deploy (pre-deploy command) and a look at which applications it archives.
+- **Shared files:** backend `openapi.json`, docs; frontend `src/api/schema.d.ts`, `archivedFilter.ts`. No other feature in flight. Local servers left running on :5001 / :5174 with
+  test data (Active, Inactive, Onboarding, NoDriver, Pending); the throwaway admin is in the worktree `.env`.
+
+---
+
 ### 2026-10-26 — Module 2 step 5: contract charges on the ledger, rent billed from the signed contract (D83, B105)
 - **Branch** `feature/contracts-ledger` in both repos, worktrees `wt-contracts-ledger-backend` / `-frontend` (slot 3: backend :5003, frontend
   :5176, databases `car_rental_contracts_ledger` / `_test`), fast-forwarded to `origin/dev` (features 13 and 14) before the work was finished.

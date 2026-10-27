@@ -25,6 +25,7 @@ import {
 import { likePattern, phoneDigits } from "../common/search.js";
 import { isUniqueViolation } from "../database/postgres-errors.js";
 import { Driver, DriverStatus } from "../drivers/driver.entity.js";
+import { startBilling } from "../drivers/drivers.service.js";
 import { toUsE164 } from "../drivers/us-phone.js";
 import { TemplateKind } from "../message-templates/message-template.entity.js";
 import { MessageTemplatesService } from "../message-templates/message-templates.service.js";
@@ -413,14 +414,24 @@ export class ApplicationsService {
    * With hundreds of rows Postgres simply reads them all; if this ever grows to many thousands, a trigram index
    * (`pg_trgm`) would make `ILIKE '%...%'` fast.
    *
+   * Applications whose driver is already `active` or `inactive` are left out of the default list (D84);
+   * `becameDriver=true` lists only those, `archived=true` only archived ones (the application and its driver are
+   * archived together).
+   *
    * `skip` / `take` become SQL `OFFSET` / `LIMIT` (Mongoose: `.skip()` / `.limit()`).
    * `getManyAndCount` also returns the total number of matching rows, for page numbers.
    * `id` is a second sort key so rows received in the same millisecond keep a fixed order
    * across pages.
    */
   async list(query: ListApplicationsQueryDto): Promise<ApplicationListDto> {
+    if (query.archived && query.becameDriver) {
+      throw new BadRequestException(
+        "Archived and became-a-driver are two different views: choose one.",
+      );
+    }
     const builder = this.applications
       .createQueryBuilder("a")
+      .leftJoinAndSelect("a.driver", "d")
       .orderBy("a.createdAt", "DESC")
       .addOrderBy("a.id", "DESC")
       .skip((query.page - 1) * query.limit)
@@ -429,6 +440,17 @@ export class ApplicationsService {
       builder.andWhere("a.status = :status", { status: query.status });
     }
     this.applyCommonFilters(builder, query);
+    // D84: once the person is an active or inactive driver they are on the Drivers page, so their application leaves
+    // the default list; `becameDriver` lists exactly those. Archived ones are always shown by `archived` alone.
+    if (query.becameDriver) {
+      builder.andWhere("d.status IN (:...driverStatuses)", {
+        driverStatuses: [DriverStatus.active, DriverStatus.inactive],
+      });
+    } else if (!query.archived) {
+      builder.andWhere("(d.id IS NULL OR d.status = :onboardingStatus)", {
+        onboardingStatus: DriverStatus.onboarding,
+      });
+    }
     const [rows, total] = await builder.getManyAndCount();
     return {
       items: rows.map((row) => this.toListItem(row)),
@@ -520,7 +542,7 @@ export class ApplicationsService {
   async findOne(id: string): Promise<ApplicationDetailDto> {
     const application = await this.applications.findOne({
       where: { id },
-      relations: { createdBy: true },
+      relations: { createdBy: true, driver: true },
     });
     if (!application) {
       throw new NotFoundException("Application not found.");
@@ -669,25 +691,27 @@ export class ApplicationsService {
    * delete, which removes them for good). Works for every status, approved included. Archiving an archived
    * application changes nothing.
    *
-   * An approved application whose driver is still in `onboarding` is archived together with that driver, in one
-   * transaction, so it leaves the Approved applications page; the driver keeps everything else. One whose driver is
-   * already `active` or `inactive` is refused: archive the driver instead (the Drivers page).
+   * If it has a driver (D84), whatever the driver's status, the driver is archived in the same transaction: the
+   * application and the driver are one person on two screens. That stops the driver's billing and reminders (D80).
    *
    * @throws NotFoundException unknown application.
-   * @throws ConflictException its driver is active or inactive.
    */
   async archive(id: string, adminId: string): Promise<ApplicationDetailDto> {
     await this.setArchived(id, true, adminId);
     return this.findOne(id);
   }
 
-  /** Brings an archived application (and its onboarding driver) back to the lists. Same rules as `archive`. */
+  /** Brings an archived application (and its driver) back to the lists. Same rules as `archive`. */
   async unarchive(id: string, adminId: string): Promise<ApplicationDetailDto> {
     await this.setArchived(id, false, adminId);
     return this.findOne(id);
   }
 
-  /** The shared body of `archive` and `unarchive`: one transaction, the application's and driver's rows locked. */
+  /**
+   * The shared body of `archive` and `unarchive`: one transaction, the application's and driver's rows locked, in
+   * that order. `DriversService.setArchived` locks in the same order (application first), so two admins pressing
+   * Archive on the two pages at once cannot wait on each other forever (D84).
+   */
   private async setArchived(
     id: string,
     archived: boolean,
@@ -707,11 +731,6 @@ export class ApplicationsService {
             lock: { mode: "pessimistic_write" },
           })
         : null;
-      if (driver && driver.status !== DriverStatus.onboarding) {
-        throw new ConflictException(
-          `${application.firstName} ${application.lastName} is already a driver (${driver.status}): ${archived ? "archive" : "unarchive"} the driver instead.`,
-        );
-      }
       if ((application.archivedAt !== null) === archived) return;
 
       const at = archived ? new Date() : null;
@@ -719,10 +738,14 @@ export class ApplicationsService {
       await manager.save(application);
       if (driver) {
         driver.archivedAt = at;
+        // An archived driver is not billed (D80): billing starts again from the day they are brought back (D83).
+        if (!archived && driver.status === DriverStatus.active) {
+          startBilling(driver);
+        }
         await manager.save(driver);
       }
       this.logger.log(
-        `Admin ${adminId} ${archived ? "archived" : "unarchived"} application ${id}${driver ? ` and its onboarding driver ${driver.id}` : ""}.`,
+        `Admin ${adminId} ${archived ? "archived" : "unarchived"} application ${id}${driver ? ` and its driver ${driver.id}` : ""}.`,
       );
     });
   }
@@ -1052,6 +1075,7 @@ export class ApplicationsService {
       alertedAt: application.alertedAt,
       alertError: application.alertError,
       archivedAt: application.archivedAt,
+      driverStatus: application.driver?.status ?? null,
       createdBy: application.createdBy
         ? { id: application.createdBy.id, email: application.createdBy.email }
         : null,
@@ -1072,6 +1096,7 @@ export class ApplicationsService {
       receivedAt: application.createdAt,
       alertError: application.alertError,
       archivedAt: application.archivedAt,
+      driverStatus: application.driver?.status ?? null,
     };
   }
 

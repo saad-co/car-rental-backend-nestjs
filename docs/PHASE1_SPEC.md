@@ -231,9 +231,9 @@ An admin assigns an unmatched payment to a driver. This posts the payment and **
 
 - **Login.**
 - **Dashboard** — received today / this week, pending review, unrecognised count, discrepancies, overdue drivers, total outstanding.
-- **Applications** — hides archived ones (Show: Archived only lists them); Archive / Unarchive next to Delete (D80).
+- **Applications** — hides archived ones (Show: Archived only lists them) and those whose driver is already active or inactive (Show: Became drivers lists them, D84); Archive / Unarchive next to Delete (D80), acting on the application and its driver together (D84).
 - **Approved applications** — approved applicants whose onboarding is not finished, with Start onboarding (D80).
-- **Drivers** — only active and inactive drivers, archived ones hidden (D80); list with balance and late status; detail page with profile, billing settings, aliases (add/remove), ledger history, SMS history.
+- **Drivers** — only active and inactive drivers, archived ones hidden (D80), archived and unarchived together with their application (D84); list with balance and late status; detail page with profile, billing settings, aliases (add/remove), ledger history, SMS history.
 - **Collections** — drivers sent to collections (D81): how they left, when sent, balance; the admin messages them from the
   driver page and can remove them. Passing the account to an outside agency is not built.
 - **Payments** — filterable by status and source. Unrecognised bucket with assign-to-driver. Discrepancy list.

@@ -186,6 +186,15 @@
             }
           },
           {
+            "name": "becameDriver",
+            "required": false,
+            "in": "query",
+            "description": "`true` = only applications whose driver is active or inactive (D84). Not together with `archived=true`.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
             "name": "archived",
             "required": false,
             "in": "query",
@@ -437,6 +446,15 @@
                 "rejected",
                 "on_hold"
               ]
+            }
+          },
+          {
+            "name": "becameDriver",
+            "required": false,
+            "in": "query",
+            "description": "`true` = only applications whose driver is active or inactive (D84). Not together with `archived=true`.",
+            "schema": {
+              "type": "boolean"
             }
           },
           {
@@ -752,7 +770,7 @@
             }
           }
         },
-        "summary": "`POST /applications/:id/archive`: hides the application from the normal list (D80); delete stays separate. An\napproved one in onboarding takes its driver with it; `409` if its driver is already active or inactive.",
+        "summary": "`POST /applications/:id/archive`: hides the application from the normal list (D80); delete stays separate. Its\ndriver, whatever the status, is archived with it (D84), which stops billing and reminders.",
         "tags": [
           "Applications"
         ]
@@ -783,7 +801,7 @@
             }
           }
         },
-        "summary": "`POST /applications/:id/unarchive`: brings an archived application (and its onboarding driver) back.",
+        "summary": "`POST /applications/:id/unarchive`: brings an archived application (and its driver, D84) back.",
         "tags": [
           "Applications"
         ]
@@ -2193,7 +2211,7 @@
             }
           }
         },
-        "summary": "`POST /drivers/:id/archive`: hides the driver from the normal list and stops billing and reminders (D80). Any\n`active` or `inactive` driver, no need to deactivate first; drivers are archived, never deleted. `409` for a\ndriver still in onboarding (archive their approved application instead).",
+        "summary": "`POST /drivers/:id/archive`: hides the driver from the normal list and stops billing and reminders (D80). Any\ndriver, no need to deactivate first; drivers are archived, never deleted. The application they came from is\narchived with them (D84).",
         "tags": [
           "Drivers"
         ]
@@ -2224,7 +2242,7 @@
             }
           }
         },
-        "summary": "`POST /drivers/:id/unarchive`: brings an archived driver back, with the status they had.",
+        "summary": "`POST /drivers/:id/unarchive`: brings an archived driver back, with the status they had, and their application with them (D84).",
         "tags": [
           "Drivers"
         ]
@@ -3139,6 +3157,16 @@
             "type": "string",
             "nullable": true,
             "description": "When an admin archived it (D80); null = not archived."
+          },
+          "driverStatus": {
+            "type": "string",
+            "nullable": true,
+            "description": "Status of the driver \"Start onboarding\" created (D80); null if there is none. Archiving also archives that driver (D84).",
+            "enum": [
+              "onboarding",
+              "active",
+              "inactive"
+            ]
           }
         },
         "required": [
@@ -3152,7 +3180,8 @@
           "submittedAt",
           "receivedAt",
           "alertError",
-          "archivedAt"
+          "archivedAt",
+          "driverStatus"
         ]
       },
       "ApplicationListDto": {
@@ -3276,6 +3305,16 @@
             "nullable": true,
             "description": "When an admin archived it (D80); null = not archived."
           },
+          "driverStatus": {
+            "nullable": true,
+            "description": "Status of the driver \"Start onboarding\" created (D80); null if there is none. Archiving also archives that driver (D84).",
+            "enum": [
+              "onboarding",
+              "active",
+              "inactive"
+            ],
+            "type": "string"
+          },
           "driver": {
             "nullable": true,
             "description": "Null until an admin presses \"Start onboarding\"; then the driver, while onboarding is not finished.",
@@ -3299,6 +3338,7 @@
           "receivedAt",
           "alertError",
           "archivedAt",
+          "driverStatus",
           "driver"
         ]
       },
@@ -3431,6 +3471,16 @@
             "nullable": true,
             "description": "When an admin archived it (D80); null = not archived."
           },
+          "driverStatus": {
+            "nullable": true,
+            "description": "Status of the driver \"Start onboarding\" created (D80); null if there is none. Archiving also archives that driver (D84).",
+            "enum": [
+              "onboarding",
+              "active",
+              "inactive"
+            ],
+            "type": "string"
+          },
           "requestId": {
             "type": "string",
             "description": "The website's id for the submission."
@@ -3501,6 +3551,7 @@
           "receivedAt",
           "alertError",
           "archivedAt",
+          "driverStatus",
           "requestId",
           "zip",
           "licenseStoragePath",
@@ -4976,6 +5027,11 @@
           "balanceCents": {
             "type": "number",
             "description": "Ledger balance in cents: credits minus debits (D60). Negative = the driver owes money; 0 with no entries."
+          },
+          "applicationId": {
+            "type": "string",
+            "nullable": true,
+            "description": "The application this driver came from (D84), for the link between the two pages; null for imported drivers."
           }
         },
         "required": [
@@ -4994,7 +5050,8 @@
           "aliases",
           "paymentCount",
           "lastPaymentAt",
-          "balanceCents"
+          "balanceCents",
+          "applicationId"
         ]
       },
       "DriverListDto": {

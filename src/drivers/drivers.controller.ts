@@ -124,8 +124,8 @@ export class DriversController {
 
   /**
    * `POST /drivers/:id/archive`: hides the driver from the normal list and stops billing and reminders (D80). Any
-   * `active` or `inactive` driver, no need to deactivate first; drivers are archived, never deleted. `409` for a
-   * driver still in onboarding (archive their approved application instead).
+   * driver, no need to deactivate first; drivers are archived, never deleted. The application they came from is
+   * archived with them (D84).
    */
   @Post(":id/archive")
   @HttpCode(HttpStatus.OK)
@@ -136,7 +136,7 @@ export class DriversController {
     return this.drivers.archive(id, admin.id);
   }
 
-  /** `POST /drivers/:id/unarchive`: brings an archived driver back, with the status they had. */
+  /** `POST /drivers/:id/unarchive`: brings an archived driver back, with the status they had, and their application with them (D84). */
   @Post(":id/unarchive")
   @HttpCode(HttpStatus.OK)
   unarchive(
