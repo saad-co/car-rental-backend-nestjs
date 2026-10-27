@@ -27,6 +27,8 @@ export class ApplicationListItemDto {
   alertError: string | null;
   /** When an admin archived it (D80); null = not archived. */
   archivedAt: Date | null;
+  /** Status of the driver "Start onboarding" created (D80); null if there is none. Archiving also archives that driver (D84). */
+  driverStatus: DriverStatus | null;
 }
 
 /** The onboarding driver of an approved application, as the Approved applications page shows it. */

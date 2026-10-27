@@ -301,8 +301,8 @@ export class ApplicationsController {
   }
 
   /**
-   * `POST /applications/:id/archive`: hides the application from the normal list (D80); delete stays separate. An
-   * approved one in onboarding takes its driver with it; `409` if its driver is already active or inactive.
+   * `POST /applications/:id/archive`: hides the application from the normal list (D80); delete stays separate. Its
+   * driver, whatever the status, is archived with it (D84), which stops billing and reminders.
    */
   @Post(":id/archive")
   @HttpCode(HttpStatus.OK)
@@ -313,7 +313,7 @@ export class ApplicationsController {
     return this.applications.archive(id, admin.id);
   }
 
-  /** `POST /applications/:id/unarchive`: brings an archived application (and its onboarding driver) back. */
+  /** `POST /applications/:id/unarchive`: brings an archived application (and its driver, D84) back. */
   @Post(":id/unarchive")
   @HttpCode(HttpStatus.OK)
   unarchive(

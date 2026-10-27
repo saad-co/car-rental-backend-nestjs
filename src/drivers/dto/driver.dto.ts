@@ -54,6 +54,8 @@ export class DriverDto {
   lastPaymentAt: Date | null;
   /** Ledger balance in cents: credits minus debits (D60). Negative = the driver owes money; 0 with no entries. */
   balanceCents: number;
+  /** The application this driver came from (D84), for the link between the two pages; null for imported drivers. */
+  applicationId: string | null;
 }
 
 /** One page of drivers, newest first. */

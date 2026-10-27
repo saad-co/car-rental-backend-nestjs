@@ -1,7 +1,9 @@
-import { ConflictException, NotFoundException } from "@nestjs/common";
+import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { plainToInstance } from "class-transformer";
 import { validateSync } from "class-validator";
 import type { DataSource } from "typeorm";
+import { chicagoDate } from "../src/common/chicago-date.js";
+import { LinkedArchiveBackfill1792660000000 } from "../src/database/migrations/1792660000000-LinkedArchiveBackfill.js";
 import { PaymentAlias } from "../src/aliases/payment-alias.entity.js";
 import { Application } from "../src/applications/application.entity.js";
 import type { ApplicationAlertService } from "../src/applications/application-alert.service.js";
@@ -322,17 +324,21 @@ describe("Approved applications, start onboarding, archive (D80, test database)"
       expect(await approvedNames()).toEqual(["Ann"]);
     });
 
-    it("is refused when the driver is already active or inactive: archive the driver instead", async () => {
-      const id = await approved("Ann");
-      const { driverId } = await applications.startOnboarding(id, adminId);
-      await setDriver(driverId!, "active");
-      await expect(applications.archive(id, adminId)).rejects.toBeInstanceOf(
-        ConflictException,
-      );
-      await expect(applications.archive(id, adminId)).rejects.toThrow(
-        "archive the driver instead",
-      );
-      expect(await archivedAtOf("applications", id)).toBeNull();
+    it("archives an active or inactive driver with it, and unarchive brings both back (D84)", async () => {
+      for (const status of ["active", "inactive"] as const) {
+        const id = await approved(`Ann${status}`);
+        const { driverId } = await applications.startOnboarding(id, adminId);
+        await setDriver(driverId!, status);
+        const archived = await applications.archive(id, adminId);
+        expect(archived.archivedAt).not.toBeNull();
+        expect(await archivedAtOf("drivers", driverId!)).not.toBeNull();
+        // The driver keeps the status it had.
+        expect((await drivers.findOne(driverId!)).status).toBe(status);
+
+        await applications.unarchive(id, adminId);
+        expect(await archivedAtOf("applications", id)).toBeNull();
+        expect(await archivedAtOf("drivers", driverId!)).toBeNull();
+      }
     });
 
     it("an unknown application is a 404", async () => {
@@ -347,6 +353,213 @@ describe("Approved applications, start onboarding, archive (D80, test database)"
       await expect(applications.deleteMany([id], adminId)).rejects.toThrow(
         "Approved applications cannot be deleted",
       );
+    });
+  });
+
+  describe("the application and its driver are archived together (D84)", () => {
+    /** A driver made through the real start-onboarding path; returns both ids. */
+    async function pair(
+      name: string,
+      status: "onboarding" | "active" | "inactive",
+    ) {
+      const applicationId = await approved(name);
+      const { driverId } = await applications.startOnboarding(
+        applicationId,
+        adminId,
+      );
+      await setDriver(driverId!, status);
+      return { applicationId, driverId: driverId! };
+    }
+
+    it("archiving the driver archives the application, and unarchiving the driver brings both back", async () => {
+      const { applicationId, driverId } = await pair("Ann", "active");
+      await drivers.archive(driverId, adminId);
+      expect(await archivedAtOf("applications", applicationId)).not.toBeNull();
+      expect(await applicationNames({ archived: "true" })).toEqual(["Ann"]);
+
+      await drivers.unarchive(driverId, adminId);
+      expect(await archivedAtOf("applications", applicationId)).toBeNull();
+      expect(await archivedAtOf("drivers", driverId)).toBeNull();
+    });
+
+    it("both rows get the same archive time", async () => {
+      const { applicationId, driverId } = await pair("Ann", "inactive");
+      await applications.archive(applicationId, adminId);
+      expect(await archivedAtOf("applications", applicationId)).toEqual(
+        await archivedAtOf("drivers", driverId),
+      );
+    });
+
+    it("a driver with no application (imported) is archived alone", async () => {
+      const { applicationId, driverId } = await pair("Ann", "active");
+      await db.query(`UPDATE applications SET driver_id = NULL WHERE id = $1`, [
+        applicationId,
+      ]);
+      await drivers.archive(driverId, adminId);
+      expect(await archivedAtOf("drivers", driverId)).not.toBeNull();
+      expect(await archivedAtOf("applications", applicationId)).toBeNull();
+      expect((await drivers.findOne(driverId)).applicationId).toBeNull();
+    });
+
+    it("unarchiving an active driver starts billing from today, so the days away are never billed (D83)", async () => {
+      const { applicationId, driverId } = await pair("Ann", "active");
+      await db.query(
+        `UPDATE drivers SET rent_from = '2026-01-05' WHERE id = $1`,
+        [driverId],
+      );
+      await applications.archive(applicationId, adminId);
+      await applications.unarchive(applicationId, adminId);
+      const [{ rent_from }] = (await db.query(
+        `SELECT rent_from::text FROM drivers WHERE id = $1`,
+        [driverId],
+      )) as [{ rent_from: string }];
+      expect(rent_from).toBe(chicagoDate(new Date()));
+    });
+
+    it("the driver and the application link to each other", async () => {
+      const { applicationId, driverId } = await pair("Ann", "active");
+      expect((await drivers.findOne(driverId)).applicationId).toBe(
+        applicationId,
+      );
+      const detail = await applications.findOne(applicationId);
+      expect(detail.driverId).toBe(driverId);
+      expect(detail.driverStatus).toBe("active");
+    });
+
+    it("pressing Archive on both pages at the same instant ends with both archived and no deadlock", async () => {
+      const { applicationId, driverId } = await pair("Ann", "active");
+      await Promise.all([
+        applications.archive(applicationId, adminId),
+        drivers.archive(driverId, adminId),
+        applications.archive(applicationId, adminId),
+        drivers.archive(driverId, adminId),
+      ]);
+      expect(await archivedAtOf("applications", applicationId)).not.toBeNull();
+      expect(await archivedAtOf("drivers", driverId)).not.toBeNull();
+      await Promise.all([
+        applications.unarchive(applicationId, adminId),
+        drivers.unarchive(driverId, adminId),
+      ]);
+      expect(await archivedAtOf("applications", applicationId)).toBeNull();
+      expect(await archivedAtOf("drivers", driverId)).toBeNull();
+    });
+  });
+
+  describe("the Applications list leaves out people who became drivers (D84)", () => {
+    async function seed() {
+      await db.query(
+        `INSERT INTO applications (request_id, first_name, last_name, email, phone, payload)
+         VALUES ('p1', 'Pen', 'Ding', 'pen@test.dev', '3055550101', '{}')`,
+      );
+      await approved("NoDriver");
+      for (const [name, status] of [
+        ["Onb", "onboarding"],
+        ["Act", "active"],
+        ["Ina", "inactive"],
+      ] as const) {
+        const id = await approved(name);
+        const { driverId } = await applications.startOnboarding(id, adminId);
+        await setDriver(driverId!, status);
+      }
+    }
+
+    it("the default list has applications without a driver or with one in onboarding", async () => {
+      await seed();
+      expect(await applicationNames()).toEqual(["NoDriver", "Onb", "Pen"]);
+    });
+
+    it("becameDriver=true lists only the active and inactive ones", async () => {
+      await seed();
+      expect(await applicationNames({ becameDriver: "true" })).toEqual([
+        "Act",
+        "Ina",
+      ]);
+    });
+
+    it("the status filter and the search work on both views", async () => {
+      await seed();
+      expect(
+        await applicationNames({ status: "pending", becameDriver: "true" }),
+      ).toEqual([]);
+      expect(await applicationNames({ status: "approved" })).toEqual([
+        "NoDriver",
+        "Onb",
+      ]);
+      expect(
+        await applicationNames({ becameDriver: "true", search: "ina" }),
+      ).toEqual(["Ina"]);
+    });
+
+    it("archived=true lists the archived ones whatever their driver, and not together with becameDriver", async () => {
+      await seed();
+      const [{ id }] = (await db.query(
+        `SELECT id FROM applications WHERE first_name = 'Act'`,
+      )) as [{ id: string }];
+      await applications.archive(id, adminId);
+      expect(await applicationNames({ archived: "true" })).toEqual(["Act"]);
+      expect(await applicationNames({ becameDriver: "true" })).toEqual(["Ina"]);
+      await expect(
+        applications.list(
+          query(ListApplicationsQueryDto, {
+            archived: "true",
+            becameDriver: "true",
+          }),
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it("rejects a bad becameDriver value", () => {
+      expect(() =>
+        query(ListApplicationsQueryDto, { becameDriver: "maybe" }),
+      ).toThrow();
+    });
+
+    it("the list rows carry the driver's status", async () => {
+      await seed();
+      const rows = (
+        await applications.list(
+          query(ListApplicationsQueryDto, { becameDriver: "true" }),
+        )
+      ).items;
+      expect(rows.map((r) => r.driverStatus)).toEqual(
+        expect.arrayContaining(["active", "inactive"]),
+      );
+      expect(rows).toHaveLength(2);
+    });
+
+    it("the Approved applications page is unchanged", async () => {
+      await seed();
+      expect((await approvedNames()).sort()).toEqual(["NoDriver", "Onb"]);
+    });
+  });
+
+  describe("backfill of applications of drivers archived before D84", () => {
+    it("archives the application of an already archived driver, and nothing else", async () => {
+      const a = await approved("Old");
+      const { driverId } = await applications.startOnboarding(a, adminId);
+      await setDriver(driverId!, "active");
+      await db.query(`UPDATE drivers SET archived_at = now() WHERE id = $1`, [
+        driverId,
+      ]);
+      const b = await approved("Live");
+      const { driverId: liveDriver } = await applications.startOnboarding(
+        b,
+        adminId,
+      );
+      await setDriver(liveDriver!, "active");
+      const c = await approved("Alone");
+
+      const runner = db.createQueryRunner();
+      try {
+        await new LinkedArchiveBackfill1792660000000().up(runner);
+      } finally {
+        await runner.release();
+      }
+      expect(await archivedAtOf("applications", a)).toEqual(
+        await archivedAtOf("drivers", driverId!),
+      );
+      expect(await archivedAtOf("applications", b)).toBeNull();
+      expect(await archivedAtOf("applications", c)).toBeNull();
     });
   });
 
@@ -401,14 +614,14 @@ describe("Approved applications, start onboarding, archive (D80, test database)"
       expect(await archivedAtOf("drivers", id)).toBeNull();
     });
 
-    it("refuses a driver still in onboarding: archive the approved application instead", async () => {
+    it("archives a driver still in onboarding too, with their application (D84)", async () => {
       const id = await driver("Cy", "onboarding");
-      await expect(drivers.archive(id, adminId)).rejects.toThrow(
-        "archive their approved application instead",
-      );
-      await expect(drivers.unarchive(id, adminId)).rejects.toThrow(
-        "unarchive their approved application instead",
-      );
+      await drivers.archive(id, adminId);
+      expect(await archivedAtOf("drivers", id)).not.toBeNull();
+      expect(await approvedNames()).toEqual([]);
+      await drivers.unarchive(id, adminId);
+      expect(await archivedAtOf("drivers", id)).toBeNull();
+      expect(await approvedNames()).toEqual(["Cy"]);
     });
 
     it("an unknown driver is a 404", async () => {
