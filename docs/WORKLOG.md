@@ -6,7 +6,7 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ### 2026-10-27 — Feature 15: archive an application and its driver together (D84, B107)
 - **Branch** `feature/linked-archive` in both repos, worktrees `wt-linked-archive-backend` / `-frontend` (slot 1: backend :5001, frontend :5174,
-  databases `car_rental_linked_archive` / `_test`), from `origin/dev` (backend `6e10a86`, frontend `a5537fa`). **Not committed, not merged, not deployed.**
+  databases `car_rental_linked_archive` / `_test`), from `origin/dev` (backend `6e10a86`, frontend `a5537fa`). **Committed and pushed 2026-10-27 (backend PR #44 `9e5154b`, frontend PR #29 `3017029`); not merged, not deployed.**
 - **Backend:** `ApplicationsService.setArchived` / `DriversService.setArchived` archive and unarchive the pair in one transaction (application row locked first, then
   the driver, in both); the two 409s are gone; `startBilling` exported and reused; `list` joins the driver and leaves out applications whose driver is `active` or
   `inactive` unless `becameDriver=true` (400 together with `archived=true`); `ApplicationListItemDto.driverStatus`, `DriverDto.applicationId`; data migration
