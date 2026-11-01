@@ -4,6 +4,10 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-11-02 — Contract draft layout; branches cleaned
+- Frontend (pushed straight to `dev`, Abulkalam): the Driver details card moved to the right column under the lease disclosure summary (`DriverDetailsCard.tsx`, split out of `ContractDetailsCards.tsx` with its AI logic). Lint and type-check pass; not looked at in the browser (signed out).
+- Every merged branch deleted locally and on GitHub in both repos (also backend `feature/linked-archive`, whose only extra commit was an outdated WORKLOG line); only `dev` and `main` remain.
+
 ### 2026-11-02 — Client revisions batch (branch `revisions`, main checkouts, no worktree): B115-B121, D86
 - **Applications:** Add application never texts and starts onboarding by itself (B115, B116); the Approve button also starts onboarding for every application, with or without text (`approveAndStartOnboarding`, B116); a phone that cannot get texts is accepted (B115). Double-click on Save no longer errors (`unlessDoneMeanwhile`).
 - **Drivers:** several drivers may share a phone (B117): migration `AllowSharedDriverPhone` drops `drivers.phone` unique; payment matching leaves a shared phone out of the exact lookup. Email stays unique.
