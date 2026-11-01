@@ -46,7 +46,10 @@ export interface ContractNumbers extends RateBreakdown {
   oneTimeTotalCents: number;
   /** First payment + one-time charges (our reading, D71). */
   amountDueAtPickupCents: number;
-  /** The sheet's recurring "Total" row: payment + excess mileage + insurance excess + other recurring. */
+  /**
+   * The recurring "Total" row: payment + insurance excess + other recurring. Excess mileage is NOT in it (client,
+   * 2026-11-02, B119): it is charged only when used, and the admin adds it to the ledger by hand.
+   */
   recurringTotalCents: number;
   /** The day the term ends, `YYYY-MM-DD`. */
   endDate: string;
@@ -105,10 +108,7 @@ export function contractNumbers(input: ContractMathInput): ContractNumbers {
     oneTimeTotalCents,
     amountDueAtPickupCents: paymentCents + oneTimeTotalCents,
     recurringTotalCents:
-      paymentCents +
-      input.excessMileageCents +
-      input.insuranceExcessCents +
-      input.otherRecurringCents,
+      paymentCents + input.insuranceExcessCents + input.otherRecurringCents,
     endDate: addMonths(input.startDate, input.termMonths),
   };
 }

@@ -114,14 +114,14 @@ describe("contractNumbers (D71)", () => {
     expect(n.amountDueAtPickupCents).toBe(56_900);
   });
 
-  it("recurring total is the payment plus the three recurring charges", () => {
+  it("recurring total is the payment plus insurance excess and other, never excess mileage (B119)", () => {
     const n = contractNumbers({
       ...base,
       excessMileageCents: 25,
       insuranceExcessCents: 5_000,
       otherRecurringCents: 1_000,
     });
-    expect(n.recurringTotalCents).toBe(39_900 + 25 + 5_000 + 1_000);
+    expect(n.recurringTotalCents).toBe(39_900 + 5_000 + 1_000);
   });
 
   it("matches the daily sample: $61 + $300 = $361", () => {

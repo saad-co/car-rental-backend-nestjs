@@ -187,11 +187,11 @@ export class DriversService {
    * Files are not covered by a database transaction, so the order is: check everything (phone, files, aliases, the email and
    * phone being free) → put the files in the bucket → one transaction for the driver, the file rows and the aliases → if that
    * fails, remove the files again (a failed removal is logged as an error). Sending the form twice makes one driver: the
-   * second try meets the unique email and phone and is answered `409`.
+   * second try meets the unique email and is answered `409`.
    *
    * @throws BadRequestException a phone that is not a US number, a file that is not a JPG, PNG or PDF of at most 10 MB, a date
    *   of birth in the future, or an alias that does not pass the checks of D69.
-   * @throws ConflictException a driver already has this email or phone, or an alias already belongs to a driver.
+   * @throws ConflictException a driver already has this email, or an alias already belongs to a driver.
    * @throws ServiceUnavailableException files came but no file bucket is set up.
    */
   async create(
@@ -231,15 +231,9 @@ export class DriversService {
           .map((alias) => [`${alias.type}:${alias.valueNormalized}`, alias]),
       ).values(),
     ];
-    const taken = await this.drivers.findOne({
-      where: [{ email: dto.email }, { phone }],
-    });
-    if (taken) {
-      throw new ConflictException(
-        taken.email === dto.email
-          ? "A driver with this email already exists."
-          : "A driver with this phone number already exists.",
-      );
+    // The phone may be shared by several drivers (B117); the email may not.
+    if (await this.drivers.exists({ where: { email: dto.email } })) {
+      throw new ConflictException("A driver with this email already exists.");
     }
 
     const id = randomUUID();
@@ -307,10 +301,8 @@ export class DriversService {
     } catch (error) {
       await this.removeFiles(putKeys);
       if (isUniqueViolation(error)) {
-        // Someone added a driver with this email or phone between our check and the insert.
-        throw new ConflictException(
-          "A driver with this email or phone number already exists.",
-        );
+        // Someone added a driver with this email between our check and the insert.
+        throw new ConflictException("A driver with this email already exists.");
       }
       throw error;
     }

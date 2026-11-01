@@ -17,6 +17,9 @@ import { ContractTrackingService } from "./contract-tracking.service.js";
 import { ContractsController } from "./contracts.controller.js";
 import { ContractsService } from "./contracts.service.js";
 import { FirmaWebhookController } from "./firma-webhook.controller.js";
+import { GeminiJsonClient } from "../llm/gemini-client.js";
+import type { LlmJsonClient } from "../llm/llm-client.js";
+import { LICENCE_LLM, LicenceReaderService } from "./licence-reader.service.js";
 
 /**
  * Driver contracts (Module 2): the draft and its rate calculator (D71, step 1), its details (step 2) and sending it for
@@ -45,6 +48,17 @@ import { FirmaWebhookController } from "./firma-webhook.controller.js";
     ContractTrackingService,
     ContractTrackingJob,
     ContractRentJob,
+    LicenceReaderService,
+    // Reads the driver details from the licence (B121, D86); null without the AI settings, as for matching.
+    {
+      provide: LICENCE_LLM,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService): LlmJsonClient | null => {
+        const apiKey = config.get<string>("LLM_API_KEY");
+        const model = config.get<string>("LLM_MODEL");
+        return apiKey && model ? new GeminiJsonClient({ apiKey, model }) : null;
+      },
+    },
     {
       provide: FIRMA_CLIENT,
       inject: [ConfigService],

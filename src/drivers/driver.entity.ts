@@ -40,8 +40,8 @@ export const MAX_DEPOSIT_CENTS = 2_147_483_647;
  * A driver renting a car from the fleet. Maps to the `drivers` table.
  *
  * Created when an admin approves an application (D26), in `onboarding` (D56). Payments are matched to
- * drivers of any status (a deposit arrives before the driver is active), which is why email and phone
- * must each belong to only one driver.
+ * drivers of any status (a deposit arrives before the driver is active), which is why the email must belong to only one
+ * driver. The phone may be shared (B117, 2026-11-02): one person renting several cars is several drivers.
  */
 @Entity("drivers")
 @Check("drivers_email_lowercase", `"email" = lower("email")`)
@@ -92,7 +92,7 @@ export class Driver {
    * (`(312) 555-0123` vs `3125550123`). The CHECK above makes the database reject
    * anything else; the code converts the application's 10 digits before saving.
    */
-  @Column({ type: "varchar", length: 12, unique: true })
+  @Column({ type: "varchar", length: 12 })
   phone: string;
 
   // The profile (D85): copied from the application when onboarding starts, or typed by an admin when a driver is added

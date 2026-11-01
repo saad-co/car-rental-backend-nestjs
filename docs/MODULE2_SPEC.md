@@ -82,6 +82,9 @@ as a requirement; *our suggestion* = ours, to be shown to the client. "Sample co
 | One-time charges: security deposit, documentation fee, insurance policy start fee, other, hold vehicle payment | Sample contract header | from a document |
 | Recurring charges: excess mileage per mile, insurance excess per month, other | Sample contract header | from a document |
 | Payment = total rate; amount due at pickup = first payment + one-time charges; recurring total | Our reading of the rate sheet and the samples ($409 + $200 = $609 and similar), D71, B91 question 2 | our suggestion |
+| Excess mileage is not in the recurring total; shown below it in the side panel, still printed on the PDF in its place; added to the ledger by hand when used (B119) | Client, through Abulkalam, 2026-11-02 | client-confirmed |
+| Vehicle picked from the business's vehicle list (model, VIN, plate, plate state = fleet area) | Client's "Masterlist Copy for Delevoper.xlsx", 2026-11-02; plate state = fleet area is our reading | from a document |
+| Driver details (address, licence number, licence state, date of birth) read from the licence by AI, editable, marked as AI-read (D86) | Client, through Abulkalam, 2026-11-02; the "AI" note and auto-read when empty are Abulkalam's | client-confirmed |
 | Lease disclosure summary shown beside the form | Sample contract's rate disclosure block | from a document |
 | Live preview while typing | Ours | our suggestion |
 | Largest rate or charge $10,000; term from 1 to 60 months | Ours (step 1, already deployed) | our suggestion |

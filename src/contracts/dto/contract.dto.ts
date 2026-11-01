@@ -207,6 +207,29 @@ export class ContractCompanyDto {
   address: string;
 }
 
+/** The driver details read from the driver's licence by the AI (B121); null for what it could not read. Nothing is saved. */
+export class LicenceDetailsDto {
+  /** One line: street, city, state and ZIP. */
+  address: string | null;
+  licenseNumber: string | null;
+  /** Two-letter code of the issuing state. */
+  licenseState: string | null;
+  /** `YYYY-MM-DD`. */
+  dateOfBirth: string | null;
+}
+
+/** One of the business's vehicles (B120): picking it fills the contract's vehicle boxes. Empty text when unknown. */
+export class FleetVehicleDto {
+  /** Year, make and model, e.g. "2015 Toyota Prius Hybrid". */
+  model: string;
+  /** Shown in the list to tell cars apart; not part of the contract (it has no colour). */
+  color: string;
+  vin: string;
+  plate: string;
+  /** The fleet area from the client's list (IL, CA or TN). */
+  plateState: string;
+}
+
 /** The numbers worked out from the inputs (D71); never stored, always recalculated. All money in whole cents. */
 export class ContractNumbersDto {
   /** Base rate (42% of the total, plus any rounding remainder). */
@@ -225,7 +248,7 @@ export class ContractNumbersDto {
   oneTimeTotalCents: number;
   /** First payment + one-time charges. */
   amountDueAtPickupCents: number;
-  /** Payment + excess mileage + insurance excess + other recurring (the sheet's recurring Total row). */
+  /** Payment + insurance excess + other recurring (the recurring Total row). Excess mileage is not in it (B119). */
   recurringTotalCents: number;
   /** Last day of the term, `YYYY-MM-DD` (start date + term months, clamped to the month's last day). */
   endDate: string;

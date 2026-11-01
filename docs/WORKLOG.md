@@ -4,6 +4,13 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-11-02 — Client revisions batch (branch `revisions`, main checkouts, no worktree): B115-B121, D86
+- **Applications:** Add application never texts and starts onboarding by itself (B115, B116); the Approve button also starts onboarding for every application, with or without text (`approveAndStartOnboarding`, B116); a phone that cannot get texts is accepted (B115). Double-click on Save no longer errors (`unlessDoneMeanwhile`).
+- **Drivers:** several drivers may share a phone (B117): migration `AllowSharedDriverPhone` drops `drivers.phone` unique; payment matching leaves a shared phone out of the exact lookup. Email stays unique.
+- **Contracts:** excess mileage out of the recurring total, shown under it (B119); vehicle dropdown from the client's Masterlist, 42 cars with colour (B120, `GET /contracts/vehicles`); driver details extracted from the licence by AI with a section loader (B121, D86, `POST /drivers/:id/contract/licence-details`). PDF preview deferred (B118); dark theme deferred (B112).
+- **Verified:** backend lint, build, unit and full e2e; frontend lint and build; migration run / revert / run with no drift; a made-up licence read by Gemini end to end. Not walked through in the browser (signed out).
+- **Before deploy:** one migration (drops a unique constraint; existing rows untouched). B121 needs a paid Gemini key or the client's consent before real licences (D86).
+
 ### 2026-11-01 — Feature 16 step 1 and Approve without text merged into local `dev`; worktrees removed
 - Committed on `feature/add-driver-direct` (backend `e7c5eaf`, frontend `55cb9b0`) and merged into **local** `dev` with no PR (Abulkalam, 2026-11-01): backend `c84536f`, frontend `e791d33`. **NOT pushed; not deployed.**
 - Main database `car_rental_db` migrated (6 migrations, up to `AddDriverProfileAndDocuments`); `npm install` in both main checkouts; backend and frontend build.

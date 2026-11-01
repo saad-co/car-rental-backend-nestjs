@@ -17,17 +17,13 @@ import {
   FirmaError,
   type FirmaClient,
 } from "../firma/firma-client.js";
-import {
-  ApplicationDocument,
-  ApplicationDocumentKind,
-  ApplicationDocumentStatus,
-} from "../applications/documents/application-document.entity.js";
 import type { FileStorage } from "../sms/storage/file-storage.js";
 import { FILE_STORAGE } from "../sms/storage/file-storage.module.js";
 import { ContractCompany } from "./contract-company.entity.js";
 import { notPostedAutomatically } from "./contract-ledger.js";
 import { contractNumbers, type ContractMathInput } from "./contract-math.js";
 import { LicenceError, placeLicence } from "./contract-licence.js";
+import { fetchLicenceFile } from "./licence-file.js";
 import {
   buildAnchors,
   loadTemplate,
@@ -306,39 +302,12 @@ export class ContractsService {
     driverId: string,
     template: ContractTemplate,
   ): Promise<{ pdf: Buffer; documentId: string }> {
-    const storage = this.storage;
-    if (!storage) {
-      throw new ServiceUnavailableException(
-        "File storage is not set up (S3_*): the driver's licence is read from it.",
-      );
-    }
-    // The licence is the driver's own file (a driver added directly, D85) or the one on the application they came from.
-    const stored = {
-      kind: ApplicationDocumentKind.license,
-      status: ApplicationDocumentStatus.stored,
-    };
-    const document = await manager.findOne(ApplicationDocument, {
-      where: [
-        { ...stored, driverId },
-        { ...stored, application: { driverId } },
-      ],
-    });
-    if (!document?.storageKey) {
-      throw new ConflictException(
-        "The driver's licence is not on file: add it to the driver's documents first.",
-      );
-    }
-    let body: Buffer;
-    try {
-      body = await storage.get(document.storageKey);
-    } catch (error) {
-      this.logger.error(
-        `could not read the licence file of driver ${driverId}: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      throw new BadGatewayException(
-        "The driver's licence file could not be read from storage.",
-      );
-    }
+    const { body, documentId } = await fetchLicenceFile(
+      manager,
+      this.storage,
+      driverId,
+      this.logger,
+    );
     try {
       return {
         pdf: await placeLicence(
@@ -346,7 +315,7 @@ export class ContractsService {
           { body },
           template.licenceSlot,
         ),
-        documentId: document.id,
+        documentId,
       };
     } catch (error) {
       if (error instanceof LicenceError)

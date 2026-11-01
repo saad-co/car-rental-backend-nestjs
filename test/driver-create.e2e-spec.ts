@@ -386,12 +386,10 @@ describe("an admin adds a driver directly (D85, test database)", () => {
       expect(storage.files.size).toBe(0);
     });
 
-    it("a phone a driver already has, written differently: 409", async () => {
+    it("a phone a driver already has is fine: two drivers share it (B117)", async () => {
       await create();
-      await expect(
-        create({ email: "other@test.dev", phone: "+1 305-721-0909" }),
-      ).rejects.toThrow("A driver with this phone number already exists.");
-      expect(await count("drivers")).toBe(1);
+      await create({ email: "other@test.dev", phone: "+1 305-721-0909" });
+      expect(await count("drivers WHERE phone = '+13057210909'")).toBe(2);
     });
 
     it("a file that is not a picture or PDF: 400, nothing stored", async () => {

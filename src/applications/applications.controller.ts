@@ -240,8 +240,8 @@ export class ApplicationsController {
   }
 
   /**
-   * `POST /applications/:id/approve`: marks the application approved and texts the applicant. No driver is created
-   * (D80); "Start onboarding" does that. Optional body `{ "message": "..." }` is the approval text the admin picked and edited (B81); without
+   * `POST /applications/:id/approve`: marks the application approved, texts the applicant and starts onboarding (creates
+   * the driver, B116). Optional body `{ "message": "..." }` is the approval text the admin picked and edited (B81); without
    * it the first approved template is sent. `{ "sendText": false }` approves without any text (B111). `400` for an
    * unknown placeholder in it.
    *
@@ -255,7 +255,7 @@ export class ApplicationsController {
     @Body() body: ApproveApplicationDto,
     @CurrentUser() admin: AuthenticatedUser,
   ): Promise<ApplicationDetailDto> {
-    return this.applications.approve(id, admin.id, {
+    return this.applications.approveAndStartOnboarding(id, admin.id, {
       message: body.message,
       sendText: body.sendText,
     });
@@ -294,7 +294,7 @@ export class ApplicationsController {
   /**
    * `POST /applications/:id/start-onboarding`: for an approved application, creates the driver (in onboarding) and
    * their login (D80). `409` if it is not approved, is archived, already has its driver, or a driver or login already
-   * has this email or phone.
+   * has this email.
    */
   @Post(":id/start-onboarding")
   @HttpCode(HttpStatus.OK)

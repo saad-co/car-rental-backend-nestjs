@@ -636,7 +636,7 @@
             }
           }
         },
-        "summary": "`POST /applications/:id/approve`: marks the application approved and texts the applicant. No driver is created\n(D80); \"Start onboarding\" does that. Optional body `{ \"message\": \"...\" }` is the approval text the admin picked and edited (B81); without\nit the first approved template is sent. `{ \"sendText\": false }` approves without any text (B111). `400` for an\nunknown placeholder in it.\n\nPOST because it is an action with side effects, not an edit of a field. `@HttpCode(200)`\nbecause it returns the updated application rather than creating a resource at this URL.",
+        "summary": "`POST /applications/:id/approve`: marks the application approved, texts the applicant and starts onboarding (creates\nthe driver, B116). Optional body `{ \"message\": \"...\" }` is the approval text the admin picked and edited (B81); without\nit the first approved template is sent. `{ \"sendText\": false }` approves without any text (B111). `400` for an\nunknown placeholder in it.\n\nPOST because it is an action with side effects, not an edit of a field. `@HttpCode(200)`\nbecause it returns the updated application rather than creating a resource at this URL.",
         "tags": [
           "Applications"
         ]
@@ -739,7 +739,7 @@
             }
           }
         },
-        "summary": "`POST /applications/:id/start-onboarding`: for an approved application, creates the driver (in onboarding) and\ntheir login (D80). `409` if it is not approved, is archived, already has its driver, or a driver or login already\nhas this email or phone.",
+        "summary": "`POST /applications/:id/start-onboarding`: for an approved application, creates the driver (in onboarding) and\ntheir login (D80). `409` if it is not approved, is archived, already has its driver, or a driver or login already\nhas this email.",
         "tags": [
           "Applications"
         ]
@@ -1672,6 +1672,62 @@
         ]
       }
     },
+    "/contracts/vehicles": {
+      "get": {
+        "operationId": "ContractsController_listVehicles",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FleetVehicleDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "`GET /contracts/vehicles`: the business's vehicles to pick on the Vehicle card (B120; not paginated: about 40).",
+        "tags": [
+          "Contracts"
+        ]
+      }
+    },
+    "/drivers/{driverId}/contract/licence-details": {
+      "post": {
+        "operationId": "ContractsController_readLicence",
+        "parameters": [
+          {
+            "name": "driverId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LicenceDetailsDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`POST /drivers/:driverId/contract/licence-details`: reads address, licence number, state and date of birth from the\ndriver's licence file with the AI (B121, D86). Nothing is saved: the page puts the values in the draft's boxes.\nPOST because every call asks the AI again. `404` unknown driver, `409` no licence on file or none found in it,\n`502` the AI or the bucket failed, `503` the AI is not set up.",
+        "tags": [
+          "Contracts"
+        ]
+      }
+    },
     "/drivers/{driverId}/contract": {
       "get": {
         "operationId": "ContractsController_getCurrent",
@@ -2101,7 +2157,7 @@
             }
           }
         },
-        "summary": "`POST /drivers`: an admin adds a driver directly, without an application (D85). Multipart form data: the text fields\n(name, email and phone are required; the profile and `aliases`, a JSON list of `{type, value}`, are optional) and the\noptional files `licenseFile` and `earningsFile` (JPG, PNG or PDF, at most 10 MB each). The driver starts in\nonboarding with no login, and nothing is texted. `409` when a driver already has the email or phone, or an alias\nalready belongs to another driver; nothing is saved then. Answers with the new driver.\n\nThe interceptor is multer, the library you would mount as `upload.fields([...])` in Express: it reads the multipart\nbody, keeps the files in memory and leaves the text fields in `@Body()`, where the global ValidationPipe checks them.",
+        "summary": "`POST /drivers`: an admin adds a driver directly, without an application (D85). Multipart form data: the text fields\n(name, email and phone are required; the profile and `aliases`, a JSON list of `{type, value}`, are optional) and the\noptional files `licenseFile` and `earningsFile` (JPG, PNG or PDF, at most 10 MB each). The driver starts in\nonboarding with no login, and nothing is texted. `409` when a driver already has the email, or an alias\nalready belongs to another driver; nothing is saved then. Answers with the new driver.\n\nThe interceptor is multer, the library you would mount as `upload.fields([...])` in Express: it reads the multipart\nbody, keeps the files in memory and leaves the text fields in `@Body()`, where the global ValidationPipe checks them.",
         "tags": [
           "Drivers"
         ]
@@ -4622,7 +4678,7 @@
           },
           "recurringTotalCents": {
             "type": "number",
-            "description": "Payment + excess mileage + insurance excess + other recurring (the sheet's recurring Total row)."
+            "description": "Payment + insurance excess + other recurring (the recurring Total row). Excess mileage is not in it (B119)."
           },
           "endDate": {
             "type": "string",
@@ -4661,6 +4717,66 @@
           "id",
           "name",
           "address"
+        ]
+      },
+      "FleetVehicleDto": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string",
+            "description": "Year, make and model, e.g. \"2015 Toyota Prius Hybrid\"."
+          },
+          "color": {
+            "type": "string",
+            "description": "Shown in the list to tell cars apart; not part of the contract (it has no colour)."
+          },
+          "vin": {
+            "type": "string"
+          },
+          "plate": {
+            "type": "string"
+          },
+          "plateState": {
+            "type": "string",
+            "description": "The fleet area from the client's list (IL, CA or TN)."
+          }
+        },
+        "required": [
+          "model",
+          "color",
+          "vin",
+          "plate",
+          "plateState"
+        ]
+      },
+      "LicenceDetailsDto": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "nullable": true,
+            "description": "One line: street, city, state and ZIP."
+          },
+          "licenseNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "licenseState": {
+            "type": "string",
+            "nullable": true,
+            "description": "Two-letter code of the issuing state."
+          },
+          "dateOfBirth": {
+            "type": "string",
+            "nullable": true,
+            "description": "`YYYY-MM-DD`."
+          }
+        },
+        "required": [
+          "address",
+          "licenseNumber",
+          "licenseState",
+          "dateOfBirth"
         ]
       },
       "ContractStatus": {

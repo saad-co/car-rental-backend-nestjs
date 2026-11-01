@@ -15,12 +15,12 @@ const JPEG_QUALITY = 85;
 /** Kept clear of the page edge when a slot runs past the bottom of the page. */
 const PAGE_MARGIN_PT = 24;
 
-function isPdf(body: Buffer): boolean {
+export function isPdf(body: Buffer): boolean {
   return body.subarray(0, 5).toString("latin1") === "%PDF-";
 }
 
 /** Any picture firma-sized: upright (EXIF), at most `MAX_SIDE_PX` on its longest side, flat white background, JPEG. */
-async function normaliseImage(body: Buffer): Promise<Buffer> {
+export async function normaliseImage(body: Buffer): Promise<Buffer> {
   try {
     return await sharp(body)
       .rotate()

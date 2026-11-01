@@ -49,6 +49,12 @@ export class AliasIndex {
     drivers: { id: string; email: string; phone: string }[],
   ): AliasIndex {
     const index = new AliasIndex();
+    // Several drivers may share a phone (B117: one person renting several cars). Such a phone says nothing about WHICH
+    // driver paid, so it is left out: the AI and a human decide.
+    const phoneCount = new Map<string, number>();
+    for (const { phone } of drivers) {
+      phoneCount.set(phone, (phoneCount.get(phone) ?? 0) + 1);
+    }
     for (const driver of drivers) {
       index.entries.set(
         AliasIndex.key(AliasType.email, driver.email.toLowerCase()),
@@ -57,10 +63,12 @@ export class AliasIndex {
           value: driver.email,
         },
       );
-      index.entries.set(AliasIndex.key(AliasType.phone, driver.phone), {
-        driverId: driver.id,
-        value: driver.phone,
-      });
+      if (phoneCount.get(driver.phone) === 1) {
+        index.entries.set(AliasIndex.key(AliasType.phone, driver.phone), {
+          driverId: driver.id,
+          value: driver.phone,
+        });
+      }
     }
     // Aliases are unique per type, so they only overwrite a contact detail that is also someone's alias.
     for (const alias of aliases) {

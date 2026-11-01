@@ -47,7 +47,7 @@ export class DriversController {
    * `POST /drivers`: an admin adds a driver directly, without an application (D85). Multipart form data: the text fields
    * (name, email and phone are required; the profile and `aliases`, a JSON list of `{type, value}`, are optional) and the
    * optional files `licenseFile` and `earningsFile` (JPG, PNG or PDF, at most 10 MB each). The driver starts in
-   * onboarding with no login, and nothing is texted. `409` when a driver already has the email or phone, or an alias
+   * onboarding with no login, and nothing is texted. `409` when a driver already has the email, or an alias
    * already belongs to another driver; nothing is saved then. Answers with the new driver.
    *
    * The interceptor is multer, the library you would mount as `upload.fields([...])` in Express: it reads the multipart

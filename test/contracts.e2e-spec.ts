@@ -176,7 +176,7 @@ describe("Contract drafts (Module 2 steps 1 and 2, D71, test database)", () => {
       numbers: {
         baseCents: 2_562,
         amountDueAtPickupCents: 36_100,
-        recurringTotalCents: 6_125,
+        recurringTotalCents: 6_100, // excess mileage is not in it (B119)
         endDate: "2027-02-28",
       },
     });
