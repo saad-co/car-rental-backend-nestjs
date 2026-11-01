@@ -4,6 +4,10 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-11-02 — Dark redesign, step 1: shell, shared parts, Applications (B112, D87)
+- **Branch** `feature/dark-theme` in both repos (main checkouts, no worktree). Frontend: `index.css` tokens re-coloured dark, fonts Archivo / IBM Plex Sans / IBM Plex Mono, `bg-white` → `bg-surface` everywhere, dark sidebar and header with the new brand mark, `DataTable` ledger look, dropdown panels and native selects fixed, `BackLink` on all 7 pages with a back link, Applications list / detail / approved / add headings and mono numbers. Backend: docs only.
+- **Verified:** lint, type-check, build; Abulkalam checked the pages in their own browser (2026-11-02). Not merged.
+
 ### 2026-11-02 — Contract draft layout; branches cleaned
 - Frontend (pushed straight to `dev`, Abulkalam): the Driver details card moved to the right column under the lease disclosure summary (`DriverDetailsCard.tsx`, split out of `ContractDetailsCards.tsx` with its AI logic). **Reverted the same day** (frontend `e17e76d`, Abulkalam): the card is back in the left column.
 - Every merged branch deleted locally and on GitHub in both repos (also backend `feature/linked-archive`, whose only extra commit was an outdated WORKLOG line); only `dev` and `main` remain.
