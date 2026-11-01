@@ -5,7 +5,7 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 ---
 
 ### 2026-11-02 — Contract draft layout; branches cleaned
-- Frontend (pushed straight to `dev`, Abulkalam): the Driver details card moved to the right column under the lease disclosure summary (`DriverDetailsCard.tsx`, split out of `ContractDetailsCards.tsx` with its AI logic). Lint and type-check pass; not looked at in the browser (signed out).
+- Frontend (pushed straight to `dev`, Abulkalam): the Driver details card moved to the right column under the lease disclosure summary (`DriverDetailsCard.tsx`, split out of `ContractDetailsCards.tsx` with its AI logic). **Reverted the same day** (frontend `e17e76d`, Abulkalam): the card is back in the left column.
 - Every merged branch deleted locally and on GitHub in both repos (also backend `feature/linked-archive`, whose only extra commit was an outdated WORKLOG line); only `dev` and `main` remain.
 
 ### 2026-11-02 — Client revisions batch (branch `revisions`, main checkouts, no worktree): B115-B121, D86
