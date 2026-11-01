@@ -7,14 +7,24 @@ import {
   HttpStatus,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
+  UploadedFiles,
+  UseFilters,
+  UseInterceptors,
 } from "@nestjs/common";
+import { FileFieldsInterceptor } from "@nestjs/platform-express";
+import { ApiBody, ApiConsumes } from "@nestjs/swagger";
 import { CurrentUser } from "../auth/current-user.decorator.js";
 import type { AuthenticatedUser } from "../auth/jwt-auth.guard.js";
-import { DriversService } from "./drivers.service.js";
+import { UploadTooLargeFilter } from "../applications/documents/upload-errors.filter.js";
+import { MAX_UPLOAD_BYTES } from "../applications/documents/upload-file.js";
+import { DriversService, type NewDriverFiles } from "./drivers.service.js";
 import { AddAliasDto } from "./dto/add-alias.dto.js";
-import { DriverDto, DriverListDto } from "./dto/driver.dto.js";
+import { CreateDriverDto } from "./dto/create-driver.dto.js";
+import { UpdateDriverProfileDto } from "./dto/driver-profile.dto.js";
+import { DriverDetailDto, DriverListDto } from "./dto/driver.dto.js";
 import {
   DeactivateDriverDto,
   SendToCollectionsDto,
@@ -33,10 +43,87 @@ export class DriversController {
     return this.drivers.list(query);
   }
 
+  /**
+   * `POST /drivers`: an admin adds a driver directly, without an application (D85). Multipart form data: the text fields
+   * (name, email and phone are required; the profile and `aliases`, a JSON list of `{type, value}`, are optional) and the
+   * optional files `licenseFile` and `earningsFile` (JPG, PNG or PDF, at most 10 MB each). The driver starts in
+   * onboarding with no login, and nothing is texted. `409` when a driver already has the email, or an alias
+   * already belongs to another driver; nothing is saved then. Answers with the new driver.
+   *
+   * The interceptor is multer, the library you would mount as `upload.fields([...])` in Express: it reads the multipart
+   * body, keeps the files in memory and leaves the text fields in `@Body()`, where the global ValidationPipe checks them.
+   */
+  @Post()
+  @UseFilters(UploadTooLargeFilter)
+  @UseInterceptors(
+    FileFieldsInterceptor(
+      [
+        { name: "licenseFile", maxCount: 1 },
+        { name: "earningsFile", maxCount: 1 },
+      ],
+      { limits: { fileSize: MAX_UPLOAD_BYTES } },
+    ),
+  )
+  @ApiConsumes("multipart/form-data")
+  @ApiBody({
+    schema: {
+      type: "object",
+      required: ["firstName", "lastName", "email", "phone"],
+      properties: {
+        firstName: { type: "string" },
+        middleName: { type: "string" },
+        lastName: { type: "string" },
+        email: { type: "string" },
+        phone: { type: "string" },
+        street: { type: "string" },
+        apt: { type: "string" },
+        city: { type: "string" },
+        state: { type: "string" },
+        zip: { type: "string" },
+        dateOfBirth: { type: "string", description: "YYYY-MM-DD" },
+        hasInsurance: { type: "string", description: "true or false" },
+        aliases: {
+          type: "string",
+          description:
+            'JSON list, e.g. [{"type":"zelle","value":"Pat Example"}]',
+        },
+        licenseFile: { type: "string", format: "binary" },
+        earningsFile: { type: "string", format: "binary" },
+      },
+    },
+  })
+  create(
+    @Body() body: CreateDriverDto,
+    @UploadedFiles()
+    files: Partial<
+      Record<"licenseFile" | "earningsFile", Express.Multer.File[]>
+    >,
+    @CurrentUser() admin: AuthenticatedUser,
+  ): Promise<DriverDetailDto> {
+    const single: NewDriverFiles = {
+      license: files.licenseFile?.[0],
+      earnings: files.earningsFile?.[0],
+    };
+    return this.drivers.create(body, single, admin.id);
+  }
+
   /** `GET /drivers/:id`: one driver. `400` for a malformed id, `404` if unknown. */
   @Get(":id")
-  findOne(@Param("id", ParseUUIDPipe) id: string): Promise<DriverDto> {
+  findOne(@Param("id", ParseUUIDPipe) id: string): Promise<DriverDetailDto> {
     return this.drivers.findOne(id);
+  }
+
+  /**
+   * `PATCH /drivers/:id/profile`: changes the profile fields (middle name, address, date of birth, insurance, D85). A
+   * field left out stays; one sent empty is cleared. Returns the updated driver.
+   */
+  @Patch(":id/profile")
+  updateProfile(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() body: UpdateDriverProfileDto,
+    @CurrentUser() admin: AuthenticatedUser,
+  ): Promise<DriverDetailDto> {
+    return this.drivers.updateProfile(id, body, admin.id);
   }
 
   /**
@@ -50,7 +137,7 @@ export class DriversController {
     @Param("id", ParseUUIDPipe) id: string,
     @Body() body: SetOnboardingStepDto,
     @CurrentUser() admin: AuthenticatedUser,
-  ): Promise<DriverDto> {
+  ): Promise<DriverDetailDto> {
     return this.drivers.setOnboardingStep(
       id,
       body.step,
@@ -70,7 +157,7 @@ export class DriversController {
     @Param("id", ParseUUIDPipe) id: string,
     @Body() body: AddAliasDto,
     @CurrentUser() admin: AuthenticatedUser,
-  ): Promise<DriverDto> {
+  ): Promise<DriverDetailDto> {
     return this.drivers.addAlias(id, body, admin.id);
   }
 
@@ -80,7 +167,7 @@ export class DriversController {
     @Param("id", ParseUUIDPipe) id: string,
     @Param("aliasId", ParseUUIDPipe) aliasId: string,
     @CurrentUser() admin: AuthenticatedUser,
-  ): Promise<DriverDto> {
+  ): Promise<DriverDetailDto> {
     return this.drivers.removeAlias(id, aliasId, admin.id);
   }
 
@@ -94,7 +181,7 @@ export class DriversController {
     @Param("id", ParseUUIDPipe) id: string,
     @Body() body: DeactivateDriverDto,
     @CurrentUser() admin: AuthenticatedUser,
-  ): Promise<DriverDto> {
+  ): Promise<DriverDetailDto> {
     return this.drivers.deactivate(id, body.reason, admin.id);
   }
 
@@ -108,7 +195,7 @@ export class DriversController {
     @Param("id", ParseUUIDPipe) id: string,
     @Body() body: SendToCollectionsDto,
     @CurrentUser() admin: AuthenticatedUser,
-  ): Promise<DriverDto> {
+  ): Promise<DriverDetailDto> {
     return this.drivers.sendToCollections(id, body.reason, admin.id);
   }
 
@@ -118,7 +205,7 @@ export class DriversController {
   removeFromCollections(
     @Param("id", ParseUUIDPipe) id: string,
     @CurrentUser() admin: AuthenticatedUser,
-  ): Promise<DriverDto> {
+  ): Promise<DriverDetailDto> {
     return this.drivers.removeFromCollections(id, admin.id);
   }
 
@@ -132,7 +219,7 @@ export class DriversController {
   archive(
     @Param("id", ParseUUIDPipe) id: string,
     @CurrentUser() admin: AuthenticatedUser,
-  ): Promise<DriverDto> {
+  ): Promise<DriverDetailDto> {
     return this.drivers.archive(id, admin.id);
   }
 
@@ -142,7 +229,7 @@ export class DriversController {
   unarchive(
     @Param("id", ParseUUIDPipe) id: string,
     @CurrentUser() admin: AuthenticatedUser,
-  ): Promise<DriverDto> {
+  ): Promise<DriverDetailDto> {
     return this.drivers.unarchive(id, admin.id);
   }
 
@@ -152,7 +239,7 @@ export class DriversController {
   reactivate(
     @Param("id", ParseUUIDPipe) id: string,
     @CurrentUser() admin: AuthenticatedUser,
-  ): Promise<DriverDto> {
+  ): Promise<DriverDetailDto> {
     return this.drivers.reactivate(id, admin.id);
   }
 }

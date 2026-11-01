@@ -68,6 +68,19 @@ describe("findByAlias", () => {
       ),
     ).toBeNull();
   });
+
+  it("a phone two drivers share matches neither (B117)", () => {
+    const shared = AliasIndex.build(
+      [],
+      [
+        { id: "a", email: "a@example.com", phone: "+13125550199" },
+        { id: "b", email: "b@example.com", phone: "+13125550199" },
+      ],
+    );
+    expect(
+      shared.find(payment(PaymentSource.email_venmo, "X", "(312) 555-0199")),
+    ).toBeNull();
+  });
 });
 
 describe("validateMatch", () => {

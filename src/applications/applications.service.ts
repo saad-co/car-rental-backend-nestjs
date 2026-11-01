@@ -25,14 +25,11 @@ import {
 import { likePattern, phoneDigits } from "../common/search.js";
 import { isUniqueViolation } from "../database/postgres-errors.js";
 import { Driver, DriverStatus } from "../drivers/driver.entity.js";
+import { profileFromApplication } from "../drivers/driver-profile.js";
 import { startBilling } from "../drivers/drivers.service.js";
 import { toUsE164 } from "../drivers/us-phone.js";
 import { TemplateKind } from "../message-templates/message-template.entity.js";
 import { MessageTemplatesService } from "../message-templates/message-templates.service.js";
-import {
-  invalidUsNumberMessage,
-  isTextableUsNumber,
-} from "../sms/quo/quo-failure-message.js";
 import { SmsContactKind } from "../sms/sms-contact.js";
 import { SmsService } from "../sms/sms.service.js";
 import type { FileStorage } from "../sms/storage/file-storage.js";
@@ -208,16 +205,16 @@ export class ApplicationsService {
    * The `*_storage_path` columns stay null: they are paths in the WEBSITE's bucket, and leaving them empty keeps the
    * document copier away from these rows. The files are `application_documents` rows with `origin = admin`.
    *
-   * It is then approved straight away (D79): the admin typing it in is the review. Approving creates no driver
-   * (D80), so "Add application" ends approved; "Add driver" (`startOnboarding`) also creates the driver, as before.
-   * What those steps would refuse (a phone that is not a US number, and for "Add driver" an email or phone a driver
+   * It is then approved straight away (D79), never with a text (B115): the admin typing it in is the review. With
+   * `startOnboarding` (the Add application screen always sends it since 2026-11-01, B116) the driver is created too.
+   * What those steps would refuse (a phone that is not a US number, and for "Add driver" an email a driver
    * or login already has) is checked first, so a bad form stores nothing. If a step still fails after the application
-   * is saved (the approval text could not be sent), the application stays as far as it got and the error says so;
+   * is saved, the application stays as far as it got and the error says so;
    * repeating the same request, or approving it from its page, retries.
    *
    * @throws BadRequestException a missing licence, a file that is not a JPG, PNG or PDF of at most 10 MB, or a
    *   phone that is not a valid US number.
-   * @throws ConflictException ("Add driver" only) a driver or login already has this email, or a driver has this phone.
+   * @throws ConflictException ("Add driver" only) a driver or login already has this email.
    * @throws ServiceUnavailableException no file bucket is set up.
    * @throws HttpException the approval failed after saving ("Application saved, but not approved: ...").
    */
@@ -244,7 +241,6 @@ export class ApplicationsService {
     }
 
     // "Add driver" also creates the driver now, so what that needs is checked first and a bad form stores nothing.
-    // "Add application" only approves, which needs just a phone the approval text can reach.
     const phone = startOnboarding
       ? await this.assertCanBecomeDriver(
           this.dataSource.manager,
@@ -255,12 +251,6 @@ export class ApplicationsService {
     if (!phone) {
       throw new BadRequestException(
         `Phone "${fields.phone}" is not a valid US number.`,
-      );
-    }
-    // The approval text goes to this number, so one that cannot get texts would fail the approval after saving.
-    if (!isTextableUsNumber(phone)) {
-      throw new BadRequestException(
-        `${invalidUsNumberMessage(phone)} Check the phone number.`,
       );
     }
 
@@ -365,7 +355,7 @@ export class ApplicationsService {
   }
 
   /**
-   * Finishes an application that `createManual` has saved (D79, D80): approves it with the normal approval text and,
+   * Finishes an application that `createManual` has saved (D79, D80): approves it without any text (B115) and,
    * for "Add driver", starts onboarding. Each part runs only if it is still to do, so a retry after a half-finished
    * first try picks up where it stopped.
    * @returns the new driver's id; null for "Add application" (no driver is created by approving).
@@ -380,7 +370,12 @@ export class ApplicationsService {
     try {
       let application = await this.findOne(id);
       if (application.status === ApplicationStatus.pending) {
-        application = await this.approve(id, adminId);
+        // An application added by hand never texts the applicant (Abulkalam, 2026-11-01, B115).
+        application = await this.unlessDoneMeanwhile(
+          id,
+          () => this.approve(id, adminId, { sendText: false }),
+          (now) => now.status === ApplicationStatus.approved,
+        );
       }
       if (
         startOnboarding &&
@@ -388,7 +383,11 @@ export class ApplicationsService {
         application.driverId === null
       ) {
         step = "approved, but the driver was not created";
-        application = await this.startOnboarding(id, adminId);
+        application = await this.unlessDoneMeanwhile(
+          id,
+          () => this.startOnboarding(id, adminId),
+          (now) => now.driverId !== null,
+        );
       }
       return application.driverId;
     } catch (error) {
@@ -399,6 +398,26 @@ export class ApplicationsService {
         );
       }
       throw error;
+    }
+  }
+
+  /**
+   * Runs one step of `approveSaved`. If it is refused with a 409 but `done` is now true for the application (a
+   * repeat of the same request, a double click, did that step at the same instant), the application as it is now is
+   * returned instead of the error; any other refusal is thrown as it was.
+   */
+  private async unlessDoneMeanwhile(
+    id: string,
+    step: () => Promise<ApplicationDetailDto>,
+    done: (application: ApplicationDetailDto) => boolean,
+  ): Promise<ApplicationDetailDto> {
+    try {
+      return await step();
+    } catch (error) {
+      if (!(error instanceof ConflictException)) throw error;
+      const now = await this.findOne(id);
+      if (!done(now)) throw error;
+      return now;
     }
   }
 
@@ -563,6 +582,7 @@ export class ApplicationsService {
    *
    * @param adminId the admin approving it (stored as the reviewer).
    * @param options.message the approval text to send; the first approved template when missing.
+   * @param options.sendText `false` approves without any text (B111); default `true`.
    * @throws NotFoundException if there is no application with this id.
    * @throws ConflictException if it is already approved.
    * @throws ServiceUnavailableException if a text could not be sent (nothing approved).
@@ -570,7 +590,7 @@ export class ApplicationsService {
   async approve(
     id: string,
     adminId: string,
-    options: { message?: string } = {},
+    options: { message?: string; sendText?: boolean } = {},
   ): Promise<ApplicationDetailDto> {
     const approved = await this.dataSource.transaction(async (manager) => {
       const application = await this.loadForReview(manager, id);
@@ -578,6 +598,7 @@ export class ApplicationsService {
       application.reviewedById = adminId;
       application.reviewedAt = new Date();
       const saved = await manager.save(application);
+      if (options.sendText === false) return saved;
 
       await this.sendOrFail(
         application,
@@ -593,6 +614,40 @@ export class ApplicationsService {
       return saved;
     });
     return this.findOne(approved.id);
+  }
+
+  /**
+   * The Approve button (B116, Abulkalam, 2026-11-01): approves (with or without the text, as `approve`) and then starts
+   * onboarding, so no "Start onboarding" press is needed. What onboarding would refuse (a phone that is not a US
+   * number, an email a driver or login already has) is checked first, so a refusal changes nothing and sends
+   * no text. If onboarding still fails after approving (a race with another admin), the error says it was approved.
+   *
+   * @throws NotFoundException, ConflictException, BadRequestException, ServiceUnavailableException as `approve` and
+   *   `startOnboarding`.
+   */
+  async approveAndStartOnboarding(
+    id: string,
+    adminId: string,
+    options: { message?: string; sendText?: boolean } = {},
+  ): Promise<ApplicationDetailDto> {
+    const application = await this.findOne(id);
+    await this.assertCanBecomeDriver(
+      this.dataSource.manager,
+      application.email,
+      application.phone,
+    );
+    await this.approve(id, adminId, options);
+    try {
+      return await this.startOnboarding(id, adminId);
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw new HttpException(
+          `Approved, but the driver was not created: ${error.message}`,
+          error.getStatus(),
+        );
+      }
+      throw error;
+    }
   }
 
   /**
@@ -667,6 +722,8 @@ export class ApplicationsService {
             email: application.email,
             phone,
             userId: user.id,
+            // The driver row is where the profile is read from (D85): copy what the application holds.
+            ...profileFromApplication(application),
           }),
         );
         application.driverId = driver.id;
@@ -678,7 +735,7 @@ export class ApplicationsService {
     } catch (error) {
       if (isUniqueViolation(error)) {
         throw new ConflictException(
-          "A driver or login with this email or phone number already exists.",
+          "A driver or login with this email already exists.",
         );
       }
       throw error;
@@ -755,7 +812,7 @@ export class ApplicationsService {
    * The unique constraints on `drivers` still decide if two approvals race; `approve` catches that case.
    * @returns the phone as E.164 (+1...), as stored on the driver.
    * @throws BadRequestException if the phone is not a valid US number.
-   * @throws ConflictException if a driver has this email or phone, or a login (an admin's, or one left over from an
+   * @throws ConflictException if a driver has this email, or a login (an admin's, or one left over from an
    *   earlier driver) has this email.
    */
   private async assertCanBecomeDriver(
@@ -770,15 +827,9 @@ export class ApplicationsService {
       );
     }
 
-    const existing = await manager.findOne(Driver, {
-      where: [{ email }, { phone }],
-    });
-    if (existing) {
-      throw new ConflictException(
-        existing.email === email
-          ? "A driver with this email already exists."
-          : "A driver with this phone number already exists.",
-      );
+    // The phone may be shared by several drivers (B117); the email may not.
+    if (await manager.exists(Driver, { where: { email } })) {
+      throw new ConflictException("A driver with this email already exists.");
     }
 
     const existingLogin = await manager.findOne(User, { where: { email } });

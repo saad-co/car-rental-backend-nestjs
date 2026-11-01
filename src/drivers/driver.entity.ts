@@ -40,8 +40,8 @@ export const MAX_DEPOSIT_CENTS = 2_147_483_647;
  * A driver renting a car from the fleet. Maps to the `drivers` table.
  *
  * Created when an admin approves an application (D26), in `onboarding` (D56). Payments are matched to
- * drivers of any status (a deposit arrives before the driver is active), which is why email and phone
- * must each belong to only one driver.
+ * drivers of any status (a deposit arrives before the driver is active), which is why the email must belong to only one
+ * driver. The phone may be shared (B117, 2026-11-02): one person renting several cars is several drivers.
  */
 @Entity("drivers")
 @Check("drivers_email_lowercase", `"email" = lower("email")`)
@@ -78,6 +78,10 @@ export class Driver {
   @Column({ name: "last_name", type: "varchar", length: 100 })
   lastName: string;
 
+  /** Not on the website form, so empty for drivers who came from an application until an admin fills it in (D85). */
+  @Column({ name: "middle_name", type: "varchar", length: 100, nullable: true })
+  middleName: string | null;
+
   /** Stored lower-case (enforced by the CHECK above). Unique across drivers. */
   @Column({ type: "varchar", length: 254, unique: true })
   email: string;
@@ -88,8 +92,39 @@ export class Driver {
    * (`(312) 555-0123` vs `3125550123`). The CHECK above makes the database reject
    * anything else; the code converts the application's 10 digits before saving.
    */
-  @Column({ type: "varchar", length: 12, unique: true })
+  @Column({ type: "varchar", length: 12 })
   phone: string;
+
+  // The profile (D85): copied from the application when onboarding starts, or typed by an admin when a driver is added
+  // directly. The driver row is the one place it is read from. Everything is optional and stored as typed; nothing here
+  // is checked beyond a length limit (the client asked for the values, not for rules about them).
+  // Date of birth and address are sensitive (B94: to be encrypted): they are returned on the driver detail only, never in
+  // a list, and never logged.
+
+  @Column({ type: "varchar", length: 200, nullable: true })
+  street: string | null;
+
+  /** Apartment or unit. */
+  @Column({ type: "varchar", length: 50, nullable: true })
+  apt: string | null;
+
+  @Column({ type: "varchar", length: 100, nullable: true })
+  city: string | null;
+
+  /** As typed ("IL" or "Illinois"); the website form has no state. */
+  @Column({ type: "varchar", length: 50, nullable: true })
+  state: string | null;
+
+  @Column({ type: "varchar", length: 10, nullable: true })
+  zip: string | null;
+
+  /** A plain calendar day. The age is worked out from it, never stored. */
+  @Column({ name: "date_of_birth", type: "date", nullable: true })
+  dateOfBirth: string | null;
+
+  /** Current auto insurance: yes / no; null = not asked or not known. */
+  @Column({ name: "has_insurance", type: "boolean", nullable: true })
+  hasInsurance: boolean | null;
 
   /** New drivers start `onboarding`; they become `active` when the last onboarding step is ticked (D56). */
   @Column({

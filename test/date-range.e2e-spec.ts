@@ -90,6 +90,7 @@ describe("Date range on the lists (B82, test database)", () => {
       db.getRepository(Driver),
       db.getRepository(PaymentAlias),
       db.getRepository(Payment),
+      null,
     );
     payments = new PaymentsService(db, new LedgerService(db));
     emails = new InboundEmailsService(

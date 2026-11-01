@@ -619,7 +619,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ReviewMessageDto"
+                "$ref": "#/components/schemas/ApproveApplicationDto"
               }
             }
           }
@@ -636,7 +636,7 @@
             }
           }
         },
-        "summary": "`POST /applications/:id/approve`: marks the application approved and texts the applicant. No driver is created\n(D80); \"Start onboarding\" does that. Optional body `{ \"message\": \"...\" }` is the approval text the admin picked and edited (B81); without\nit the first approved template is sent. `400` for an unknown placeholder in it.\n\nPOST because it is an action with side effects, not an edit of a field. `@HttpCode(200)`\nbecause it returns the updated application rather than creating a resource at this URL.",
+        "summary": "`POST /applications/:id/approve`: marks the application approved, texts the applicant and starts onboarding (creates\nthe driver, B116). Optional body `{ \"message\": \"...\" }` is the approval text the admin picked and edited (B81); without\nit the first approved template is sent. `{ \"sendText\": false }` approves without any text (B111). `400` for an\nunknown placeholder in it.\n\nPOST because it is an action with side effects, not an edit of a field. `@HttpCode(200)`\nbecause it returns the updated application rather than creating a resource at this URL.",
         "tags": [
           "Applications"
         ]
@@ -739,7 +739,7 @@
             }
           }
         },
-        "summary": "`POST /applications/:id/start-onboarding`: for an approved application, creates the driver (in onboarding) and\ntheir login (D80). `409` if it is not approved, is archived, already has its driver, or a driver or login already\nhas this email or phone.",
+        "summary": "`POST /applications/:id/start-onboarding`: for an approved application, creates the driver (in onboarding) and\ntheir login (D80). `409` if it is not approved, is archived, already has its driver, or a driver or login already\nhas this email.",
         "tags": [
           "Applications"
         ]
@@ -893,6 +893,95 @@
         "summary": "`PUT /applications/:id/documents/:kind`: puts one file (multipart field `file`) in the licence, rating or earnings\nslot, replacing what is there, a website copy included (D68). JPG, PNG or PDF, at most 10 MB; `400` otherwise.\nReturns the slot. PUT because the slot ends up holding exactly this file however many times it is sent.",
         "tags": [
           "ApplicationDocuments"
+        ]
+      }
+    },
+    "/drivers/{id}/documents": {
+      "get": {
+        "operationId": "DriverDocumentsController_list",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationDocumentListDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`GET /drivers/:id/documents`: the driver's files, each with a short-lived link to open it.",
+        "tags": [
+          "DriverDocuments"
+        ]
+      }
+    },
+    "/drivers/{id}/documents/{kind}": {
+      "put": {
+        "operationId": "DriverDocumentsController_upload",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "kind",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationDocumentDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`PUT /drivers/:id/documents/:kind`: puts one file (multipart field `file`) in the licence, rating or earnings slot,\nreplacing what is there. JPG, PNG or PDF, at most 10 MB; `400` otherwise. Returns the slot.",
+        "tags": [
+          "DriverDocuments"
         ]
       }
     },
@@ -1583,6 +1672,62 @@
         ]
       }
     },
+    "/contracts/vehicles": {
+      "get": {
+        "operationId": "ContractsController_listVehicles",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FleetVehicleDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "`GET /contracts/vehicles`: the business's vehicles to pick on the Vehicle card (B120; not paginated: about 40).",
+        "tags": [
+          "Contracts"
+        ]
+      }
+    },
+    "/drivers/{driverId}/contract/licence-details": {
+      "post": {
+        "operationId": "ContractsController_readLicence",
+        "parameters": [
+          {
+            "name": "driverId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LicenceDetailsDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`POST /drivers/:driverId/contract/licence-details`: reads address, licence number, state and date of birth from the\ndriver's licence file with the AI (B121, D86). Nothing is saved: the page puts the values in the draft's boxes.\nPOST because every call asks the AI again. `404` unknown driver, `409` no licence on file or none found in it,\n`502` the AI or the bucket failed, `503` the AI is not set up.",
+        "tags": [
+          "Contracts"
+        ]
+      }
+    },
     "/drivers/{driverId}/contract": {
       "get": {
         "operationId": "ContractsController_getCurrent",
@@ -1864,6 +2009,15 @@
             }
           },
           {
+            "name": "withoutApplication",
+            "required": false,
+            "in": "query",
+            "description": "`true` lists only drivers with no application: the ones an admin added directly (D85). With `status=onboarding` it\nis the Drivers page's \"Onboarding (added directly)\" view; a driver in onboarding who came from an application is\non the Approved applications page instead. Omitted or `false`: no filter.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
             "name": "archived",
             "required": false,
             "in": "query",
@@ -1919,6 +2073,94 @@
         "tags": [
           "Drivers"
         ]
+      },
+      "post": {
+        "operationId": "DriversController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "firstName",
+                  "lastName",
+                  "email",
+                  "phone"
+                ],
+                "properties": {
+                  "firstName": {
+                    "type": "string"
+                  },
+                  "middleName": {
+                    "type": "string"
+                  },
+                  "lastName": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "type": "string"
+                  },
+                  "phone": {
+                    "type": "string"
+                  },
+                  "street": {
+                    "type": "string"
+                  },
+                  "apt": {
+                    "type": "string"
+                  },
+                  "city": {
+                    "type": "string"
+                  },
+                  "state": {
+                    "type": "string"
+                  },
+                  "zip": {
+                    "type": "string"
+                  },
+                  "dateOfBirth": {
+                    "type": "string",
+                    "description": "YYYY-MM-DD"
+                  },
+                  "hasInsurance": {
+                    "type": "string",
+                    "description": "true or false"
+                  },
+                  "aliases": {
+                    "type": "string",
+                    "description": "JSON list, e.g. [{\"type\":\"zelle\",\"value\":\"Pat Example\"}]"
+                  },
+                  "licenseFile": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "earningsFile": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverDetailDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`POST /drivers`: an admin adds a driver directly, without an application (D85). Multipart form data: the text fields\n(name, email and phone are required; the profile and `aliases`, a JSON list of `{type, value}`, are optional) and the\noptional files `licenseFile` and `earningsFile` (JPG, PNG or PDF, at most 10 MB each). The driver starts in\nonboarding with no login, and nothing is texted. `409` when a driver already has the email, or an alias\nalready belongs to another driver; nothing is saved then. Answers with the new driver.\n\nThe interceptor is multer, the library you would mount as `upload.fields([...])` in Express: it reads the multipart\nbody, keeps the files in memory and leaves the text fields in `@Body()`, where the global ValidationPipe checks them.",
+        "tags": [
+          "Drivers"
+        ]
       }
     },
     "/drivers/{id}": {
@@ -1940,13 +2182,54 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DriverDto"
+                  "$ref": "#/components/schemas/DriverDetailDto"
                 }
               }
             }
           }
         },
         "summary": "`GET /drivers/:id`: one driver. `400` for a malformed id, `404` if unknown.",
+        "tags": [
+          "Drivers"
+        ]
+      }
+    },
+    "/drivers/{id}/profile": {
+      "patch": {
+        "operationId": "DriversController_updateProfile",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateDriverProfileDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverDetailDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`PATCH /drivers/:id/profile`: changes the profile fields (middle name, address, date of birth, insurance, D85). A\nfield left out stays; one sent empty is cleared. Returns the updated driver.",
         "tags": [
           "Drivers"
         ]
@@ -1981,7 +2264,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DriverDto"
+                  "$ref": "#/components/schemas/DriverDetailDto"
                 }
               }
             }
@@ -2022,7 +2305,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DriverDto"
+                  "$ref": "#/components/schemas/DriverDetailDto"
                 }
               }
             }
@@ -2061,7 +2344,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DriverDto"
+                  "$ref": "#/components/schemas/DriverDetailDto"
                 }
               }
             }
@@ -2102,7 +2385,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DriverDto"
+                  "$ref": "#/components/schemas/DriverDetailDto"
                 }
               }
             }
@@ -2143,7 +2426,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DriverDto"
+                  "$ref": "#/components/schemas/DriverDetailDto"
                 }
               }
             }
@@ -2174,7 +2457,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DriverDto"
+                  "$ref": "#/components/schemas/DriverDetailDto"
                 }
               }
             }
@@ -2205,7 +2488,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DriverDto"
+                  "$ref": "#/components/schemas/DriverDetailDto"
                 }
               }
             }
@@ -2236,7 +2519,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DriverDto"
+                  "$ref": "#/components/schemas/DriverDetailDto"
                 }
               }
             }
@@ -2267,7 +2550,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DriverDto"
+                  "$ref": "#/components/schemas/DriverDetailDto"
                 }
               }
             }
@@ -3565,6 +3848,21 @@
           "createdBy"
         ]
       },
+      "ApproveApplicationDto": {
+        "type": "object",
+        "properties": {
+          "sendText": {
+            "type": "boolean",
+            "description": "`false` approves without texting the applicant (`message` is then ignored). Default `true`."
+          },
+          "message": {
+            "type": "string",
+            "description": "The text, with `{firstName}` / `{lastName}` placeholders (filled in by the API; unknown ones are refused, 400).\n1 to 1000 characters after trimming. Approve without it sends the first approved template; decline without it\nsends no text.",
+            "minLength": 1,
+            "maxLength": 1000
+          }
+        }
+      },
       "ReviewMessageDto": {
         "type": "object",
         "properties": {
@@ -4380,7 +4678,7 @@
           },
           "recurringTotalCents": {
             "type": "number",
-            "description": "Payment + excess mileage + insurance excess + other recurring (the sheet's recurring Total row)."
+            "description": "Payment + insurance excess + other recurring (the recurring Total row). Excess mileage is not in it (B119)."
           },
           "endDate": {
             "type": "string",
@@ -4419,6 +4717,66 @@
           "id",
           "name",
           "address"
+        ]
+      },
+      "FleetVehicleDto": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string",
+            "description": "Year, make and model, e.g. \"2015 Toyota Prius Hybrid\"."
+          },
+          "color": {
+            "type": "string",
+            "description": "Shown in the list to tell cars apart; not part of the contract (it has no colour)."
+          },
+          "vin": {
+            "type": "string"
+          },
+          "plate": {
+            "type": "string"
+          },
+          "plateState": {
+            "type": "string",
+            "description": "The fleet area from the client's list (IL, CA or TN)."
+          }
+        },
+        "required": [
+          "model",
+          "color",
+          "vin",
+          "plate",
+          "plateState"
+        ]
+      },
+      "LicenceDetailsDto": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "nullable": true,
+            "description": "One line: street, city, state and ZIP."
+          },
+          "licenseNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "licenseState": {
+            "type": "string",
+            "nullable": true,
+            "description": "Two-letter code of the issuing state."
+          },
+          "dateOfBirth": {
+            "type": "string",
+            "nullable": true,
+            "description": "`YYYY-MM-DD`."
+          }
+        },
+        "required": [
+          "address",
+          "licenseNumber",
+          "licenseState",
+          "dateOfBirth"
         ]
       },
       "ContractStatus": {
@@ -4963,13 +5321,13 @@
             "description": "E.164, e.g. `+13125550123`."
           },
           "status": {
+            "type": "string",
             "description": "`onboarding` until all three steps are done, then `active`; `inactive` when the driver left (D56).",
             "enum": [
               "onboarding",
               "active",
               "inactive"
-            ],
-            "type": "string"
+            ]
           },
           "onboarding": {
             "$ref": "#/components/schemas/DriverOnboardingDto"
@@ -4986,14 +5344,14 @@
             "description": "When an admin archived the driver (D80); null = not archived."
           },
           "leftReason": {
+            "type": "string",
             "nullable": true,
             "description": "How the driver left (D81); null if not inactive, or deactivated before reasons existed (\"reason not recorded\").",
             "enum": [
               "contract_ended",
               "bad_driver",
               "cooperative_returned_car"
-            ],
-            "type": "string"
+            ]
           },
           "leftAt": {
             "format": "date-time",
@@ -5080,6 +5438,225 @@
           "page",
           "limit"
         ]
+      },
+      "DriverProfileDto": {
+        "type": "object",
+        "properties": {
+          "middleName": {
+            "type": "string",
+            "nullable": true
+          },
+          "street": {
+            "type": "string",
+            "nullable": true
+          },
+          "apt": {
+            "type": "string",
+            "nullable": true,
+            "description": "Apartment or unit."
+          },
+          "city": {
+            "type": "string",
+            "nullable": true
+          },
+          "state": {
+            "type": "string",
+            "nullable": true
+          },
+          "zip": {
+            "type": "string",
+            "nullable": true
+          },
+          "dateOfBirth": {
+            "type": "string",
+            "nullable": true,
+            "description": "`YYYY-MM-DD`; null = not known."
+          },
+          "age": {
+            "type": "number",
+            "nullable": true,
+            "description": "Whole years today (Chicago day), worked out from the date of birth and never stored; null without a date of birth."
+          },
+          "hasInsurance": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "Current auto insurance; null = not known."
+          }
+        },
+        "required": [
+          "middleName",
+          "street",
+          "apt",
+          "city",
+          "state",
+          "zip",
+          "dateOfBirth",
+          "age",
+          "hasInsurance"
+        ]
+      },
+      "DriverDetailDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "firstName": {
+            "type": "string"
+          },
+          "lastName": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string",
+            "description": "E.164, e.g. `+13125550123`."
+          },
+          "status": {
+            "description": "`onboarding` until all three steps are done, then `active`; `inactive` when the driver left (D56).",
+            "enum": [
+              "onboarding",
+              "active",
+              "inactive"
+            ],
+            "type": "string"
+          },
+          "onboarding": {
+            "$ref": "#/components/schemas/DriverOnboardingDto"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "When the driver was created (when onboarding was started on the approved application, D80)."
+          },
+          "archivedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "When an admin archived the driver (D80); null = not archived."
+          },
+          "leftReason": {
+            "nullable": true,
+            "description": "How the driver left (D81); null if not inactive, or deactivated before reasons existed (\"reason not recorded\").",
+            "enum": [
+              "contract_ended",
+              "bad_driver",
+              "cooperative_returned_car"
+            ],
+            "type": "string"
+          },
+          "leftAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "When the reason was noted; null with no reason."
+          },
+          "sentToCollectionsAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "When an admin sent the driver to collections (D81); null = not in collections."
+          },
+          "aliases": {
+            "description": "Every payment alias of the driver, grouped by payment method then by value. Empty if none yet.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DriverAliasDto"
+            }
+          },
+          "paymentCount": {
+            "type": "number",
+            "description": "Number of payments assigned to this driver."
+          },
+          "lastPaymentAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "When the driver's most recent payment happened; null if none."
+          },
+          "balanceCents": {
+            "type": "number",
+            "description": "Ledger balance in cents: credits minus debits (D60). Negative = the driver owes money; 0 with no entries."
+          },
+          "applicationId": {
+            "type": "string",
+            "nullable": true,
+            "description": "The application this driver came from (D84), for the link between the two pages; null for imported drivers."
+          },
+          "profile": {
+            "$ref": "#/components/schemas/DriverProfileDto"
+          }
+        },
+        "required": [
+          "id",
+          "firstName",
+          "lastName",
+          "email",
+          "phone",
+          "status",
+          "onboarding",
+          "createdAt",
+          "archivedAt",
+          "leftReason",
+          "leftAt",
+          "sentToCollectionsAt",
+          "aliases",
+          "paymentCount",
+          "lastPaymentAt",
+          "balanceCents",
+          "applicationId",
+          "profile"
+        ]
+      },
+      "UpdateDriverProfileDto": {
+        "type": "object",
+        "properties": {
+          "middleName": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 100
+          },
+          "street": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 200
+          },
+          "apt": {
+            "type": "string",
+            "nullable": true,
+            "description": "Apartment or unit.",
+            "maxLength": 50
+          },
+          "city": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 100
+          },
+          "state": {
+            "type": "string",
+            "nullable": true,
+            "description": "As typed (\"IL\" or \"Illinois\").",
+            "maxLength": 50
+          },
+          "zip": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 10
+          },
+          "dateOfBirth": {
+            "type": "string",
+            "nullable": true,
+            "description": "`YYYY-MM-DD`, a real day that is not in the future. The age is worked out from it.",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "hasInsurance": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "Current auto insurance: `true` / `false`; empty = not known."
+          }
+        }
       },
       "SetOnboardingStepDto": {
         "type": "object",

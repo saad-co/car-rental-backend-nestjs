@@ -17,17 +17,13 @@ import {
   FirmaError,
   type FirmaClient,
 } from "../firma/firma-client.js";
-import {
-  ApplicationDocument,
-  ApplicationDocumentKind,
-  ApplicationDocumentStatus,
-} from "../applications/documents/application-document.entity.js";
 import type { FileStorage } from "../sms/storage/file-storage.js";
 import { FILE_STORAGE } from "../sms/storage/file-storage.module.js";
 import { ContractCompany } from "./contract-company.entity.js";
 import { notPostedAutomatically } from "./contract-ledger.js";
 import { contractNumbers, type ContractMathInput } from "./contract-math.js";
 import { LicenceError, placeLicence } from "./contract-licence.js";
+import { fetchLicenceFile } from "./licence-file.js";
 import {
   buildAnchors,
   loadTemplate,
@@ -296,7 +292,7 @@ export class ContractsService {
 
   /**
    * The template PDF with the driver's licence drawn on its last page (D76): the licence file is the one on the driver's
-   * application (the first step of a driver's life, D26). Nothing here is ever logged or put in a message but the driver's id.
+   * application (the first step of a driver's life, D26) or, for a driver added directly, the driver's own (D85). Nothing here is ever logged or put in a message but the driver's id.
    * @throws ServiceUnavailableException no file storage is set up.
    * @throws ConflictException the application has no stored licence file, or it cannot be read as a picture or PDF.
    * @throws BadGatewayException the bucket could not give the file.
@@ -306,35 +302,12 @@ export class ContractsService {
     driverId: string,
     template: ContractTemplate,
   ): Promise<{ pdf: Buffer; documentId: string }> {
-    const storage = this.storage;
-    if (!storage) {
-      throw new ServiceUnavailableException(
-        "File storage is not set up (S3_*): the driver's licence is read from it.",
-      );
-    }
-    const document = await manager.findOne(ApplicationDocument, {
-      where: {
-        kind: ApplicationDocumentKind.license,
-        status: ApplicationDocumentStatus.stored,
-        application: { driverId },
-      },
-    });
-    if (!document?.storageKey) {
-      throw new ConflictException(
-        "The driver's licence is not on file: add it to the application first.",
-      );
-    }
-    let body: Buffer;
-    try {
-      body = await storage.get(document.storageKey);
-    } catch (error) {
-      this.logger.error(
-        `could not read the licence file of driver ${driverId}: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      throw new BadGatewayException(
-        "The driver's licence file could not be read from storage.",
-      );
-    }
+    const { body, documentId } = await fetchLicenceFile(
+      manager,
+      this.storage,
+      driverId,
+      this.logger,
+    );
     try {
       return {
         pdf: await placeLicence(
@@ -342,7 +315,7 @@ export class ContractsService {
           { body },
           template.licenceSlot,
         ),
-        documentId: document.id,
+        documentId,
       };
     } catch (error) {
       if (error instanceof LicenceError)

@@ -20,6 +20,7 @@ import { ApplicationNotesController } from "./notes/application-notes.controller
 import { ApplicationNotesService } from "./notes/application-notes.service.js";
 import { ApplicationDocumentsController } from "./documents/application-documents.controller.js";
 import { ApplicationDocumentsService } from "./documents/application-documents.service.js";
+import { DriverDocumentsController } from "./documents/driver-documents.controller.js";
 import { SupabaseDocumentSource } from "./documents/supabase-document-source.js";
 import type { FileStorage } from "../sms/storage/file-storage.js";
 import {
@@ -52,6 +53,7 @@ import {
   controllers: [
     ApplicationsController,
     ApplicationDocumentsController,
+    DriverDocumentsController,
     ApplicationNotesController,
   ],
   providers: [

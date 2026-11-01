@@ -2,8 +2,10 @@
 export interface LlmJsonRequest {
   /** The fixed instructions (the rules). */
   system: string;
-  /** The data to work on: here, one email. */
+  /** The data to work on: one email, or the instruction that goes with `file`. */
   user: string;
+  /** A picture or PDF to read along with `user` (the driver's licence, B121). */
+  file?: { mimeType: string; data: Buffer };
   /** JSON Schema the answer must follow. */
   schema: Record<string, unknown>;
 }

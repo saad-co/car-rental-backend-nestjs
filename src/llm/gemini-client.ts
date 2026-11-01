@@ -46,7 +46,17 @@ export class GeminiJsonClient implements LlmJsonClient {
     const response = await this.ai.models
       .generateContent({
         model: this.options.model,
-        contents: request.user,
+        contents: request.file
+          ? [
+              {
+                inlineData: {
+                  mimeType: request.file.mimeType,
+                  data: request.file.data.toString("base64"),
+                },
+              },
+              { text: request.user },
+            ]
+          : request.user,
         config: {
           systemInstruction: request.system,
           responseMimeType: "application/json",

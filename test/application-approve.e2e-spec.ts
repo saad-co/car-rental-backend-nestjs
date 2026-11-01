@@ -122,6 +122,46 @@ describe("Approve and decline send texts (test database)", () => {
     await db.destroy();
   });
 
+  describe("the Approve button: approve and start onboarding (B116)", () => {
+    it("approves, sends the text and creates the driver in onboarding", async () => {
+      const result = await service("dry_run").approveAndStartOnboarding(
+        applicationId,
+        adminId,
+      );
+      expect(result.status).toBe("approved");
+      expect(result.driverId).not.toBeNull();
+      expect(await count("drivers WHERE status = 'onboarding'")).toBe(1);
+      expect(await texts()).toHaveLength(1);
+    });
+
+    it("without text: approved and onboarding started, nothing sent (B111)", async () => {
+      const result = await service("dry_run").approveAndStartOnboarding(
+        applicationId,
+        adminId,
+        { sendText: false },
+      );
+      expect(result.driverId).not.toBeNull();
+      expect(await texts()).toEqual([]);
+    });
+
+    it("an email a driver already has: refused before anything changes, no text", async () => {
+      await service("dry_run").approveAndStartOnboarding(
+        applicationId,
+        adminId,
+      );
+      await db.query(`TRUNCATE sms_attachments, sms_messages`);
+      [{ id: applicationId }] = (await db.query(
+        `INSERT INTO applications (request_id, first_name, last_name, email, phone, payload)
+         VALUES ('r2', 'Pat', 'Again', 'pat@test.dev', '(305) 721-0911', '{}') RETURNING id`,
+      )) as [{ id: string }];
+      await expect(
+        service("dry_run").approveAndStartOnboarding(applicationId, adminId),
+      ).rejects.toThrow("A driver with this email already exists.");
+      expect(await statusOf()).toBe("pending");
+      expect(await texts()).toEqual([]);
+    });
+  });
+
   describe("approve (B71, D78)", () => {
     it("dry_run: sends only the approved template filled in (no login text, D78) and creates no driver (D80)", async () => {
       const approved = await service("dry_run").approve(applicationId, adminId);

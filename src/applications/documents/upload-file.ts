@@ -49,3 +49,13 @@ export function documentStorageKey(
 ): string {
   return `applications/${applicationId}/${kind}-${id}.${extension}`;
 }
+
+/** Where a file of a driver added directly lives in our bucket (D85): the application pattern with the driver's id. */
+export function driverDocumentStorageKey(
+  driverId: string,
+  kind: ApplicationDocumentKind,
+  id: string,
+  extension: string,
+): string {
+  return `drivers/${driverId}/${kind}-${id}.${extension}`;
+}

@@ -37,4 +37,14 @@ export class ListDriversQueryDto extends ArchivedQueryDto {
   @Transform(queryBoolean)
   @IsBoolean()
   collections?: boolean;
+
+  /**
+   * `true` lists only drivers with no application: the ones an admin added directly (D85). With `status=onboarding` it
+   * is the Drivers page's "Onboarding (added directly)" view; a driver in onboarding who came from an application is
+   * on the Approved applications page instead. Omitted or `false`: no filter.
+   */
+  @IsOptional()
+  @Transform(queryBoolean)
+  @IsBoolean()
+  withoutApplication?: boolean;
 }

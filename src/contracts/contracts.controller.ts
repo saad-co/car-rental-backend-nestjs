@@ -15,8 +15,12 @@ import { CurrentUser } from "../auth/current-user.decorator.js";
 import type { AuthenticatedUser } from "../auth/jwt-auth.guard.js";
 import { ContractTrackingService } from "./contract-tracking.service.js";
 import { ContractsService } from "./contracts.service.js";
+import { FLEET_VEHICLES } from "./fleet-vehicles.js";
+import { LicenceReaderService } from "./licence-reader.service.js";
 import {
   ContractCompanyDto,
+  FleetVehicleDto,
+  LicenceDetailsDto,
   ContractCurrentDto,
   ContractDocumentsDto,
   ContractDto,
@@ -35,6 +39,7 @@ export class ContractsController {
   constructor(
     private readonly contracts: ContractsService,
     private readonly tracking: ContractTrackingService,
+    private readonly licenceReader: LicenceReaderService,
   ) {}
 
   /** `POST /contracts/calculate`: the numbers for some inputs, nothing saved. `400` bad inputs. */
@@ -48,6 +53,26 @@ export class ContractsController {
   @Get("contracts/companies")
   listCompanies(): Promise<ContractCompanyDto[]> {
     return this.contracts.listCompanies();
+  }
+
+  /** `GET /contracts/vehicles`: the business's vehicles to pick on the Vehicle card (B120; not paginated: about 40). */
+  @Get("contracts/vehicles")
+  listVehicles(): FleetVehicleDto[] {
+    return FLEET_VEHICLES;
+  }
+
+  /**
+   * `POST /drivers/:driverId/contract/licence-details`: reads address, licence number, state and date of birth from the
+   * driver's licence file with the AI (B121, D86). Nothing is saved: the page puts the values in the draft's boxes.
+   * POST because every call asks the AI again. `404` unknown driver, `409` no licence on file or none found in it,
+   * `502` the AI or the bucket failed, `503` the AI is not set up.
+   */
+  @Post("drivers/:driverId/contract/licence-details")
+  @HttpCode(HttpStatus.OK)
+  readLicence(
+    @Param("driverId", ParseUUIDPipe) driverId: string,
+  ): Promise<LicenceDetailsDto> {
+    return this.licenceReader.read(driverId);
   }
 
   /** `GET /drivers/:driverId/contract`: the open draft or else the contract sent last, or `{ contract: null }`. `404` unknown driver. */

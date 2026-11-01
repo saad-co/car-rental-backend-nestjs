@@ -9,6 +9,7 @@ import {
   Unique,
   UpdateDateColumn,
 } from "typeorm";
+import { Driver } from "../../drivers/driver.entity.js";
 import { User } from "../../users/user.entity.js";
 import { Application } from "../application.entity.js";
 
@@ -44,9 +45,19 @@ export enum ApplicationDocumentStatus {
  * The website keeps the files in its own private Supabase bucket and may clear old ones to free space, so we
  * copy each into our own private bucket as soon as we see its path. The path comes from the application
  * (`license_storage_path` and friends); a row is created for each one that is set, once per application and kind.
+ *
+ * A row has exactly one owner (D85): an application (every row so far), or a driver added directly, who has no
+ * application. A driver's documents are its own rows plus those of its application, read together; the table keeps its
+ * name because renaming it would touch every query for no gain.
  */
 @Entity("application_documents")
 @Unique("application_documents_application_kind_key", ["applicationId", "kind"])
+@Unique("application_documents_driver_kind_key", ["driverId", "kind"])
+// One owner: an application, or a driver (and then an admin upload; the website never sends files for a driver).
+@Check(
+  "application_documents_one_owner",
+  `("application_id" IS NULL) <> ("driver_id" IS NULL) AND ("driver_id" IS NULL OR "origin" = 'admin')`,
+)
 @Check(
   "application_documents_stored_has_file",
   `"status" <> 'stored' OR ("storage_key" IS NOT NULL AND "size_bytes" IS NOT NULL)`,
@@ -64,12 +75,22 @@ export class ApplicationDocument {
   @PrimaryGeneratedColumn("uuid")
   id: string;
 
-  @Column({ name: "application_id", type: "uuid" })
-  applicationId: string;
+  /** The application this file belongs to; null for a driver added directly (then `driverId` is set). */
+  @Column({ name: "application_id", type: "uuid", nullable: true })
+  applicationId: string | null;
 
-  @ManyToOne(() => Application, { onDelete: "CASCADE" })
+  @ManyToOne(() => Application, { nullable: true, onDelete: "CASCADE" })
   @JoinColumn({ name: "application_id" })
-  application?: Application;
+  application?: Application | null;
+
+  /** The driver this file belongs to when the driver was added directly (D85); null for an application's file. */
+  @Column({ name: "driver_id", type: "uuid", nullable: true })
+  driverId: string | null;
+
+  /** `RESTRICT`: drivers are archived, never deleted, so a driver's files are never silently dropped with the row. */
+  @ManyToOne(() => Driver, { nullable: true, onDelete: "RESTRICT" })
+  @JoinColumn({ name: "driver_id" })
+  driver?: Driver | null;
 
   @Column({
     type: "enum",

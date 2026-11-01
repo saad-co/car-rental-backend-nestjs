@@ -190,6 +190,7 @@ describe("Track and file a signed contract (Module 2 step 4, D75, test database)
       db.getRepository(Driver),
       db.getRepository(PaymentAlias),
       db.getRepository(Payment),
+      null,
     );
     tracking = new ContractTrackingService(
       db,

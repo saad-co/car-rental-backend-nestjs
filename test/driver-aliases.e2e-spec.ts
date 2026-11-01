@@ -44,6 +44,7 @@ describe("Payment aliases on the driver page: add and remove (D69, test database
       db.getRepository(Driver),
       db.getRepository(PaymentAlias),
       db.getRepository(Payment),
+      null,
     );
   });
 

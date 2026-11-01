@@ -176,7 +176,7 @@ describe("Contract drafts (Module 2 steps 1 and 2, D71, test database)", () => {
       numbers: {
         baseCents: 2_562,
         amountDueAtPickupCents: 36_100,
-        recurringTotalCents: 6_125,
+        recurringTotalCents: 6_100, // excess mileage is not in it (B119)
         endDate: "2027-02-28",
       },
     });
@@ -430,13 +430,14 @@ describe("Contract drafts (Module 2 steps 1 and 2, D71, test database)", () => {
       expect(problems({ purchaseOptionCents: 2_147_483_647 })).toEqual([]);
     });
 
-    it("keeps the licence number and date of birth out of the drivers list and the driver page", async () => {
+    it("keeps the contract's licence number and date of birth out of the drivers list and the driver page", async () => {
       const company = await firstCompany();
       await contracts.createDraft(driverId, body(details(company.id)), admin);
       const drivers = new DriversService(
         db.getRepository(Driver),
         db.getRepository(PaymentAlias),
         db.getRepository(Payment),
+        null,
       );
       const list = await drivers.list(plainToInstance(ListDriversQueryDto, {}));
       const page = await drivers.findOne(driverId);
@@ -444,8 +445,11 @@ describe("Contract drafts (Module 2 steps 1 and 2, D71, test database)", () => {
         const json = JSON.stringify(response);
         expect(json).not.toContain("X123-4567-8901");
         expect(json).not.toContain("1990-05-17");
-        expect(json).not.toMatch(/license|dateOfBirth/i);
+        expect(json).not.toMatch(/license/i);
       }
+      // The driver page has the driver's own profile (D85), which is not the contract's: still empty here. The list has none.
+      expect(JSON.stringify(list)).not.toMatch(/dateOfBirth/i);
+      expect(page.profile.dateOfBirth).toBeNull();
     });
 
     it("keeps a company that contracts point to (it cannot be deleted)", async () => {
