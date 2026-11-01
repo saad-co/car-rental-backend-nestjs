@@ -4,8 +4,13 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-11-01 — Feature 16 step 1 and Approve without text merged into local `dev`; worktrees removed
+- Committed on `feature/add-driver-direct` (backend `e7c5eaf`, frontend `55cb9b0`) and merged into **local** `dev` with no PR (Abulkalam, 2026-11-01): backend `c84536f`, frontend `e791d33`. **NOT pushed; not deployed.**
+- Main database `car_rental_db` migrated (6 migrations, up to `AddDriverProfileAndDocuments`); `npm install` in both main checkouts; backend and frontend build.
+- Removed: both `wt-add-driver-direct-*` worktrees, the stale `wt-assign-quick-add-frontend` entry, local branches `feature/add-driver-direct`, `feature/assign-quick-add`, `feature/linked-archive`, and the worktree databases (`car_rental_add_driver_direct`, `_assign_quick_add`, `_contracts`, `_ledger_page`, each with `_test`). `.claude/launch.json` now starts the main checkouts (5000 / 5173). `deploy-*` kept.
+
 ### 2026-11-01 — Approve without text (B111); dark theme deferred (B112)
-- **Branch** `feature/add-driver-direct` (same worktrees as feature 16, Abulkalam's choice), NOT committed.
+- **Branch** `feature/add-driver-direct` (same worktrees as feature 16, Abulkalam's choice).
 - **Backend:** `ApproveApplicationDto` (`message` + optional `sendText`); `ApplicationsService.approve` skips the text when `sendText === false`; `openapi.json` re-exported. **Frontend:** `sendText` on the approve request; "Approve without text" in the Approve dialog; client regenerated.
 - **Verified:** backend build and lint, frontend `tsc`, build and lint. No new tests (Abulkalam: quick change); not tried in the browser (no pending application locally).
 
