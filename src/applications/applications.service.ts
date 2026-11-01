@@ -25,6 +25,7 @@ import {
 import { likePattern, phoneDigits } from "../common/search.js";
 import { isUniqueViolation } from "../database/postgres-errors.js";
 import { Driver, DriverStatus } from "../drivers/driver.entity.js";
+import { profileFromApplication } from "../drivers/driver-profile.js";
 import { startBilling } from "../drivers/drivers.service.js";
 import { toUsE164 } from "../drivers/us-phone.js";
 import { TemplateKind } from "../message-templates/message-template.entity.js";
@@ -563,6 +564,7 @@ export class ApplicationsService {
    *
    * @param adminId the admin approving it (stored as the reviewer).
    * @param options.message the approval text to send; the first approved template when missing.
+   * @param options.sendText `false` approves without any text (B111); default `true`.
    * @throws NotFoundException if there is no application with this id.
    * @throws ConflictException if it is already approved.
    * @throws ServiceUnavailableException if a text could not be sent (nothing approved).
@@ -570,7 +572,7 @@ export class ApplicationsService {
   async approve(
     id: string,
     adminId: string,
-    options: { message?: string } = {},
+    options: { message?: string; sendText?: boolean } = {},
   ): Promise<ApplicationDetailDto> {
     const approved = await this.dataSource.transaction(async (manager) => {
       const application = await this.loadForReview(manager, id);
@@ -578,6 +580,7 @@ export class ApplicationsService {
       application.reviewedById = adminId;
       application.reviewedAt = new Date();
       const saved = await manager.save(application);
+      if (options.sendText === false) return saved;
 
       await this.sendOrFail(
         application,
@@ -667,6 +670,8 @@ export class ApplicationsService {
             email: application.email,
             phone,
             userId: user.id,
+            // The driver row is where the profile is read from (D85): copy what the application holds.
+            ...profileFromApplication(application),
           }),
         );
         application.driverId = driver.id;

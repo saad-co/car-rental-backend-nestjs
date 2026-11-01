@@ -26,6 +26,7 @@ import {
   ApprovedApplicationListDto,
 } from "./dto/application.dto.js";
 import { ApplicationReceivedDto } from "./dto/application-received.dto.js";
+import { ApproveApplicationDto } from "./dto/approve-application.dto.js";
 import { ReviewMessageDto } from "./dto/review-message.dto.js";
 import {
   DeleteApplicationsDto,
@@ -241,7 +242,8 @@ export class ApplicationsController {
   /**
    * `POST /applications/:id/approve`: marks the application approved and texts the applicant. No driver is created
    * (D80); "Start onboarding" does that. Optional body `{ "message": "..." }` is the approval text the admin picked and edited (B81); without
-   * it the first approved template is sent. `400` for an unknown placeholder in it.
+   * it the first approved template is sent. `{ "sendText": false }` approves without any text (B111). `400` for an
+   * unknown placeholder in it.
    *
    * POST because it is an action with side effects, not an edit of a field. `@HttpCode(200)`
    * because it returns the updated application rather than creating a resource at this URL.
@@ -250,10 +252,13 @@ export class ApplicationsController {
   @HttpCode(HttpStatus.OK)
   approve(
     @Param("id", ParseUUIDPipe) id: string,
-    @Body() body: ReviewMessageDto,
+    @Body() body: ApproveApplicationDto,
     @CurrentUser() admin: AuthenticatedUser,
   ): Promise<ApplicationDetailDto> {
-    return this.applications.approve(id, admin.id, { message: body.message });
+    return this.applications.approve(id, admin.id, {
+      message: body.message,
+      sendText: body.sendText,
+    });
   }
 
   /**

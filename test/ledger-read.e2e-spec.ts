@@ -201,6 +201,7 @@ describe("Driver ledger: history and summaries (B77, test database)", () => {
       db.getRepository(Driver),
       db.getRepository(PaymentAlias),
       db.getRepository(Payment),
+      null,
     );
     expect((await drivers.findOne(pat)).balanceCents).toBe(-4200);
   });

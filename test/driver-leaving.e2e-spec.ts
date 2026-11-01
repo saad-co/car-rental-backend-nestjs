@@ -77,6 +77,7 @@ describe("Leaving a driver, collections and the deposit amount (D81, D82, test d
       db.getRepository(Driver),
       db.getRepository(PaymentAlias),
       db.getRepository(Payment),
+      null,
     );
     auth = new AuthService(
       new UsersService(db.getRepository(User), passwords),

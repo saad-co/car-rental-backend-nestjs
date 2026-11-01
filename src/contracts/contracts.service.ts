@@ -296,7 +296,7 @@ export class ContractsService {
 
   /**
    * The template PDF with the driver's licence drawn on its last page (D76): the licence file is the one on the driver's
-   * application (the first step of a driver's life, D26). Nothing here is ever logged or put in a message but the driver's id.
+   * application (the first step of a driver's life, D26) or, for a driver added directly, the driver's own (D85). Nothing here is ever logged or put in a message but the driver's id.
    * @throws ServiceUnavailableException no file storage is set up.
    * @throws ConflictException the application has no stored licence file, or it cannot be read as a picture or PDF.
    * @throws BadGatewayException the bucket could not give the file.
@@ -312,16 +312,20 @@ export class ContractsService {
         "File storage is not set up (S3_*): the driver's licence is read from it.",
       );
     }
+    // The licence is the driver's own file (a driver added directly, D85) or the one on the application they came from.
+    const stored = {
+      kind: ApplicationDocumentKind.license,
+      status: ApplicationDocumentStatus.stored,
+    };
     const document = await manager.findOne(ApplicationDocument, {
-      where: {
-        kind: ApplicationDocumentKind.license,
-        status: ApplicationDocumentStatus.stored,
-        application: { driverId },
-      },
+      where: [
+        { ...stored, driverId },
+        { ...stored, application: { driverId } },
+      ],
     });
     if (!document?.storageKey) {
       throw new ConflictException(
-        "The driver's licence is not on file: add it to the application first.",
+        "The driver's licence is not on file: add it to the driver's documents first.",
       );
     }
     let body: Buffer;

@@ -164,7 +164,7 @@ export class ApplicationDocumentCopier {
       try {
         // The database CHECK guarantees a website copy has its path; this only tells TypeScript.
         const sourcePath = document.sourcePath;
-        if (sourcePath === null) {
+        if (sourcePath === null || document.applicationId === null) {
           throw new Error("A website copy has no source path.");
         }
         const file = await source.fetch(sourcePath);

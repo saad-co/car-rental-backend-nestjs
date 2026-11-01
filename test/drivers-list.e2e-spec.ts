@@ -24,6 +24,7 @@ describe("Drivers list with aliases and payment summary (test database)", () => 
       db.getRepository(Driver),
       db.getRepository(PaymentAlias),
       db.getRepository(Payment),
+      null,
     );
   });
 

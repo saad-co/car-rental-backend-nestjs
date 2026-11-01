@@ -1,11 +1,14 @@
+import { randomUUID } from "node:crypto";
 import { chicagoDate } from "../common/chicago-date.js";
 import { addDateRange } from "../common/date-range.js";
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { isEmail } from "class-validator";
@@ -15,18 +18,53 @@ import { AliasSource, PaymentAlias } from "../aliases/payment-alias.entity.js";
 import { isUniqueViolation } from "../database/postgres-errors.js";
 import { likePattern, phoneDigits } from "../common/search.js";
 import { Application } from "../applications/application.entity.js";
+import {
+  ApplicationDocument,
+  ApplicationDocumentKind,
+  ApplicationDocumentOrigin,
+  ApplicationDocumentStatus,
+} from "../applications/documents/application-document.entity.js";
+import {
+  DOCUMENT_LABEL,
+  checkUpload,
+  driverDocumentStorageKey,
+} from "../applications/documents/upload-file.js";
 import { Payment } from "../payments/payment.entity.js";
+import type { FileStorage } from "../sms/storage/file-storage.js";
+import { FILE_STORAGE } from "../sms/storage/file-storage.module.js";
 import { User } from "../users/user.entity.js";
 import { Driver, DriverLeftReason, DriverStatus } from "./driver.entity.js";
+import { driverAge } from "./driver-profile.js";
 import { AddAliasDto } from "./dto/add-alias.dto.js";
-import { DriverDto, DriverListDto } from "./dto/driver.dto.js";
+import { CreateDriverDto } from "./dto/create-driver.dto.js";
+import type { UpdateDriverProfileDto } from "./dto/driver-profile.dto.js";
+import { DriverDetailDto, DriverDto, DriverListDto } from "./dto/driver.dto.js";
 import { ListDriversQueryDto } from "./dto/list-drivers-query.dto.js";
 import { OnboardingStep } from "./dto/set-onboarding-step.dto.js";
 import { toUsE164 } from "./us-phone.js";
 
+/** The files an admin attaches while adding a driver directly (D85), by slot; both are optional. */
+export type NewDriverFiles = Partial<
+  Record<
+    ApplicationDocumentKind.license | ApplicationDocumentKind.earnings,
+    Express.Multer.File
+  >
+>;
+
+/** A driver as the list shows it: a plain object type (not the class), so the detail can spread it and add the profile. */
+type DriverWithExtras = Omit<DriverDetailDto, "profile">;
+
+/** An alias that passed the checks, in the two forms it is stored in (what is shown, what matching compares). */
+interface PreparedAlias {
+  type: AliasType;
+  value: string;
+  valueNormalized: string;
+}
+
 /**
  * Drivers for the admin screens: reading them, their onboarding steps and status (D56), and deactivating /
- * reactivating them (B67). Drivers are created by approving an application (ApplicationsService.approve), not here.
+ * reactivating them (B67). Drivers are created by starting onboarding on an approved application
+ * (ApplicationsService.startOnboarding), or directly by an admin (`create`, D85).
  */
 @Injectable()
 export class DriversService {
@@ -37,6 +75,8 @@ export class DriversService {
     @InjectRepository(PaymentAlias)
     private readonly aliases: Repository<PaymentAlias>,
     @InjectRepository(Payment) private readonly payments: Repository<Payment>,
+    /** Our file bucket, for the licence and earnings files of a driver added directly. Null when none is set up. */
+    @Inject(FILE_STORAGE) private readonly storage: FileStorage | null,
   ) {}
 
   /**
@@ -62,6 +102,12 @@ export class DriversService {
       builder.andWhere("d.status <> :onboarding", {
         onboarding: DriverStatus.onboarding,
       });
+    }
+    // Drivers an admin added directly have no application (D85).
+    if (query.withoutApplication) {
+      builder.andWhere(
+        "NOT EXISTS (SELECT 1 FROM applications a WHERE a.driver_id = d.id)",
+      );
     }
     // The Collections page (D81): only drivers sent to collections, the latest first, dated by the day they were sent.
     if (query.collections) {
@@ -111,13 +157,216 @@ export class DriversService {
    * One driver.
    * @throws NotFoundException if there is no driver with this id.
    */
-  async findOne(id: string): Promise<DriverDto> {
+  async findOne(id: string): Promise<DriverDetailDto> {
     const driver = await this.drivers.findOneBy({ id });
     if (!driver) {
       throw new NotFoundException("Driver not found.");
     }
     const [dto] = await this.withExtras([driver]);
-    return dto;
+    return {
+      ...dto,
+      profile: {
+        middleName: driver.middleName,
+        street: driver.street,
+        apt: driver.apt,
+        city: driver.city,
+        state: driver.state,
+        zip: driver.zip,
+        dateOfBirth: driver.dateOfBirth,
+        age: driverAge(driver.dateOfBirth),
+        hasInsurance: driver.hasInsurance,
+      },
+    };
+  }
+
+  /**
+   * Adds a driver directly, without an application (D85). The driver starts in `onboarding` like any new driver and has no
+   * login: nothing is texted or emailed, and no staff alert goes out. Aliases are saved with the same rules as adding one
+   * on the driver page (D69), and a licence and an earnings file may come with it.
+   *
+   * Files are not covered by a database transaction, so the order is: check everything (phone, files, aliases, the email and
+   * phone being free) → put the files in the bucket → one transaction for the driver, the file rows and the aliases → if that
+   * fails, remove the files again (a failed removal is logged as an error). Sending the form twice makes one driver: the
+   * second try meets the unique email and phone and is answered `409`.
+   *
+   * @throws BadRequestException a phone that is not a US number, a file that is not a JPG, PNG or PDF of at most 10 MB, a date
+   *   of birth in the future, or an alias that does not pass the checks of D69.
+   * @throws ConflictException a driver already has this email or phone, or an alias already belongs to a driver.
+   * @throws ServiceUnavailableException files came but no file bucket is set up.
+   */
+  async create(
+    dto: CreateDriverDto,
+    files: NewDriverFiles,
+    adminId: string,
+  ): Promise<DriverDetailDto> {
+    const phone = toUsE164(dto.phone);
+    if (!phone) {
+      throw new BadRequestException(
+        `Phone "${dto.phone}" is not a valid US number.`,
+      );
+    }
+    this.assertNotFuture(dto.dateOfBirth);
+    const uploads = (
+      [
+        ApplicationDocumentKind.license,
+        ApplicationDocumentKind.earnings,
+      ] as const
+    ).flatMap((kind) => {
+      const file = files[kind];
+      return file
+        ? [{ kind, file, type: checkUpload(DOCUMENT_LABEL[kind], file) }]
+        : [];
+    });
+    const storage = this.storage;
+    if (uploads.length > 0 && !storage) {
+      throw new ServiceUnavailableException(
+        "File storage is not set up, so documents cannot be saved.",
+      );
+    }
+    // The same method and handle typed twice is one alias.
+    const prepared = [
+      ...new Map(
+        (dto.aliases ?? [])
+          .map((alias) => this.prepareAlias(alias))
+          .map((alias) => [`${alias.type}:${alias.valueNormalized}`, alias]),
+      ).values(),
+    ];
+    const taken = await this.drivers.findOne({
+      where: [{ email: dto.email }, { phone }],
+    });
+    if (taken) {
+      throw new ConflictException(
+        taken.email === dto.email
+          ? "A driver with this email already exists."
+          : "A driver with this phone number already exists.",
+      );
+    }
+
+    const id = randomUUID();
+    const putKeys: string[] = [];
+    try {
+      const stored: {
+        kind: ApplicationDocumentKind;
+        key: string;
+        size: number;
+        contentType: string;
+      }[] = [];
+      for (const { kind, file, type } of uploads) {
+        const key = driverDocumentStorageKey(
+          id,
+          kind,
+          randomUUID(),
+          type.extension,
+        );
+        await storage!.put(key, file.buffer, type.contentType);
+        putKeys.push(key);
+        stored.push({
+          kind,
+          key,
+          size: file.size,
+          contentType: type.contentType,
+        });
+      }
+
+      await this.drivers.manager.transaction(async (manager) => {
+        await manager.save(
+          manager.create(Driver, {
+            id,
+            firstName: dto.firstName,
+            lastName: dto.lastName,
+            email: dto.email,
+            phone,
+            middleName: dto.middleName ?? null,
+            street: dto.street ?? null,
+            apt: dto.apt ?? null,
+            city: dto.city ?? null,
+            state: dto.state ?? null,
+            zip: dto.zip ?? null,
+            dateOfBirth: dto.dateOfBirth ?? null,
+            hasInsurance: dto.hasInsurance ?? null,
+          }),
+        );
+        for (const item of stored) {
+          await manager.insert(ApplicationDocument, {
+            applicationId: null,
+            driverId: id,
+            kind: item.kind,
+            origin: ApplicationDocumentOrigin.admin,
+            sourcePath: null,
+            status: ApplicationDocumentStatus.stored,
+            storageKey: item.key,
+            sizeBytes: item.size,
+            contentType: item.contentType,
+            uploadedById: adminId,
+          });
+        }
+        for (const alias of prepared) {
+          await this.insertAlias(manager, id, alias);
+        }
+      });
+    } catch (error) {
+      await this.removeFiles(putKeys);
+      if (isUniqueViolation(error)) {
+        // Someone added a driver with this email or phone between our check and the insert.
+        throw new ConflictException(
+          "A driver with this email or phone number already exists.",
+        );
+      }
+      throw error;
+    }
+    this.logger.log(`Admin ${adminId} added driver ${id} directly.`);
+    return this.findOne(id);
+  }
+
+  /**
+   * Changes the profile fields of a driver (D85). A field left out stays as it is; one sent empty is cleared. Names, email
+   * and phone are not changed here (they tie the driver to payments, the chat and the contract).
+   * @throws NotFoundException unknown driver.
+   * @throws BadRequestException a date of birth in the future.
+   */
+  async updateProfile(
+    id: string,
+    dto: UpdateDriverProfileDto,
+    adminId: string,
+  ): Promise<DriverDetailDto> {
+    this.assertNotFuture(dto.dateOfBirth);
+    await this.drivers.manager.transaction(async (manager) => {
+      const driver = await this.lockDriver(manager, id);
+      if (dto.middleName !== undefined) driver.middleName = dto.middleName;
+      if (dto.street !== undefined) driver.street = dto.street;
+      if (dto.apt !== undefined) driver.apt = dto.apt;
+      if (dto.city !== undefined) driver.city = dto.city;
+      if (dto.state !== undefined) driver.state = dto.state;
+      if (dto.zip !== undefined) driver.zip = dto.zip;
+      if (dto.dateOfBirth !== undefined) driver.dateOfBirth = dto.dateOfBirth;
+      if (dto.hasInsurance !== undefined)
+        driver.hasInsurance = dto.hasInsurance;
+      await manager.save(driver);
+    });
+    // Ids only: the profile holds a date of birth and an address.
+    this.logger.log(`Admin ${adminId} edited the profile of driver ${id}.`);
+    return this.findOne(id);
+  }
+
+  /** A date of birth cannot be after today (Chicago day): the age worked out from it would be negative. */
+  private assertNotFuture(dateOfBirth: string | null | undefined): void {
+    if (dateOfBirth && dateOfBirth > chicagoDate(new Date())) {
+      throw new BadRequestException("dateOfBirth cannot be in the future.");
+    }
+  }
+
+  /** Removes stored objects after a failed save; a failure is logged with its reason and not thrown. */
+  private async removeFiles(keys: string[]): Promise<void> {
+    for (const key of keys) {
+      try {
+        await this.storage?.delete(key);
+      } catch (error) {
+        this.logger.error(
+          `Could not remove ${key} after a failed save; it is left in the bucket.`,
+          error instanceof Error ? error.stack : String(error),
+        );
+      }
+    }
   }
 
   /**
@@ -142,7 +391,7 @@ export class DriversService {
     done: boolean,
     adminId: string,
     depositPaidCents?: number,
-  ): Promise<DriverDto> {
+  ): Promise<DriverDetailDto> {
     if (
       depositPaidCents !== undefined &&
       (step !== OnboardingStep.deposit || !done)
@@ -238,7 +487,7 @@ export class DriversService {
     id: string,
     reason: DriverLeftReason,
     adminId: string,
-  ): Promise<DriverDto> {
+  ): Promise<DriverDetailDto> {
     await this.drivers.manager.transaction(async (manager) => {
       const driver = await this.lockDriver(manager, id);
       if (
@@ -263,7 +512,7 @@ export class DriversService {
    *
    * @throws NotFoundException unknown driver.
    */
-  async reactivate(id: string, adminId: string): Promise<DriverDto> {
+  async reactivate(id: string, adminId: string): Promise<DriverDetailDto> {
     await this.drivers.manager.transaction(async (manager) => {
       const driver = await this.lockDriver(manager, id);
       if (driver.status !== DriverStatus.inactive) return;
@@ -300,7 +549,7 @@ export class DriversService {
     id: string,
     reason: DriverLeftReason | undefined,
     adminId: string,
-  ): Promise<DriverDto> {
+  ): Promise<DriverDetailDto> {
     await this.drivers.manager.transaction(async (manager) => {
       const driver = await this.lockDriver(manager, id);
       if (driver.status === DriverStatus.onboarding) {
@@ -329,7 +578,10 @@ export class DriversService {
    *
    * @throws NotFoundException unknown driver.
    */
-  async removeFromCollections(id: string, adminId: string): Promise<DriverDto> {
+  async removeFromCollections(
+    id: string,
+    adminId: string,
+  ): Promise<DriverDetailDto> {
     await this.drivers.manager.transaction(async (manager) => {
       const driver = await this.lockDriver(manager, id);
       if (driver.sentToCollectionsAt === null) return;
@@ -375,13 +627,13 @@ export class DriversService {
    *
    * @throws NotFoundException unknown driver.
    */
-  async archive(id: string, adminId: string): Promise<DriverDto> {
+  async archive(id: string, adminId: string): Promise<DriverDetailDto> {
     await this.setArchived(id, true, adminId);
     return this.findOne(id);
   }
 
   /** Brings an archived driver back to the lists, with the status they had. Same rules as `archive`. */
-  async unarchive(id: string, adminId: string): Promise<DriverDto> {
+  async unarchive(id: string, adminId: string): Promise<DriverDetailDto> {
     await this.setArchived(id, false, adminId);
     return this.findOne(id);
   }
@@ -438,10 +690,24 @@ export class DriversService {
     driverId: string,
     dto: AddAliasDto,
     adminId: string,
-  ): Promise<DriverDto> {
+  ): Promise<DriverDetailDto> {
     if (!(await this.drivers.existsBy({ id: driverId }))) {
       throw new NotFoundException("Driver not found.");
     }
+    const prepared = this.prepareAlias(dto);
+    await this.insertAlias(this.drivers.manager, driverId, prepared);
+    this.logger.log(
+      `Admin ${adminId} added ${dto.type} alias "${dto.value}" to driver ${driverId}.`,
+    );
+    return this.findOne(driverId);
+  }
+
+  /**
+   * The checks every new alias passes (D69), and its stored forms.
+   * @throws BadRequestException a phone that is not a US number, an email that is not an address, or nothing left after
+   *   normalising (e.g. just `$`).
+   */
+  private prepareAlias(dto: AddAliasDto): PreparedAlias {
     if (dto.type === AliasType.phone && !toUsE164(dto.value)) {
       throw new BadRequestException(
         "That is not a US phone number (10 digits).",
@@ -454,11 +720,24 @@ export class DriversService {
     if (valueNormalized === "") {
       throw new BadRequestException("Enter a name or handle.");
     }
+    return { type: dto.type, value: dto.value, valueNormalized };
+  }
 
+  /**
+   * Saves a checked alias for a driver through `manager` (so it can be part of a bigger transaction), as `manual`. An alias
+   * belongs to one driver (`UNIQUE (type, value_normalized)`): if one exists already this is refused and names its owner.
+   * The database decides when two requests add the same alias at the same instant.
+   * @throws ConflictException the alias exists already (on this driver, or on another one).
+   */
+  private async insertAlias(
+    manager: EntityManager,
+    driverId: string,
+    alias: PreparedAlias,
+  ): Promise<void> {
     /** The error to answer with if this alias exists already, or null. */
-    const existingAlias = async () => {
-      const existing = await this.aliases.findOne({
-        where: { type: dto.type, valueNormalized },
+    const existingAlias = async (reader: Repository<PaymentAlias>) => {
+      const existing = await reader.findOne({
+        where: { type: alias.type, valueNormalized: alias.valueNormalized },
         relations: { driver: true },
       });
       if (!existing) return null;
@@ -471,31 +750,28 @@ export class DriversService {
         `This alias already belongs to ${owner}. An alias can belong to one driver only.`,
       );
     };
-    const conflict = await existingAlias();
+    const conflict = await existingAlias(manager.getRepository(PaymentAlias));
     if (conflict) throw conflict;
 
     try {
-      await this.aliases.insert({
+      await manager.insert(PaymentAlias, {
         driverId,
-        type: dto.type,
-        value: dto.value,
-        valueNormalized,
+        type: alias.type,
+        value: alias.value,
+        valueNormalized: alias.valueNormalized,
         source: AliasSource.manual,
       });
     } catch (error) {
       if (isUniqueViolation(error)) {
-        // Another request added it a moment ago: report the owner like above.
+        // Another request added it a moment ago: report the owner like above. Read through the main connection, because
+        // a failed statement leaves `manager`'s transaction (if it is one) unusable.
         throw (
-          (await existingAlias()) ??
+          (await existingAlias(this.aliases)) ??
           new ConflictException("This alias already exists.")
         );
       }
       throw error;
     }
-    this.logger.log(
-      `Admin ${adminId} added ${dto.type} alias "${dto.value}" to driver ${driverId}.`,
-    );
-    return this.findOne(driverId);
   }
 
   /**
@@ -509,7 +785,7 @@ export class DriversService {
     driverId: string,
     aliasId: string,
     adminId: string,
-  ): Promise<DriverDto> {
+  ): Promise<DriverDetailDto> {
     const alias = await this.aliases.findOneBy({ id: aliasId, driverId });
     if (!alias) throw new NotFoundException("Alias not found.");
     await this.aliases.delete({ id: aliasId, driverId });
@@ -536,7 +812,7 @@ export class DriversService {
    * Adds each driver's aliases and payment summary using two queries for the WHOLE page (one for aliases,
    * one grouped count), never one per driver.
    */
-  private async withExtras(rows: Driver[]): Promise<DriverDto[]> {
+  private async withExtras(rows: Driver[]): Promise<DriverWithExtras[]> {
     if (rows.length === 0) return [];
     const ids = rows.map((row) => row.id);
     const aliases = await this.aliases.find({

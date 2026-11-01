@@ -423,12 +423,32 @@ describe("Send a contract for signing (Module 2 step 3, D74, test database)", ()
         expect(await imagesOnLastPage(request.pdf)).toBeGreaterThan(0);
       });
 
+      it("draws the licence of a driver added directly, who has no application (D85)", async () => {
+        const direct = await newDriver(2, false);
+        const body = await licencePicture();
+        const key = `drivers/${direct}/license-test.bin`;
+        storage.files.set(key, body);
+        const [{ id: documentId }] = (await db.query(
+          `INSERT INTO application_documents (driver_id, kind, origin, status, storage_key, size_bytes)
+           VALUES ($1, 'license', 'admin', 'stored', $2, $3) RETURNING id`,
+          [direct, key, body.length],
+        )) as [{ id: string }];
+        const id = await newDraft({}, direct);
+
+        const sent = await contracts.sendForSigning(id, admin);
+
+        expect(sent.sentValues?.licenseDocumentId).toBe(documentId);
+        expect(await imagesOnLastPage(firma.requests[0].pdf)).toBeGreaterThan(
+          0,
+        );
+      });
+
       it("blocks the send when the driver has no licence file, and changes nothing", async () => {
         const other = await newDriver(2, false);
         const id = await newDraft({}, other);
 
         await expect(contracts.sendForSigning(id, admin)).rejects.toThrow(
-          "The driver's licence is not on file: add it to the application first.",
+          "The driver's licence is not on file: add it to the driver's documents first.",
         );
         expect(firma.requests).toHaveLength(0);
         expect((await row(id)).status).toBe("draft");
