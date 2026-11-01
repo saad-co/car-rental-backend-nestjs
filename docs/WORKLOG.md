@@ -4,6 +4,11 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-11-02 — Deployed to staging: dark redesign step 1 and the revisions batch
+- `feature/dark-theme` merged straight into `dev` (Abulkalam; backend `4284eca`, frontend `78866e9`) and deployed by the deploy steps, backend then frontend. This also put the revisions batch (B111-B121, D86) and feature 16 step 1 (D85) on staging for the first time.
+- **Checked:** `railway logs` shows `AddDriverProfileAndDocuments` and `AllowSharedDriverPhone` executed and the app started with no errors; frontend `/admin` 200, backend `/docs` 200, `GET /contracts/vehicles` without a token 401; the deployed CSS has the dark tokens and IBM Plex Sans. Not clicked through on staging.
+- **Live on staging:** opening a contract draft with empty Driver details sends that driver's licence to Gemini (D86); Abulkalam confirmed the key / consent before the deploy (2026-11-02).
+
 ### 2026-11-02 — Dark redesign, step 1: shell, shared parts, Applications (B112, D87)
 - **Branch** `feature/dark-theme` in both repos (main checkouts, no worktree). Frontend: `index.css` tokens re-coloured dark, fonts Archivo / IBM Plex Sans / IBM Plex Mono, `bg-white` → `bg-surface` everywhere, dark sidebar and header with the new brand mark, `DataTable` ledger look, dropdown panels and native selects fixed, `BackLink` on all 7 pages with a back link, Applications list / detail / approved / add headings and mono numbers. Backend: docs only.
 - **Verified:** lint, type-check, build; Abulkalam checked the pages in their own browser (2026-11-02). Not merged.
