@@ -45,6 +45,7 @@ describe("Driver onboarding, deactivate and reactivate (D56, test database)", ()
       db.getRepository(Driver),
       db.getRepository(PaymentAlias),
       db.getRepository(Payment),
+      null,
     );
     auth = new AuthService(
       new UsersService(db.getRepository(User), passwords),

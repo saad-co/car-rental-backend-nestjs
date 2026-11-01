@@ -102,6 +102,7 @@ describe("Approved applications, start onboarding, archive (D80, test database)"
       db.getRepository(Driver),
       db.getRepository(PaymentAlias),
       db.getRepository(Payment),
+      null,
     );
   });
 

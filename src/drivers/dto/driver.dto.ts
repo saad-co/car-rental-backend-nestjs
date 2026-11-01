@@ -58,6 +58,31 @@ export class DriverDto {
   applicationId: string | null;
 }
 
+/**
+ * The driver's profile (D85). Sensitive (date of birth, address): sent on the detail only, never in a list, and never
+ * logged.
+ */
+export class DriverProfileDto {
+  middleName: string | null;
+  street: string | null;
+  /** Apartment or unit. */
+  apt: string | null;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
+  /** `YYYY-MM-DD`; null = not known. */
+  dateOfBirth: string | null;
+  /** Whole years today (Chicago day), worked out from the date of birth and never stored; null without a date of birth. */
+  age: number | null;
+  /** Current auto insurance; null = not known. */
+  hasInsurance: boolean | null;
+}
+
+/** One driver with the profile: the answer of `GET /drivers/:id` and of every change to a driver. */
+export class DriverDetailDto extends DriverDto {
+  profile: DriverProfileDto;
+}
+
 /** One page of drivers, newest first. */
 export class DriverListDto {
   items: DriverDto[];

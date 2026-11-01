@@ -9,6 +9,7 @@ import { InjectDataSource } from "@nestjs/typeorm";
 import { randomUUID } from "node:crypto";
 import { DataSource } from "typeorm";
 import { FILE_LINK_SECONDS } from "../../sms/storage/file-storage.js";
+import { Driver } from "../../drivers/driver.entity.js";
 import { Application } from "../application.entity.js";
 import {
   DOCUMENT_COPIER_DEPS,
@@ -29,7 +30,11 @@ import {
   DOCUMENT_LABEL,
   checkUpload,
   documentStorageKey,
+  driverDocumentStorageKey,
 } from "./upload-file.js";
+
+/** Whose slots are meant: an application's, or a driver's own (a driver added directly, D85). */
+type Owner = { applicationId: string } | { driverId: string };
 
 /**
  * An application's documents: reading them (our own copies, D54) and admin uploads into the three slots (D68):
@@ -53,8 +58,22 @@ export class ApplicationDocumentsService {
    */
   async list(applicationId: string): Promise<ApplicationDocumentListDto> {
     await this.requireApplication(applicationId);
+    return this.listRows({ applicationId });
+  }
+
+  /**
+   * The documents of one driver (D85): those of the application it came from, or its own when it was added directly
+   * (a driver has one or the other). Same shape as an application's list.
+   * @throws NotFoundException unknown driver.
+   */
+  async listForDriver(driverId: string): Promise<ApplicationDocumentListDto> {
+    const owner = await this.ownerOfDriver(driverId);
+    return this.listRows(owner);
+  }
+
+  private async listRows(owner: Owner): Promise<ApplicationDocumentListDto> {
     const rows = await this.dataSource.getRepository(ApplicationDocument).find({
-      where: { applicationId },
+      where: owner,
       relations: { uploadedBy: true },
     });
     rows.sort(
@@ -85,6 +104,31 @@ export class ApplicationDocumentsService {
     adminId: string,
   ): Promise<ApplicationDocumentDto> {
     await this.requireApplication(applicationId);
+    return this.store({ applicationId }, kind, file, adminId);
+  }
+
+  /**
+   * Puts `file` in the `kind` slot of a driver (D85). A driver that came from an application uses that application's slot,
+   * so the two pages always show the same file; one added directly has its own rows.
+   * @throws NotFoundException unknown driver.
+   * @throws BadRequestException / ServiceUnavailableException as `upload`.
+   */
+  async uploadForDriver(
+    driverId: string,
+    kind: ApplicationDocumentKind,
+    file: Express.Multer.File,
+    adminId: string,
+  ): Promise<ApplicationDocumentDto> {
+    return this.store(await this.ownerOfDriver(driverId), kind, file, adminId);
+  }
+
+  /** The shared body of both uploads: the slot of `owner` gets the new file. */
+  private async store(
+    owner: Owner,
+    kind: ApplicationDocumentKind,
+    file: Express.Multer.File,
+    adminId: string,
+  ): Promise<ApplicationDocumentDto> {
     const type = checkUpload(DOCUMENT_LABEL[kind], file);
     const { storage } = this.deps;
     if (!storage) {
@@ -93,12 +137,20 @@ export class ApplicationDocumentsService {
       );
     }
 
-    const key = documentStorageKey(
-      applicationId,
-      kind,
-      randomUUID(),
-      type.extension,
-    );
+    const key =
+      "applicationId" in owner
+        ? documentStorageKey(
+            owner.applicationId,
+            kind,
+            randomUUID(),
+            type.extension,
+          )
+        : driverDocumentStorageKey(
+            owner.driverId,
+            kind,
+            randomUUID(),
+            type.extension,
+          );
     await storage.put(key, file.buffer, type.contentType);
 
     let oldKey: string | null;
@@ -109,7 +161,7 @@ export class ApplicationDocumentsService {
           // Lock the slot's row (if there is one), so a copy finishing at the same moment, or a second upload,
           // waits here and then sees this result.
           const existing = await manager.findOne(ApplicationDocument, {
-            where: { applicationId, kind },
+            where: { ...owner, kind },
             lock: { mode: "pessimistic_write" },
           });
           const values = {
@@ -128,7 +180,9 @@ export class ApplicationDocumentsService {
             return { oldKey: existing.storageKey, documentId: existing.id };
           }
           const inserted = await manager.insert(ApplicationDocument, {
-            applicationId,
+            applicationId:
+              "applicationId" in owner ? owner.applicationId : null,
+            driverId: "driverId" in owner ? owner.driverId : null,
             kind,
             ...values,
           });
@@ -151,6 +205,22 @@ export class ApplicationDocumentsService {
         relations: { uploadedBy: true },
       });
     return this.toDto(document);
+  }
+
+  /**
+   * Who owns a driver's documents (D85): its application when it has one, otherwise the driver itself.
+   * @throws NotFoundException unknown driver.
+   */
+  private async ownerOfDriver(driverId: string): Promise<Owner> {
+    if (
+      !(await this.dataSource.getRepository(Driver).existsBy({ id: driverId }))
+    ) {
+      throw new NotFoundException("Driver not found.");
+    }
+    const application = await this.dataSource
+      .getRepository(Application)
+      .findOne({ select: { id: true }, where: { driverId } });
+    return application ? { applicationId: application.id } : { driverId };
   }
 
   private async requireApplication(applicationId: string): Promise<void> {

@@ -76,13 +76,13 @@ so the two repos cannot silently drift apart.
 **User** — an account that can log in. `email` (unique), `passwordHash`, `role` (`admin` | `driver`, no default),
 `active`. Admins log in to the admin app; drivers log in to the driver portal with their email (D26).
 
-**Driver** — `firstName`, `lastName`, `phone` (E.164), `email`, `status` (`onboarding` | `active` | `inactive`, D56),
+**Driver** — `firstName`, `middleName`, `lastName`, `phone` (E.164), `email`, the profile (D85: `street`, `apt`, `city`, `state`, `zip`, `dateOfBirth`, `hasInsurance`; the age is worked out, not stored), `status` (`onboarding` | `active` | `inactive`, D56),
 `contractSignedAt`, `depositPaidAt`, `vehicleAssignedAt` (onboarding steps, each with the admin who ticked it),
 `billingType` (`daily` | `weekly`), `billingRateCents`, `billingDueWeekday` (weekly only),
 `billingActive`, `smsOptedOut`, `archivedAt` (D80: archived drivers are hidden and not billed or reminded),
 `depositPaidCents` (D82: the deposit amount typed when the deposit step is ticked), `leftReason` (`contract_ended` |
 `bad_driver` | `cooperative_returned_car`), `leftAt` (D81: set when the driver is deactivated or sent to collections),
-`sentToCollectionsAt` (D81: a flag on an inactive driver, shown on the Collections page). A driver is created by "Start onboarding" on an approved application, not by approving (D80). New drivers start `onboarding`; `active` only when all three steps are done (CHECK);
+`sentToCollectionsAt` (D81: a flag on an inactive driver, shown on the Collections page). A driver is created by "Start onboarding" on an approved application, not by approving (D80), or directly by an admin without an application (D85). New drivers start `onboarding`; `active` only when all three steps are done (CHECK);
 an `inactive` driver cannot log in.
 
 **PaymentAlias** — links a payment identity to a driver.
@@ -233,7 +233,8 @@ An admin assigns an unmatched payment to a driver. This posts the payment and **
 - **Dashboard** — received today / this week, pending review, unrecognised count, discrepancies, overdue drivers, total outstanding.
 - **Applications** — hides archived ones (Show: Archived only lists them) and those whose driver is already active or inactive (Show: Became drivers lists them, D84); Archive / Unarchive next to Delete (D80), acting on the application and its driver together (D84).
 - **Approved applications** — approved applicants whose onboarding is not finished, with Start onboarding (D80).
-- **Drivers** — only active and inactive drivers, archived ones hidden (D80), archived and unarchived together with their application (D84); list with balance and late status; detail page with profile, billing settings, aliases (add/remove), ledger history, SMS history.
+- **Add driver** (D85) — a form for a driver with no application: name, email and phone required; profile, licence and earnings files and payment aliases optional. Starts in onboarding, no login, no text.
+- **Drivers** — only active and inactive drivers (plus the "Onboarding (added directly)" view, D85), archived ones hidden (D80), archived and unarchived together with their application (D84); list with balance and late status; detail page with profile, billing settings, aliases (add/remove), ledger history, SMS history.
 - **Collections** — drivers sent to collections (D81): how they left, when sent, balance; the admin messages them from the
   driver page and can remove them. Passing the account to an outside agency is not built.
 - **Payments** — filterable by status and source. Unrecognised bucket with assign-to-driver. Discrepancy list.

@@ -127,6 +127,7 @@ describe("Contract charges on the ledger and rent billing (Module 2 step 5, D83,
       db.getRepository(Driver),
       db.getRepository(PaymentAlias),
       db.getRepository(Payment),
+      null,
     );
     tracking = new ContractTrackingService(
       db,
