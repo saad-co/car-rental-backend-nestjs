@@ -10,6 +10,7 @@ import { LedgerPreset } from "../ledger-presets/ledger-preset.entity.js";
 import { MessageTemplate } from "../message-templates/message-template.entity.js";
 import { Driver } from "../drivers/driver.entity.js";
 import { LedgerEntry } from "../ledger/ledger-entry.entity.js";
+import { EmailIntakeStatus } from "../email-intake/email-intake-status.entity.js";
 import { InboundEmail } from "../email-intake/inbound-email.entity.js";
 import { Payment } from "../payments/payment.entity.js";
 import { SmsAttachment } from "../sms/sms-attachment.entity.js";
@@ -32,6 +33,7 @@ export default new DataSource({
     Driver,
     Application,
     InboundEmail,
+    EmailIntakeStatus,
     Payment,
     PaymentAlias,
     SmsMessage,

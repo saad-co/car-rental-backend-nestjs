@@ -9,6 +9,8 @@ import {
   type EmailIntakeDeps,
 } from "./email-intake.service.js";
 import { EmailIntakeScheduler } from "./email-intake.scheduler.js";
+import { EmailIntakeStatus } from "./email-intake-status.entity.js";
+import { EmailIntakeStatusService } from "./email-intake-status.service.js";
 import { GeminiJsonClient } from "../llm/gemini-client.js";
 import { ImapMailboxReader } from "./mailbox/imap-mailbox-reader.js";
 import { InboundEmail } from "./inbound-email.entity.js";
@@ -26,7 +28,7 @@ import { LlmPaymentExtractor } from "./extraction/llm-payment-extractor.js";
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([InboundEmail]),
+    TypeOrmModule.forFeature([InboundEmail, EmailIntakeStatus]),
     PaymentsModule,
     MatchingModule,
   ],
@@ -59,6 +61,7 @@ import { LlmPaymentExtractor } from "./extraction/llm-payment-extractor.js";
       },
     },
     EmailIntakeService,
+    EmailIntakeStatusService,
     EmailIntakeScheduler,
   ],
   exports: [EmailIntakeService],

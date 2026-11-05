@@ -2,6 +2,8 @@ import { Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 import { LlmTemporaryError } from "../llm/llm-client.js";
 import { MatchingService } from "../matching/matching.service.js";
+import { EmailIntakeOutcome } from "./email-intake-status.entity.js";
+import { EmailIntakeStatusService } from "./email-intake-status.service.js";
 import { EmailIntakeService } from "./email-intake.service.js";
 
 /** What `syncNewMessages()` says when intake is off: nothing runs, not even matching. */
@@ -20,6 +22,7 @@ export class EmailIntakeScheduler {
   constructor(
     private readonly intake: EmailIntakeService,
     private readonly matching: MatchingService,
+    private readonly status: EmailIntakeStatusService,
   ) {}
 
   /** Second 0 of every third minute. `waitForCompletion`: a tick never starts while the previous one runs. */
@@ -28,17 +31,27 @@ export class EmailIntakeScheduler {
     let switchedOff = false;
     try {
       const result = await this.intake.syncNewMessages();
-      if (result.ran && result.stored > 0) {
-        this.logger.log(`Email intake stored ${result.stored} email(s)`);
-      } else if (!result.ran) {
+      if (result.ran) {
+        if (result.stored > 0) {
+          this.logger.log(`Email intake stored ${result.stored} email(s)`);
+        }
+        await this.status.record(EmailIntakeOutcome.ok, {
+          stored: result.stored,
+        });
+      } else {
         switchedOff = result.reason === SWITCHED_OFF;
-        if (!switchedOff) {
+        if (switchedOff) {
+          await this.status.record(EmailIntakeOutcome.off);
+        } else {
+          // Another run still holds the lock: it will record its own outcome, so this tick records nothing.
           this.logger.warn(`Email intake did not run: ${result.reason}`);
         }
       }
     } catch (error) {
-      // Logged, never hidden: the run stopped and the next tick retries from the same email.
+      // Logged, never hidden: the run stopped and the next tick retries from the same email. Also recorded, so the
+      // dashboard shows the reason (spec 5.1: an unreadable mailbox is a visible failure).
       this.logError("Email intake run failed", error);
+      await this.status.record(EmailIntakeOutcome.failed, { error });
     }
     if (switchedOff) return;
 
