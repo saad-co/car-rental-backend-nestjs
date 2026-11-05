@@ -43,6 +43,8 @@ Full rules: `PHASE1_SPEC.md` sections 5–8.
 | Folder | Role |
 |---|---|
 | `src/email-intake/` | Module, 3-minute scheduler, `EmailIntakeService` (lock, cursor, one transaction per email), email log API. Subfolders: `mailbox/` (IMAP reader behind an interface), `verification/` (DKIM, sender allow-list, parser, `EmailProcessor`), `extraction/` (LLM prompt and answer validation) |
+| `src/email-intake/` (status) | `EmailIntakeStatusService.record()` writes the one-row `email_intake_status` table after every scheduler run (`ok`, `failed` with the reason, `off`); never throws (D88) |
+| `src/dashboard/` | Read-only `GET /dashboard` (D88): every dashboard figure in one response, plain SQL over payments, ledger, drivers, contracts, applications, inbound emails and texts; owns no table. Rent due today comes from `rentSchedule` (the rent job's own function). Frontend: `src/pages/Dashboard/Home.tsx`, cards in `src/components/dashboard/`, charts loaded lazily |
 | `src/llm/` | `LlmJsonClient` interface, Gemini adapter, `LlmTemporaryError` (rate limit 429 and overload 5xx; shared by intake and matching) |
 | `src/payments/` | `payments` table, admin list, manual assign, record a payment by hand (`POST /payments/manual`, duplicate warning) and void it (D64) |
 | `src/aliases/` | `payment_aliases` table, normalisation |

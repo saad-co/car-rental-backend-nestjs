@@ -3230,6 +3230,28 @@
           "Payments"
         ]
       }
+    },
+    "/dashboard": {
+      "get": {
+        "operationId": "DashboardController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`GET /dashboard`: every number on the dashboard in one response (money in cents, Chicago days). `401` no token.",
+        "tags": [
+          "Dashboard"
+        ]
+      }
     }
   },
   "info": {
@@ -6994,6 +7016,589 @@
           "payment",
           "aliasSaved",
           "aliasOwnedBy"
+        ]
+      },
+      "DashboardPaymentsDto": {
+        "type": "object",
+        "properties": {
+          "processedCents": {
+            "type": "number",
+            "description": "Everything that came in: confirmed payments plus the unmatched queue (rejected ones left out), in cents."
+          },
+          "processedCount": {
+            "type": "number",
+            "description": "How many payments that is."
+          },
+          "grossCents": {
+            "type": "number",
+            "description": "Sum of the confirmed (matched) payments, in cents."
+          },
+          "grossCount": {
+            "type": "number",
+            "description": "How many confirmed payments."
+          },
+          "matchedPercent": {
+            "type": "number",
+            "description": "Confirmed payments as a share of (confirmed + unmatched), 0-100. Rejected payments are left out."
+          },
+          "queueCents": {
+            "type": "number",
+            "description": "Sum of the unmatched payments (the queue), in cents."
+          },
+          "queueCount": {
+            "type": "number",
+            "description": "How many unmatched payments."
+          },
+          "needsReviewCount": {
+            "type": "number",
+            "description": "Of the unmatched ones, how many the matcher has already tried and a person must assign."
+          },
+          "todayCents": {
+            "type": "number",
+            "description": "Confirmed payments on today's Chicago day, in cents."
+          },
+          "last7DaysCents": {
+            "type": "number",
+            "description": "Today and the 6 days before it (Chicago days), in cents."
+          },
+          "last30DaysCents": {
+            "type": "number",
+            "description": "Today and the 29 days before it (Chicago days), in cents."
+          },
+          "thisWeekCents": {
+            "type": "number",
+            "description": "Monday to today (Chicago), in cents."
+          },
+          "thisWeekCount": {
+            "type": "number",
+            "description": "How many confirmed payments came in this week."
+          },
+          "averageCents": {
+            "type": "number",
+            "description": "Average confirmed payment, in cents (rounded). 0 when there is none."
+          },
+          "largestCents": {
+            "type": "number",
+            "description": "The largest confirmed payment, in cents."
+          }
+        },
+        "required": [
+          "processedCents",
+          "processedCount",
+          "grossCents",
+          "grossCount",
+          "matchedPercent",
+          "queueCents",
+          "queueCount",
+          "needsReviewCount",
+          "todayCents",
+          "last7DaysCents",
+          "last30DaysCents",
+          "thisWeekCents",
+          "thisWeekCount",
+          "averageCents",
+          "largestCents"
+        ]
+      },
+      "DashboardTrendDayDto": {
+        "type": "object",
+        "properties": {
+          "day": {
+            "type": "string",
+            "description": "Chicago day, `YYYY-MM-DD`."
+          },
+          "amountCents": {
+            "type": "number",
+            "description": "Confirmed payments on that day, in cents. 0 for a quiet day."
+          }
+        },
+        "required": [
+          "day",
+          "amountCents"
+        ]
+      },
+      "DashboardSourceDto": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PaymentSource"
+              }
+            ]
+          },
+          "amountCents": {
+            "type": "number",
+            "description": "Confirmed money from this source, in cents."
+          },
+          "count": {
+            "type": "number",
+            "description": "Confirmed payments from this source."
+          },
+          "unmatchedCount": {
+            "type": "number",
+            "description": "Unmatched payments from this source."
+          },
+          "sharePercent": {
+            "type": "number",
+            "description": "This source's share of all confirmed money, 0-100 (rounded, so the shares may not add up to exactly 100)."
+          }
+        },
+        "required": [
+          "source",
+          "amountCents",
+          "count",
+          "unmatchedCount",
+          "sharePercent"
+        ]
+      },
+      "DashboardDriversDto": {
+        "type": "object",
+        "properties": {
+          "active": {
+            "type": "number",
+            "description": "Active, not archived drivers."
+          },
+          "daily": {
+            "type": "number",
+            "description": "Of them, on a daily contract."
+          },
+          "weekly": {
+            "type": "number",
+            "description": "Of them, on a weekly contract."
+          },
+          "withoutContract": {
+            "type": "number",
+            "description": "Of them, with no signed contract in force yet (nothing to bill)."
+          },
+          "dailyPercent": {
+            "type": "number",
+            "description": "`daily` as a share of daily + weekly, 0-100."
+          },
+          "weeklyPercent": {
+            "type": "number",
+            "description": "`weekly` as a share of daily + weekly, 0-100."
+          }
+        },
+        "required": [
+          "active",
+          "daily",
+          "weekly",
+          "withoutContract",
+          "dailyPercent",
+          "weeklyPercent"
+        ]
+      },
+      "DashboardWeekday": {
+        "type": "string",
+        "enum": [
+          "monday",
+          "tuesday",
+          "wednesday",
+          "thursday",
+          "friday",
+          "saturday",
+          "sunday"
+        ]
+      },
+      "DashboardWeekdayDto": {
+        "type": "object",
+        "properties": {
+          "weekday": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DashboardWeekday"
+              }
+            ]
+          },
+          "drivers": {
+            "type": "number",
+            "description": "Active drivers on a weekly contract due that day."
+          },
+          "expectedCents": {
+            "type": "number",
+            "description": "Their weekly rent added up, in cents."
+          }
+        },
+        "required": [
+          "weekday",
+          "drivers",
+          "expectedCents"
+        ]
+      },
+      "DashboardBillingDto": {
+        "type": "object",
+        "properties": {
+          "dueTodayCents": {
+            "type": "number",
+            "description": "Rent that falls due today, in cents: exactly what the hourly rent job posts for today (daily + weekly)."
+          },
+          "dailyDueCents": {
+            "type": "number",
+            "description": "Of it, from daily contracts, in cents."
+          },
+          "weeklyDueCents": {
+            "type": "number",
+            "description": "Of it, from weekly contracts, in cents."
+          },
+          "dailyDueDrivers": {
+            "type": "number",
+            "description": "Drivers with daily rent due today."
+          },
+          "weeklyDueDrivers": {
+            "type": "number",
+            "description": "Drivers with weekly rent due today."
+          },
+          "inactiveOwedCents": {
+            "type": "number",
+            "description": "What inactive drivers (not in collections) still owe, in cents."
+          },
+          "collectionsOwedCents": {
+            "type": "number",
+            "description": "What drivers sent to collections still owe, in cents."
+          },
+          "weeklyByDay": {
+            "description": "The seven weekdays, Monday first.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DashboardWeekdayDto"
+            }
+          }
+        },
+        "required": [
+          "dueTodayCents",
+          "dailyDueCents",
+          "weeklyDueCents",
+          "dailyDueDrivers",
+          "weeklyDueDrivers",
+          "inactiveOwedCents",
+          "collectionsOwedCents",
+          "weeklyByDay"
+        ]
+      },
+      "DashboardWatchlistDriverDto": {
+        "type": "object",
+        "properties": {
+          "driverId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "description": "First and last name."
+          },
+          "balanceCents": {
+            "type": "number",
+            "description": "Negative: the driver owes this much, in cents."
+          }
+        },
+        "required": [
+          "driverId",
+          "name",
+          "balanceCents"
+        ]
+      },
+      "DashboardBalancesDto": {
+        "type": "object",
+        "properties": {
+          "driverCount": {
+            "type": "number",
+            "description": "How many drivers are counted."
+          },
+          "fleetBalanceCents": {
+            "type": "number",
+            "description": "All their balances added up (credits minus debits), in cents. Negative: the fleet owes more than it holds."
+          },
+          "positiveCount": {
+            "type": "number",
+            "description": "Drivers with a credit balance."
+          },
+          "zeroCount": {
+            "type": "number",
+            "description": "Drivers at exactly zero."
+          },
+          "negativeCount": {
+            "type": "number",
+            "description": "Drivers who owe money."
+          },
+          "creditCents": {
+            "type": "number",
+            "description": "The credits of the drivers in credit, added up, in cents."
+          },
+          "outstandingCents": {
+            "type": "number",
+            "description": "What the drivers who owe money owe, added up, in cents (a positive number): the total outstanding."
+          },
+          "watchlist": {
+            "description": "The 8 drivers who owe the most, most first.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DashboardWatchlistDriverDto"
+            }
+          }
+        },
+        "required": [
+          "driverCount",
+          "fleetBalanceCents",
+          "positiveCount",
+          "zeroCount",
+          "negativeCount",
+          "creditCents",
+          "outstandingCents",
+          "watchlist"
+        ]
+      },
+      "DashboardApplicationsDto": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "number"
+          },
+          "pending": {
+            "type": "number"
+          },
+          "approved": {
+            "type": "number"
+          },
+          "rejected": {
+            "type": "number"
+          },
+          "onHold": {
+            "type": "number"
+          },
+          "approvalPercent": {
+            "type": "number",
+            "description": "Approved as a share of approved + rejected + on hold, 0-100. 0 when none was reviewed."
+          },
+          "onboardingDrivers": {
+            "type": "number",
+            "description": "Drivers whose onboarding is not finished (not archived)."
+          }
+        },
+        "required": [
+          "total",
+          "pending",
+          "approved",
+          "rejected",
+          "onHold",
+          "approvalPercent",
+          "onboardingDrivers"
+        ]
+      },
+      "EmailIntakeOutcome": {
+        "type": "string",
+        "enum": [
+          "ok",
+          "failed",
+          "off"
+        ]
+      },
+      "DashboardIntakeRunDto": {
+        "type": "object",
+        "properties": {
+          "outcome": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EmailIntakeOutcome"
+              }
+            ]
+          },
+          "at": {
+            "format": "date-time",
+            "type": "string",
+            "description": "When the latest run ended."
+          },
+          "stored": {
+            "type": "number",
+            "description": "Emails the latest run stored."
+          },
+          "lastSuccessAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "When a run last worked; kept through later failures. Null: never."
+          },
+          "error": {
+            "type": "string",
+            "nullable": true,
+            "description": "Why the latest run failed. Set only when `outcome` is `failed`."
+          }
+        },
+        "required": [
+          "outcome",
+          "at",
+          "stored",
+          "lastSuccessAt",
+          "error"
+        ]
+      },
+      "DashboardMailCountsDto": {
+        "type": "object",
+        "properties": {
+          "processed": {
+            "type": "number"
+          },
+          "notPayment": {
+            "type": "number"
+          },
+          "rejectedUnverified": {
+            "type": "number"
+          },
+          "extractionFailed": {
+            "type": "number"
+          },
+          "duplicatePayment": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "processed",
+          "notPayment",
+          "rejectedUnverified",
+          "extractionFailed",
+          "duplicatePayment"
+        ]
+      },
+      "DashboardIntakeDto": {
+        "type": "object",
+        "properties": {
+          "lastRun": {
+            "nullable": true,
+            "description": "The latest run, or null when none has been recorded yet (a new database, or intake never started).",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DashboardIntakeRunDto"
+              }
+            ]
+          },
+          "last24Hours": {
+            "description": "Mails stored in the last 24 hours, by outcome.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DashboardMailCountsDto"
+              }
+            ]
+          },
+          "last7Days": {
+            "description": "Mails stored in the last 7 days, by outcome.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DashboardMailCountsDto"
+              }
+            ]
+          },
+          "lastEmailAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "When the newest stored mail arrived, or null when there is none."
+          },
+          "awaitingMatchCount": {
+            "type": "number",
+            "description": "Payments the matcher has not looked at yet."
+          }
+        },
+        "required": [
+          "lastRun",
+          "last24Hours",
+          "last7Days",
+          "lastEmailAt",
+          "awaitingMatchCount"
+        ]
+      },
+      "SmsServiceMode": {
+        "type": "string",
+        "enum": [
+          "off",
+          "dry_run",
+          "live"
+        ]
+      },
+      "DashboardSmsDto": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SmsServiceMode"
+              }
+            ]
+          },
+          "quoConfigured": {
+            "type": "boolean",
+            "description": "Whether a Quo key and number are set."
+          },
+          "failedLast7Days": {
+            "type": "number",
+            "description": "Texts sent in the last 7 days that failed or were not delivered."
+          }
+        },
+        "required": [
+          "mode",
+          "quoConfigured",
+          "failedLast7Days"
+        ]
+      },
+      "DashboardDto": {
+        "type": "object",
+        "properties": {
+          "asOf": {
+            "format": "date-time",
+            "type": "string",
+            "description": "When this was worked out."
+          },
+          "today": {
+            "type": "string",
+            "description": "Today's Chicago day, `YYYY-MM-DD`."
+          },
+          "payments": {
+            "$ref": "#/components/schemas/DashboardPaymentsDto"
+          },
+          "trend": {
+            "description": "The last 21 Chicago days, oldest first, quiet days included.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DashboardTrendDayDto"
+            }
+          },
+          "sources": {
+            "description": "Sources with confirmed money or unmatched payments, biggest first.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DashboardSourceDto"
+            }
+          },
+          "drivers": {
+            "$ref": "#/components/schemas/DashboardDriversDto"
+          },
+          "billing": {
+            "$ref": "#/components/schemas/DashboardBillingDto"
+          },
+          "balances": {
+            "$ref": "#/components/schemas/DashboardBalancesDto"
+          },
+          "applications": {
+            "$ref": "#/components/schemas/DashboardApplicationsDto"
+          },
+          "intake": {
+            "$ref": "#/components/schemas/DashboardIntakeDto"
+          },
+          "sms": {
+            "$ref": "#/components/schemas/DashboardSmsDto"
+          }
+        },
+        "required": [
+          "asOf",
+          "today",
+          "payments",
+          "trend",
+          "sources",
+          "drivers",
+          "billing",
+          "balances",
+          "applications",
+          "intake",
+          "sms"
         ]
       }
     }

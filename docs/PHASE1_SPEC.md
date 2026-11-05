@@ -99,6 +99,10 @@ Unique on `(type, valueNormalized)`. **Lookups always filter by type.**
 (permanent Gmail id, unique per mailbox, D47), `bodyText` (only for allow-listed payment senders). Rows are never
 updated (D37). The link to the payment lives on the payment (`Payment.externalId` = the email row id), not here (D47).
 
+**EmailIntakeStatus** (D88) — how the mailbox reading is doing, one row only (`id` = 1, enforced by a CHECK), overwritten by every
+run: `lastRunAt`, `lastOutcome` (`ok` | `failed` | `off`), `lastStored`, `lastSuccessAt`, `lastError` (set only when `failed`).
+Shown on the dashboard, so an unreadable mailbox is a visible failure (section 5.1).
+
 **Payment** — a money event from any source.
 `source` (`email_cashapp` | `email_venmo` | `email_zelle` | `email_stripe` | `email_chime` | `plaid_zelle` | `manual`),
 `externalId` (the InboundEmail id or Plaid transaction id), unique on `(source, externalId)`.
@@ -230,7 +234,14 @@ An admin assigns an unmatched payment to a driver. This posts the payment and **
 ## 10. Admin UI
 
 - **Login.**
-- **Dashboard** — received today / this week, pending review, unrecognised count, discrepancies, overdue drivers, total outstanding.
+- **Dashboard** (D88; one card per card of the client's existing dashboard, worked out on the server by `GET /dashboard`) —
+  headline tiles (gross processed, matched value, queue value, fleet balance); collected today / 7 days / 30 days / this week,
+  average and largest payment; drivers active (daily / weekly), weekly due today, billing due today, applications pending;
+  revenue trend (21 days); payment source split; billing load (rent due today, owed by inactive drivers, in collections);
+  weekly due-day distribution; application funnel; driver balance distribution (with the total outstanding); the pending
+  applications, unmatched payments and balance watchlist lists; email intake (latest run, its error, mails by outcome);
+  system status (database, mailbox, texting). Discrepancies and days late are not shown until the bank check (M5) and
+  reminders (M6) exist.
 - **Applications** — hides archived ones (Show: Archived only lists them) and those whose driver is already active or inactive (Show: Became drivers lists them, D84); Archive / Unarchive next to Delete (D80), acting on the application and its driver together (D84).
 - **Approved applications** — approved applicants whose onboarding is not finished, with Start onboarding (D80).
 - **Add driver** (D85) — a form for a driver with no application: name, email and phone required; profile, licence and earnings files and payment aliases optional. Starts in onboarding, no login, no text.
