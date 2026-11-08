@@ -18,6 +18,7 @@ import {
   DriversService,
   type NewDriverFiles,
 } from "../src/drivers/drivers.service.js";
+import { AddContractDocumentKind1794086000000 } from "../src/database/migrations/1794086000000-AddContractDocumentKind.js";
 import { CreateDriverDto } from "../src/drivers/dto/create-driver.dto.js";
 import { UpdateDriverProfileDto } from "../src/drivers/dto/driver-profile.dto.js";
 import { ListDriversQueryDto } from "../src/drivers/dto/list-drivers-query.dto.js";
@@ -644,6 +645,192 @@ describe("an admin adds a driver directly (D85, test database)", () => {
           "00000000-0000-0000-0000-000000000000",
         ),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    describe("the signed contract (D90)", () => {
+      /** A driver that came from an application that already holds a licence file. */
+      async function driverWithApplication() {
+        const [{ id: driverId }] = (await db.query(
+          `INSERT INTO drivers (first_name, last_name, email, phone) VALUES ('Sam', 'Applied', 'sam@test.dev', '+13125550102') RETURNING id`,
+        )) as [{ id: string }];
+        const [{ id: applicationId }] = (await db.query(
+          `INSERT INTO applications (request_id, first_name, last_name, email, phone, payload, status, driver_id)
+           VALUES (gen_random_uuid(), 'Sam', 'Applied', 'sam@test.dev', '3125550102', '{}', 'approved', $1) RETURNING id`,
+          [driverId],
+        )) as [{ id: string }];
+        storage.files.set("applications/old/license.png", {
+          body: PNG,
+          contentType: "image/png",
+        });
+        await db.query(
+          `INSERT INTO application_documents (application_id, kind, origin, status, storage_key, size_bytes)
+           VALUES ($1, 'license', 'admin', 'stored', 'applications/old/license.png', $2)`,
+          [applicationId, PNG.length],
+        );
+        return { driverId, applicationId };
+      }
+
+      it("is kept on a direct driver and listed with a link", async () => {
+        const driver = await create();
+        const documents = documentsService();
+
+        const slot = await documents.uploadForDriver(
+          driver.id,
+          ApplicationDocumentKind.contract,
+          upload(PDF, "contract.pdf"),
+          adminId,
+        );
+
+        expect(slot).toMatchObject({
+          kind: "contract",
+          contentType: "application/pdf",
+          origin: "admin",
+        });
+        const rows = await documentRows(driver.id);
+        expect(rows).toMatchObject([
+          { kind: "contract", application_id: null, status: "stored" },
+        ]);
+        expect(rows[0].storage_key).toMatch(
+          /^drivers\/[0-9a-f-]+\/contract-[0-9a-f-]+\.pdf$/,
+        );
+        expect(storage.files.has(rows[0].storage_key)).toBe(true);
+        const listed = await documents.listForDriver(driver.id);
+        expect(listed.items.map((d) => d.kind)).toEqual(["contract"]);
+        expect(listed.items[0].url).toMatch(
+          /^https:\/\/bucket\.test\/drivers\//,
+        );
+      });
+
+      it("belongs to the driver, not the application, and is listed after the application's files", async () => {
+        const { driverId, applicationId } = await driverWithApplication();
+        const documents = documentsService();
+
+        await documents.uploadForDriver(
+          driverId,
+          ApplicationDocumentKind.contract,
+          upload(PDF),
+          adminId,
+        );
+
+        const contractRows = (await db.query(
+          `SELECT application_id, driver_id FROM application_documents WHERE kind = 'contract'`,
+        )) as { application_id: string | null; driver_id: string | null }[];
+        expect(contractRows).toEqual([
+          { application_id: null, driver_id: driverId },
+        ]);
+        expect(
+          (await documents.listForDriver(driverId)).items.map((d) => d.kind),
+        ).toEqual(["license", "contract"]);
+        // The application's own page still shows only its application files.
+        expect(
+          (await documents.list(applicationId)).items.map((d) => d.kind),
+        ).toEqual(["license"]);
+      });
+
+      it("survives deleting the application, which takes the application's own files with it", async () => {
+        const { driverId, applicationId } = await driverWithApplication();
+        await documentsService().uploadForDriver(
+          driverId,
+          ApplicationDocumentKind.contract,
+          upload(PDF),
+          adminId,
+        );
+
+        await db.query(`DELETE FROM applications WHERE id = $1`, [
+          applicationId,
+        ]);
+
+        const kinds = (await db.query(
+          `SELECT kind FROM application_documents ORDER BY kind`,
+        )) as { kind: string }[];
+        expect(kinds).toEqual([{ kind: "contract" }]);
+      });
+
+      it("replaces in place: one row, the old object removed", async () => {
+        const driver = await create();
+        const documents = documentsService();
+        await documents.uploadForDriver(
+          driver.id,
+          ApplicationDocumentKind.contract,
+          upload(PDF, "first.pdf"),
+          adminId,
+        );
+        const oldKey = (await documentRows(driver.id))[0].storage_key;
+
+        await documents.uploadForDriver(
+          driver.id,
+          ApplicationDocumentKind.contract,
+          upload(Buffer.from("%PDF-1.4 second"), "second.pdf"),
+          adminId,
+        );
+
+        const rows = await documentRows(driver.id);
+        expect(rows).toHaveLength(1);
+        expect(rows[0].storage_key).not.toBe(oldKey);
+        expect(storage.files.has(oldKey)).toBe(false);
+        expect(storage.files.has(rows[0].storage_key)).toBe(true);
+      });
+
+      it("cannot be put on an application: 400, nothing stored", async () => {
+        const { applicationId } = await driverWithApplication();
+        const before = storage.files.size;
+
+        await expect(
+          documentsService().upload(
+            applicationId,
+            ApplicationDocumentKind.contract,
+            upload(PDF),
+            adminId,
+          ),
+        ).rejects.toThrow(BadRequestException);
+
+        expect(storage.files.size).toBe(before);
+        expect(await count("application_documents")).toBe(1);
+      });
+
+      it("refuses a file that is not a picture or PDF, and an unknown driver", async () => {
+        const driver = await create();
+        const documents = documentsService();
+
+        await expect(
+          documents.uploadForDriver(
+            driver.id,
+            ApplicationDocumentKind.contract,
+            upload(Buffer.from("just text"), "contract.txt"),
+            adminId,
+          ),
+        ).rejects.toThrow(BadRequestException);
+        await expect(
+          documents.uploadForDriver(
+            "00000000-0000-0000-0000-000000000000",
+            ApplicationDocumentKind.contract,
+            upload(PDF),
+            adminId,
+          ),
+        ).rejects.toThrow(NotFoundException);
+
+        expect(storage.files.size).toBe(0);
+        expect(await count("application_documents")).toBe(0);
+      });
+
+      it("the migration refuses to be reverted while a contract is stored (it never deletes one)", async () => {
+        const driver = await create();
+        await documentsService().uploadForDriver(
+          driver.id,
+          ApplicationDocumentKind.contract,
+          upload(PDF),
+          adminId,
+        );
+        const runner = db.createQueryRunner();
+        try {
+          await expect(
+            new AddContractDocumentKind1794086000000().down(runner),
+          ).rejects.toThrow(/1 signed contract file/);
+        } finally {
+          await runner.release();
+        }
+        expect(await count("application_documents")).toBe(1);
+      });
     });
 
     it("the database allows a file only one owner", async () => {

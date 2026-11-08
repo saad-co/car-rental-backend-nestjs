@@ -979,7 +979,7 @@
             }
           }
         },
-        "summary": "`PUT /drivers/:id/documents/:kind`: puts one file (multipart field `file`) in the licence, rating or earnings slot,\nreplacing what is there. JPG, PNG or PDF, at most 10 MB; `400` otherwise. Returns the slot.",
+        "summary": "`PUT /drivers/:id/documents/:kind`: puts one file (multipart field `file`) in the licence, rating, earnings or\ncontract slot, replacing what is there. The contract (D90) is always kept on the driver itself. JPG, PNG or PDF,\nat most 10 MB; `400` otherwise. Returns the slot.",
         "tags": [
           "DriverDocuments"
         ]
@@ -3907,7 +3907,8 @@
             "enum": [
               "license",
               "rating",
-              "earnings"
+              "earnings",
+              "contract"
             ],
             "type": "string"
           },
@@ -3924,7 +3925,8 @@
             "description": "`website`: copied from the website's storage; `admin`: uploaded by an admin (D68).",
             "enum": [
               "website",
-              "admin"
+              "admin",
+              "firma"
             ],
             "type": "string"
           },

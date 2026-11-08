@@ -11,6 +11,8 @@ import { FIRMA_CLIENT, type FirmaClient } from "../firma/firma-client.js";
 import { FirmaHttpClient } from "../firma/firma-http-client.js";
 import { ContractCompany } from "./contract-company.entity.js";
 import { Contract } from "./contract.entity.js";
+import { ContractFilingJob } from "./contract-filing.job.js";
+import { ContractFilingService } from "./contract-filing.service.js";
 import { ContractRentJob } from "./contract-rent.job.js";
 import { ContractTrackingJob } from "./contract-tracking.job.js";
 import { ContractTrackingService } from "./contract-tracking.service.js";
@@ -47,6 +49,9 @@ import { LICENCE_LLM, LicenceReaderService } from "./licence-reader.service.js";
     ContractsService,
     ContractTrackingService,
     ContractTrackingJob,
+    // Copies each signed PDF into the driver's contract slot on the Documents card (D90, step 2).
+    ContractFilingService,
+    ContractFilingJob,
     ContractRentJob,
     LicenceReaderService,
     // Reads the driver details from the licence (B121, D86); null without the AI settings, as for matching.

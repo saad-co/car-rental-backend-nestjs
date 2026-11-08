@@ -26,11 +26,17 @@ export function checkUpload(
   return type;
 }
 
-/** The three document slots, in the order they are shown. */
+/** The three application-form document slots, in the order they are shown. */
 export const DOCUMENT_KINDS = [
   ApplicationDocumentKind.license,
   ApplicationDocumentKind.rating,
   ApplicationDocumentKind.earnings,
+] as const;
+
+/** Every slot a driver's page can show, in display order: the three above, then the signed contract (D90). */
+export const DRIVER_DOCUMENT_KINDS = [
+  ...DOCUMENT_KINDS,
+  ApplicationDocumentKind.contract,
 ] as const;
 
 /** How a slot is named in messages. */
@@ -38,6 +44,7 @@ export const DOCUMENT_LABEL: Record<ApplicationDocumentKind, string> = {
   [ApplicationDocumentKind.license]: "Driver's licence",
   [ApplicationDocumentKind.rating]: "Rating screenshot",
   [ApplicationDocumentKind.earnings]: "Proof of earnings",
+  [ApplicationDocumentKind.contract]: "Signed contract",
 };
 
 /** Where a document lives in our bucket: the same pattern the website copies use (D54). `id` makes every file's key new. */

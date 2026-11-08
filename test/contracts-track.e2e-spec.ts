@@ -537,7 +537,7 @@ describe("Track and file a signed contract (Module 2 step 4, D75, test database)
         ],
       ] as const;
       for (const [expected, state, type] of cases) {
-        await db.query("TRUNCATE contracts CASCADE");
+        await db.query("DELETE FROM contracts");
         const { id, firmaId } = await sentContract();
         firma.set(firmaId, state);
         await deliver(event(type, firmaId));

@@ -9,6 +9,7 @@ import {
   Unique,
   UpdateDateColumn,
 } from "typeorm";
+import { Contract } from "../../contracts/contract.entity.js";
 import { Driver } from "../../drivers/driver.entity.js";
 import { User } from "../../users/user.entity.js";
 import { Application } from "../application.entity.js";
@@ -19,13 +20,20 @@ export enum ApplicationDocumentOrigin {
   website = "website",
   /** Uploaded by an admin (D68): while adding an application by hand, or later from the Documents tab. */
   admin = "admin",
+  /** A copy of the signed PDF of a firma contract, filed in the driver's contract slot (D90, step 2). */
+  firma = "firma",
 }
 
-/** Which of the three uploads on the application form a document is. */
+/**
+ * Which file a document is: the three uploads on the application form, or a driver's signed contract (D90).
+ * A contract always belongs to the DRIVER, never to an application: deleting an application deletes its files (CASCADE),
+ * which must never take a signed contract with it.
+ */
 export enum ApplicationDocumentKind {
   license = "license",
   rating = "rating",
   earnings = "earnings",
+  contract = "contract",
 }
 
 /** Where a document is in being copied from the website's storage into ours. */
@@ -53,19 +61,27 @@ export enum ApplicationDocumentStatus {
 @Entity("application_documents")
 @Unique("application_documents_application_kind_key", ["applicationId", "kind"])
 @Unique("application_documents_driver_kind_key", ["driverId", "kind"])
-// One owner: an application, or a driver (and then an admin upload; the website never sends files for a driver).
+// A contract is filed at most once: one firma contract, one copy (D90).
+@Unique("application_documents_contract_key", ["contractId"])
+// One owner: an application, or a driver (and then an admin upload or a firma copy; the website never sends files for a
+// driver). Written as "not the website" so the check never names a value added in the same migration (D90).
 @Check(
   "application_documents_one_owner",
-  `("application_id" IS NULL) <> ("driver_id" IS NULL) AND ("driver_id" IS NULL OR "origin" = 'admin')`,
+  `("application_id" IS NULL) <> ("driver_id" IS NULL) AND ("driver_id" IS NULL OR "origin" <> 'website')`,
 )
 @Check(
   "application_documents_stored_has_file",
   `"status" <> 'stored' OR ("storage_key" IS NOT NULL AND "size_bytes" IS NOT NULL)`,
 )
-// A website copy always has its website path; an admin upload is always already stored (D68).
+// A website copy always has its website path; an admin upload or a firma copy is always already stored (D68, D90).
 @Check(
   "application_documents_origin_shape",
-  `("origin" = 'website' AND "source_path" IS NOT NULL) OR ("origin" = 'admin' AND "status" = 'stored')`,
+  `("origin" = 'website' AND "source_path" IS NOT NULL) OR ("origin" <> 'website' AND "status" = 'stored')`,
+)
+// Only a driver-owned row can come from a contract.
+@Check(
+  "application_documents_contract_link",
+  `"contract_id" IS NULL OR "driver_id" IS NOT NULL`,
 )
 @Check(
   "application_documents_failed_has_error",
@@ -111,6 +127,17 @@ export class ApplicationDocument {
   /** Path in the website's bucket, like `2026-10-07/<uuid>.png`. Null for an admin upload (it has no website path). */
   @Column({ name: "source_path", type: "text", nullable: true })
   sourcePath: string | null;
+
+  /**
+   * The firma contract this file is a copy of (origin `firma` only; D90 step 2). `SET NULL`: the copy is its own file in
+   * the bucket and outlives the link.
+   */
+  @Column({ name: "contract_id", type: "uuid", nullable: true })
+  contractId: string | null;
+
+  @ManyToOne(() => Contract, { nullable: true, onDelete: "SET NULL" })
+  @JoinColumn({ name: "contract_id" })
+  contract?: Contract | null;
 
   /** The admin who uploaded it (admin uploads only). */
   @Column({ name: "uploaded_by_id", type: "uuid", nullable: true })

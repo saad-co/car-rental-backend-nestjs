@@ -42,8 +42,9 @@ export class DriverDocumentsController {
   }
 
   /**
-   * `PUT /drivers/:id/documents/:kind`: puts one file (multipart field `file`) in the licence, rating or earnings slot,
-   * replacing what is there. JPG, PNG or PDF, at most 10 MB; `400` otherwise. Returns the slot.
+   * `PUT /drivers/:id/documents/:kind`: puts one file (multipart field `file`) in the licence, rating, earnings or
+   * contract slot, replacing what is there. The contract (D90) is always kept on the driver itself. JPG, PNG or PDF,
+   * at most 10 MB; `400` otherwise. Returns the slot.
    */
   @Put(":id/documents/:kind")
   @UseFilters(UploadTooLargeFilter)
