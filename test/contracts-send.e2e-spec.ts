@@ -391,7 +391,7 @@ describe("Send a contract for signing (Module 2 step 3, D74, test database)", ()
         expect((await row(id)).status).toBe("draft");
       } finally {
         // The company list is fixed by a migration: leave it as found (the next test reads it).
-        await db.query("TRUNCATE contracts CASCADE");
+        await db.query("DELETE FROM contracts");
         await db.query("DELETE FROM contract_companies WHERE id = $1", [
           tennesseeId,
         ]);

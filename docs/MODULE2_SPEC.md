@@ -70,6 +70,8 @@ as a requirement; *our suggestion* = ours, to be shown to the client. "Sample co
 | Send for signing from the contract page (step 3, built) | Scope PDF, Module 2 ("sends it for signature"); signing provider chosen by the client (D70); Saad's "applet" message | client-confirmed |
 | The company's signature is its entity name, printed before the driver signs (step 3, built) | Client message via Saad, 2026-10-21 (D72) | client-confirmed |
 | Track the status and file the signed PDF; "Contract signed" ticked automatically (step 4, built, see "Step 4" below) | Scope PDF, Module 2 (status at each stage, signed PDF and audit trail stored, driver activated); D56 | from a document |
+| A signed contract file on every driver, uploaded from the driver's Documents card: one PDF (or picture) per driver, viewable and replaceable, no effect on rent, deposit or ledger (D90 step 1, built) | The client sent signed rental agreements for 7 drivers (2026-11-07) that were not made through our app; Abulkalam chose this over building the paper contract (B109 step 2) | client-confirmed (the client supplied the files); the one-slot design is ours |
+| The signed PDF of a firma contract is copied into the same slot, never over an admin's upload; a newer signing replaces an older copy (D90 step 2, built) | Abulkalam, 2026-11-08: one place per driver for the signed contract, firma-generated or not | our suggestion, agreed by Abulkalam |
 
 ### Step 1 fields (rate calculator, D71)
 | Field | Source | Status |

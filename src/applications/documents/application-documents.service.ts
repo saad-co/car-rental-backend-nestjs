@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Inject,
   Injectable,
   Logger,
@@ -26,8 +27,8 @@ import type {
   ApplicationDocumentListDto,
 } from "./dto/application-document.dto.js";
 import {
-  DOCUMENT_KINDS,
   DOCUMENT_LABEL,
+  DRIVER_DOCUMENT_KINDS,
   checkUpload,
   documentStorageKey,
   driverDocumentStorageKey,
@@ -63,21 +64,39 @@ export class ApplicationDocumentsService {
 
   /**
    * The documents of one driver (D85): those of the application it came from, or its own when it was added directly
-   * (a driver has one or the other). Same shape as an application's list.
+   * (a driver has one or the other), plus the driver's signed contract, which is always the driver's own (D90). Same
+   * shape as an application's list.
    * @throws NotFoundException unknown driver.
    */
   async listForDriver(driverId: string): Promise<ApplicationDocumentListDto> {
     const owner = await this.ownerOfDriver(driverId);
-    return this.listRows(owner);
+    return this.listRows(owner, driverId);
   }
 
-  private async listRows(owner: Owner): Promise<ApplicationDocumentListDto> {
-    const rows = await this.dataSource.getRepository(ApplicationDocument).find({
+  /**
+   * @param contractOf the driver whose own contract row is added to an application's rows; not needed when `owner` is
+   *   already that driver (its rows include the contract).
+   */
+  private async listRows(
+    owner: Owner,
+    contractOf?: string,
+  ): Promise<ApplicationDocumentListDto> {
+    const repository = this.dataSource.getRepository(ApplicationDocument);
+    const rows = await repository.find({
       where: owner,
       relations: { uploadedBy: true },
     });
+    if (contractOf !== undefined && "applicationId" in owner) {
+      const contract = await repository.findOne({
+        where: { driverId: contractOf, kind: ApplicationDocumentKind.contract },
+        relations: { uploadedBy: true },
+      });
+      if (contract) rows.push(contract);
+    }
     rows.sort(
-      (a, b) => DOCUMENT_KINDS.indexOf(a.kind) - DOCUMENT_KINDS.indexOf(b.kind),
+      (a, b) =>
+        DRIVER_DOCUMENT_KINDS.indexOf(a.kind) -
+        DRIVER_DOCUMENT_KINDS.indexOf(b.kind),
     );
     return {
       items: await Promise.all(rows.map((row) => this.toDto(row))),
@@ -103,13 +122,20 @@ export class ApplicationDocumentsService {
     file: Express.Multer.File,
     adminId: string,
   ): Promise<ApplicationDocumentDto> {
+    if (kind === ApplicationDocumentKind.contract) {
+      // Application rows are deleted with the application (CASCADE); a signed contract must outlive it (D90).
+      throw new BadRequestException(
+        "A signed contract belongs to a driver, not an application. Upload it on the driver's page.",
+      );
+    }
     await this.requireApplication(applicationId);
     return this.store({ applicationId }, kind, file, adminId);
   }
 
   /**
    * Puts `file` in the `kind` slot of a driver (D85). A driver that came from an application uses that application's slot,
-   * so the two pages always show the same file; one added directly has its own rows.
+   * so the two pages always show the same file; one added directly has its own rows. The signed contract (D90) is the
+   * exception: it is always the driver's own row, whether or not the driver has an application.
    * @throws NotFoundException unknown driver.
    * @throws BadRequestException / ServiceUnavailableException as `upload`.
    */
@@ -119,7 +145,11 @@ export class ApplicationDocumentsService {
     file: Express.Multer.File,
     adminId: string,
   ): Promise<ApplicationDocumentDto> {
-    return this.store(await this.ownerOfDriver(driverId), kind, file, adminId);
+    const owner: Owner =
+      kind === ApplicationDocumentKind.contract
+        ? await this.driverOwnRows(driverId)
+        : await this.ownerOfDriver(driverId);
+    return this.store(owner, kind, file, adminId);
   }
 
   /** The shared body of both uploads: the slot of `owner` gets the new file. */
@@ -166,6 +196,8 @@ export class ApplicationDocumentsService {
           });
           const values = {
             origin: ApplicationDocumentOrigin.admin,
+            // An upload over a firma copy makes the slot the admin's (D90); the contract page keeps its own file.
+            contractId: null,
             sourcePath: null,
             status: ApplicationDocumentStatus.stored,
             storageKey: key,
@@ -212,15 +244,28 @@ export class ApplicationDocumentsService {
    * @throws NotFoundException unknown driver.
    */
   private async ownerOfDriver(driverId: string): Promise<Owner> {
+    await this.requireDriver(driverId);
+    const application = await this.dataSource
+      .getRepository(Application)
+      .findOne({ select: { id: true }, where: { driverId } });
+    return application ? { applicationId: application.id } : { driverId };
+  }
+
+  /**
+   * The driver itself as owner, even when it has an application (D90: a signed contract is never kept on the application).
+   * @throws NotFoundException unknown driver.
+   */
+  private async driverOwnRows(driverId: string): Promise<Owner> {
+    await this.requireDriver(driverId);
+    return { driverId };
+  }
+
+  private async requireDriver(driverId: string): Promise<void> {
     if (
       !(await this.dataSource.getRepository(Driver).existsBy({ id: driverId }))
     ) {
       throw new NotFoundException("Driver not found.");
     }
-    const application = await this.dataSource
-      .getRepository(Application)
-      .findOne({ select: { id: true }, where: { driverId } });
-    return application ? { applicationId: application.id } : { driverId };
   }
 
   private async requireApplication(applicationId: string): Promise<void> {
