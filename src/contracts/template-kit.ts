@@ -39,6 +39,8 @@ export const VALUE_KEYS = [
   "EXCESS_MILEAGE",
   "INSURANCE_EXCESS",
   "OTHER_RECURRING",
+  // The "Total" row at the end of the recurring charges (D91): payment + insurance excess + other, no mileage (B119).
+  "RECURRING_TOTAL",
   "PURCHASE_OPTION",
 ] as const;
 
@@ -89,16 +91,17 @@ export interface LicenceSlot {
   heightPct: number;
 }
 
-/** One state's contract: its PDF and everything measured on it. */
+/** One company's contract: its PDF and everything measured on it (D91: the client's five templates differ page by page). */
 export interface ContractTemplate {
-  /** The state whose text this is (`contract_companies.state`). */
+  /** The company whose contract this is (`contract_companies.name`). */
+  company: string;
+  /** The state whose text this is (`contract_companies.state`); with the name it picks the template. */
   state: string;
   /** The PDF in `src/contracts/templates/`. */
   file: string;
   placements: readonly Placement[];
-  /** The driver's signature box and its date, measured the same way. */
+  /** The driver's signature box, measured the same way. The templates have no date under the signature (D91). */
   signature: Box;
-  date: Box;
   /** The line on which money in the disclosure table ends (percent of the page). */
   moneyRightPct: number;
   licenceSlot: LicenceSlot;

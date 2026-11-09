@@ -107,6 +107,22 @@ describe("buildContractValues", () => {
     expect(daily.TOTAL_RATE).toBe("$61.00");
   });
 
+  it("prints the recurring total: the payment plus insurance excess and other, never the per-mile charge (B119, D91)", () => {
+    expect(values.RECURRING_TOTAL).toBe("$409.00");
+    const extra = buildContractValues(
+      contract({
+        insuranceExcessCents: 1_000,
+        otherRecurringCents: 500,
+        excessMileageCents: 25,
+      }),
+      company,
+      driver,
+    );
+    // 409.00 + 10.00 + 5.00; the 0.25 per mile is not in it.
+    expect(extra.RECURRING_TOTAL).toBe("$424.00");
+    expect(extra.EXCESS_MILEAGE).toBe("$0.25");
+  });
+
   it("prints the purchase option as the sample does: whole dollars without cents", () => {
     expect(values.PURCHASE_OPTION).toBe("$9,750");
     const odd = buildContractValues(

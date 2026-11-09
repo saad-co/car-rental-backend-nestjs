@@ -136,6 +136,7 @@ export function buildContractValues(
     EXCESS_MILEAGE: formatCents(contract.excessMileageCents),
     INSURANCE_EXCESS: formatCents(contract.insuranceExcessCents),
     OTHER_RECURRING: formatCents(contract.otherRecurringCents),
+    RECURRING_TOTAL: formatCents(n.recurringTotalCents),
     PURCHASE_OPTION: formatPurchaseOption(contract.purchaseOptionCents ?? 0),
   };
 }

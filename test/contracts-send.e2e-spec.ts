@@ -239,7 +239,7 @@ describe("Send a contract for signing (Module 2 step 3, D74, test database)", ()
       expect(sent).toMatchObject({ id, status: "sent" });
       expect(sent.sentAt).toBeInstanceOf(Date);
       expect(sent.sentValues).toMatchObject({
-        template: "illinois-lease.pdf",
+        template: "ashwood-lease.pdf",
         recipientName: "Test Driver",
         recipientEmail: "driver1@test.test",
         values: {
@@ -279,7 +279,9 @@ describe("Send a contract for signing (Module 2 step 3, D74, test database)", ()
       );
       const anchors = request.anchors.map((a) => a.anchor);
       expect(anchors).toContain("{{LESSEE_SIGNATURE}}");
-      expect(anchors).toContain("{{LESSEE_DATE}}");
+      // The client's templates have no date under the signature (D91).
+      expect(anchors).not.toContain("{{LESSEE_DATE}}");
+      expect(request.anchors.some((a) => a.kind === "date")).toBe(false);
       expect(
         request.anchors.find((a) => a.anchor === "{{LESSOR_SIGNATURE}}"),
       ).toMatchObject({ kind: "text", value: "Ashwood Holdings LLC" });
@@ -351,7 +353,7 @@ describe("Send a contract for signing (Module 2 step 3, D74, test database)", ()
 
       const sent = await contracts.sendForSigning(id, admin);
 
-      expect(sent.sentValues?.template).toBe("california-lease.pdf");
+      expect(sent.sentValues?.template).toBe("gonzo-ca-lease.pdf");
       expect(sent.sentValues?.values.COMPANY_NAME).toBe(
         "Gonzo Enterprises Inc",
       );
@@ -370,10 +372,43 @@ describe("Send a contract for signing (Module 2 step 3, D74, test database)", ()
           phone: "+13125550101",
         },
       );
-      expect(request.anchors).toEqual(buildAnchors(values, templateFor("CA")!));
+      expect(request.anchors).toEqual(
+        buildAnchors(
+          values,
+          templateFor({ name: "Gonzo Enterprises Inc", state: "CA" })!,
+        ),
+      );
       expect(request.anchors.map((a) => a.anchor)).toContain(
         "{{COMPANY_SIGN}}",
       );
+    });
+
+    it("sends each of the five companies with its own template PDF (D91)", async () => {
+      const expected: Record<string, string> = {
+        "Ashwood Holdings LLC|IL": "ashwood-lease.pdf",
+        "Evergreen Holdings LLC|IL": "evergreen-lease.pdf",
+        "Gonzo Enterprises Inc|CA": "gonzo-ca-lease.pdf",
+        "Gonzo Enterprises Inc|IL": "gonzo-il-lease.pdf",
+        "Silver Pine Holdings LLC|IL": "silver-pine-lease.pdf",
+      };
+      const companies = (await db.query(
+        `SELECT id, name, state FROM contract_companies`,
+      )) as { id: string; name: string; state: string }[];
+      expect(companies).toHaveLength(5);
+      for (const company of companies) {
+        const id = await newDraft({ companyId: company.id });
+        const sent = await contracts.sendForSigning(id, admin);
+        expect(sent.sentValues?.template, company.name).toBe(
+          expected[`${company.name}|${company.state}`],
+        );
+        const request = firma.requests[firma.requests.length - 1];
+        const anchors = request.anchors.map((a) => a.anchor);
+        expect(anchors, company.name).toContain("{{LESSEE_SIGNATURE}}");
+        expect(anchors, company.name).toContain("{{TOTAL_RATE}}");
+        expect(anchors, company.name).not.toContain("{{LESSEE_DATE}}");
+        // A signed or sent contract blocks the next draft: reset between companies.
+        await db.query("DELETE FROM contracts");
+      }
     });
 
     it("refuses a company whose state has no contract yet with 409", async () => {
@@ -385,7 +420,7 @@ describe("Send a contract for signing (Module 2 step 3, D74, test database)", ()
         const id = await newDraft({ companyId: tennesseeId });
 
         await expect(contracts.sendForSigning(id, admin)).rejects.toThrow(
-          "There is no contract for TN yet.",
+          "There is no contract for Volunteer LLC (TN) yet.",
         );
         expect(firma.requests).toHaveLength(0);
         expect((await row(id)).status).toBe("draft");

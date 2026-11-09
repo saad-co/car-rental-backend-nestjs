@@ -216,10 +216,10 @@ export class ContractsService {
       const company = contract.companyId
         ? await manager.findOneBy(ContractCompany, { id: contract.companyId })
         : null;
-      const template = company ? templateFor(company.state) : undefined;
+      const template = company ? templateFor(company) : undefined;
       if (company && !template) {
         throw new ConflictException(
-          `There is no contract for ${company.state} yet.`,
+          `There is no contract for ${company.name} (${company.state}) yet.`,
         );
       }
       const driver = await manager.findOneByOrFail(Driver, {
