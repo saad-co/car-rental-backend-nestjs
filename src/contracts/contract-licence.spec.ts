@@ -1,9 +1,16 @@
 import { PDFDocument } from "pdf-lib";
 import sharp from "sharp";
 import { LicenceError, placeLicence } from "./contract-licence.js";
-import { loadTemplate, templateFor } from "./contract-template.js";
+import {
+  allTemplates,
+  loadTemplate,
+  templateFor,
+} from "./contract-template.js";
 
-const slot = templateFor("IL")!.licenceSlot;
+const slot = templateFor({
+  name: "Gonzo Enterprises Inc",
+  state: "IL",
+})!.licenceSlot;
 
 /** A made-up 3:2 "licence": flat grey, so nothing personal is ever in a test. */
 async function picture(
@@ -65,8 +72,7 @@ describe("placeLicence", () => {
   });
 
   it("works on the real templates and leaves them readable", async () => {
-    for (const state of ["IL", "CA"]) {
-      const template = templateFor(state)!;
+    for (const template of allTemplates()) {
       const result = await placeLicence(
         loadTemplate(template.file),
         { body: await picture("jpeg") },

@@ -7,36 +7,55 @@ import {
   round2,
   type Placement,
 } from "./template-kit.js";
-import { CALIFORNIA_TEMPLATE } from "./templates/california-placements.js";
-import { ILLINOIS_TEMPLATE } from "./templates/illinois-placements.js";
+import { ASHWOOD_TEMPLATE } from "./templates/ashwood-placements.js";
+import { EVERGREEN_TEMPLATE } from "./templates/evergreen-placements.js";
+import { GONZO_CA_TEMPLATE } from "./templates/gonzo-ca-placements.js";
+import { GONZO_IL_TEMPLATE } from "./templates/gonzo-il-placements.js";
+import { SILVER_PINE_TEMPLATE } from "./templates/silver-pine-placements.js";
 
 export { VALUE_KEYS };
 export type { ContractTemplate, ContractValues, Placement };
 export type { ValueKey } from "./template-kit.js";
 
 /**
- * The lease PDFs and where each value goes on them (Module 2 step 3, D74; one template per state, D76). Each PDF is the
- * client's sample with every value replaced by a `{{MARKER}}` text; firma finds each marker and puts a locked field over it.
- * firma never removes the marker text (it answers "not removed" for these PDFs): the field's white background is all that
- * hides it, so a field must cover its whole marker, tails of the braces included.
+ * The lease PDFs and where each value goes on them (Module 2 step 3, D74; one template per state, D76; one per company,
+ * D91). Each PDF is the client's template with every value replaced by a `{{MARKER}}` text; firma finds each marker and puts
+ * a locked field over it. firma never removes the marker text (it answers "not removed" for these PDFs): the field's white
+ * background is all that hides it, so a field must cover its whole marker, tails of the braces included.
  */
 
-/** The two markers that are not values: the driver signs and dates here. */
+/** The one marker that is not a value: the driver signs here. The templates have no date under it (D91). */
 export const SIGNATURE_MARKER = "{{LESSEE_SIGNATURE}}";
-export const DATE_MARKER = "{{LESSEE_DATE}}";
 
 export function markerOf(name: string): string {
   return `{{${name}}}`;
 }
 
-const TEMPLATES: Record<string, ContractTemplate> = {
-  IL: ILLINOIS_TEMPLATE,
-  CA: CALIFORNIA_TEMPLATE,
-};
+/**
+ * One template per company (D91): the client's five templates differ in their page-1 lines and page breaks, so a measured
+ * table cannot be shared. Gonzo Enterprises Inc has two rows (Illinois and California), so the state is part of the key.
+ */
+const TEMPLATES: Record<string, ContractTemplate> = Object.fromEntries(
+  [
+    GONZO_IL_TEMPLATE,
+    GONZO_CA_TEMPLATE,
+    EVERGREEN_TEMPLATE,
+    ASHWOOD_TEMPLATE,
+    SILVER_PINE_TEMPLATE,
+  ].map((template) => [`${template.company}|${template.state}`, template]),
+);
 
-/** The template of a state, or `undefined` when that state's contract is not built yet. */
-export function templateFor(state: string): ContractTemplate | undefined {
-  return TEMPLATES[state];
+/** The template of a company, or `undefined` when its contract is not built yet (Tennessee has none). */
+export function templateFor(company: {
+  name: string;
+  state: string;
+}): ContractTemplate | undefined {
+  return TEMPLATES[`${company.name}|${company.state}`];
+}
+
+/** Every template, for tests and checks. */
+export function allTemplates(): ContractTemplate[] {
+  return Object.values(TEMPLATES);
 }
 
 const PAGE_WIDTH_PT = 612;
@@ -180,7 +199,7 @@ function toAnchor(
 }
 
 /**
- * Every anchor of the contract: one locked text field per marker, then the driver's signature box and date.
+ * Every anchor of the contract: one locked text field per marker, then the driver's signature box.
  * Pure: the same values always give the same anchors.
  */
 export function buildAnchors(
@@ -188,7 +207,6 @@ export function buildAnchors(
   template: ContractTemplate,
 ): FirmaAnchor[] {
   const signature = template.signature;
-  const date = template.date;
   return [
     ...template.placements.map((place) =>
       toAnchor(template, place, values[place.key]),
@@ -200,14 +218,6 @@ export function buildAnchors(
       heightPct: signature.heightPct,
       xOffsetPct: 0,
       yOffsetPct: signature.yOffsetPct,
-    },
-    {
-      kind: "date",
-      anchor: DATE_MARKER,
-      widthPct: date.widthPct,
-      heightPct: date.heightPct,
-      xOffsetPct: 0,
-      fontSize: 11,
     },
   ];
 }

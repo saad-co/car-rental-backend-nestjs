@@ -129,6 +129,20 @@ as a requirement; *our suggestion* = ours, to be shown to the client. "Sample co
 | The driver's licence file (application document, kind licence) is drawn on the contract's last page; sending is blocked with a message when there is none or it cannot be read | The client's samples have it; Abulkalam: block when missing, allowed to send it to firma (2026-10-24) | from a document (the picture); client-confirmed by Abulkalam (blocking) |
 | Markers renamed so none repeats on a page, long names shortened, one line break before "Plate:", amounts right-aligned | Ours: firma only covers a marker with a white box, so a repeated or too-wide marker left marks and misaligned values in the first signed contract; the wording of the contract is unchanged | our addition |
 
+### Updated contract templates (D91)
+| Field or step | Source | Status |
+|---|---|---|
+| The five contract texts are the client's updated templates (shorter insurance paragraph with an authorisation clause, "full list of charges and fees" sentence with the Google Doc link, card-on-file note, no "Date:" line under the Lessee signature) | The client's five Google Docs of 2026-10-26 (Gonzo IL, Gonzo CA, Evergreen, Ashwood, Silver Pine), BACKLOG B114 | from a document |
+| The insurance paragraph ends "...charge its cost to Lessee." ("as provided in." removed) | The client's reply, relayed by Abulkalam, 2026-11-08 | client-confirmed |
+| The card-on-file note stays as written although the Stripe card feature is skipped | Abulkalam, 2026-11-08 | client-confirmed (by Abulkalam) |
+| No date next to the signature; the date is the Effective Date at the top | The new templates have no "Date:" line; Abulkalam, 2026-11-08 ("the date is on the top") | from a document; client-confirmed (by Abulkalam) |
+| One template and one measured table per company (five), not per state | Ours: the five documents differ in their page-1 lines and page breaks, so they cannot share positions | our suggestion |
+| Recurring total printed in the "Total" row that ends the recurring charges (payment + insurance excess + other, no per-mile charge) in the Illinois, Evergreen, Ashwood and Silver Pine templates | The new templates' recurring table; the sum is B119 | from a document |
+| "Excess Mileage Charge (Per Mile)" is not printed on the California and Silver Pine contracts | Those two templates have no such row | from a document |
+| The driver's phone is not printed on the Ashwood contract | The Ashwood template has no phone line (to confirm with the client, B125) | from a document |
+| "(Lessor)" and "(Lessee)" after the names are not printed; the sample's own typos and oddities are kept | Ours: the value fields need the room (as in D74); the text is otherwise the client's | our addition |
+| Silver Pine's licence picture slot (its file has no picture box) | Ours: Illinois's slot size, at Illinois's distance from the "Driver License:" label; to check on a real send | our suggestion |
+
 ### Step 4 flow (track and file, D75)
 | Field or step | Source | Status |
 |---|---|---|
