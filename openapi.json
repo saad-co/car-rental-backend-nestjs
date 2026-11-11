@@ -2128,6 +2128,10 @@
                     "type": "string",
                     "description": "true or false"
                   },
+                  "rentDueTime": {
+                    "type": "string",
+                    "description": "Time rent is due, Chicago time, HH:MM (24 hours)"
+                  },
                   "aliases": {
                     "type": "string",
                     "description": "JSON list, e.g. [{\"type\":\"zelle\",\"value\":\"Pat Example\"}]"
@@ -2230,6 +2234,47 @@
           }
         },
         "summary": "`PATCH /drivers/:id/profile`: changes the profile fields (middle name, address, date of birth, insurance, D85). A\nfield left out stays; one sent empty is cleared. Returns the updated driver.",
+        "tags": [
+          "Drivers"
+        ]
+      }
+    },
+    "/drivers/{id}/rent-settings": {
+      "patch": {
+        "operationId": "DriversController_updateRentSettings",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateDriverRentSettingsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverDetailDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`PATCH /drivers/:id/rent-settings`: changes the time of day rent is due (Chicago time, `HH:MM`) and the \"On Payment\nPlan\" flag (D92). A field left out stays; `rentDueTime: null` clears it. Returns the updated driver. `400` for a bad\ntime, `404` if unknown.",
         "tags": [
           "Drivers"
         ]
@@ -3248,6 +3293,28 @@
           }
         },
         "summary": "`GET /dashboard`: every number on the dashboard in one response (money in cents, Chicago days). `401` no token.",
+        "tags": [
+          "Dashboard"
+        ]
+      }
+    },
+    "/dashboard/daily-operations": {
+      "get": {
+        "operationId": "DashboardController_dailyOperationsPage",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DailyOperationsDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`GET /dashboard/daily-operations`: the daily operations page (D92): payments due today, late payments, early warning.\nComputed from the ledger and the signed contracts when read. `401` no token.",
         "tags": [
           "Dashboard"
         ]
@@ -5414,6 +5481,15 @@
             "type": "string",
             "nullable": true,
             "description": "The application this driver came from (D84), for the link between the two pages; null for imported drivers."
+          },
+          "rentDueTime": {
+            "type": "string",
+            "nullable": true,
+            "description": "The time of day rent is due, Chicago time as `HH:MM` (24 hours), or null = not set (D92)."
+          },
+          "onPaymentPlan": {
+            "type": "boolean",
+            "description": "Marked \"On Payment Plan\" by staff (D92): left out of the Should Be Deactivated list while true."
           }
         },
         "required": [
@@ -5433,7 +5509,9 @@
           "paymentCount",
           "lastPaymentAt",
           "balanceCents",
-          "applicationId"
+          "applicationId",
+          "rentDueTime",
+          "onPaymentPlan"
         ]
       },
       "DriverListDto": {
@@ -5609,6 +5687,15 @@
             "nullable": true,
             "description": "The application this driver came from (D84), for the link between the two pages; null for imported drivers."
           },
+          "rentDueTime": {
+            "type": "string",
+            "nullable": true,
+            "description": "The time of day rent is due, Chicago time as `HH:MM` (24 hours), or null = not set (D92)."
+          },
+          "onPaymentPlan": {
+            "type": "boolean",
+            "description": "Marked \"On Payment Plan\" by staff (D92): left out of the Should Be Deactivated list while true."
+          },
           "profile": {
             "$ref": "#/components/schemas/DriverProfileDto"
           }
@@ -5631,6 +5718,8 @@
           "lastPaymentAt",
           "balanceCents",
           "applicationId",
+          "rentDueTime",
+          "onPaymentPlan",
           "profile"
         ]
       },
@@ -5679,6 +5768,20 @@
             "type": "boolean",
             "nullable": true,
             "description": "Current auto insurance: `true` / `false`; empty = not known."
+          }
+        }
+      },
+      "UpdateDriverRentSettingsDto": {
+        "type": "object",
+        "properties": {
+          "rentDueTime": {
+            "type": "string",
+            "nullable": true,
+            "description": "The time of day rent is due, Chicago time, `HH:MM`; `null` = not set."
+          },
+          "onPaymentPlan": {
+            "type": "boolean",
+            "description": "Staff marked the driver \"On Payment Plan\": left out of the Should Be Deactivated list while true."
           }
         }
       },
@@ -7601,6 +7704,478 @@
           "applications",
           "intake",
           "sms"
+        ]
+      },
+      "DueTodayRowDto": {
+        "type": "object",
+        "properties": {
+          "schedule": {
+            "nullable": true,
+            "description": "Weekly or daily, from the contract in force; null if the driver has none (not expected: rent comes from a contract).",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractSchedule"
+              }
+            ]
+          },
+          "status": {
+            "description": "Paid: nothing open. Late: open and past the due time. Not yet paid: open, due time not reached.",
+            "enum": [
+              "paid",
+              "not_yet_paid",
+              "late"
+            ],
+            "type": "string"
+          },
+          "driverId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "vehicle": {
+            "type": "string",
+            "nullable": true,
+            "description": "The vehicle of the contract in force, \"Model (PLATE)\"; null when the contract names none."
+          },
+          "rateCents": {
+            "type": "number",
+            "nullable": true,
+            "description": "The contract's rent per period in cents; null without a contract."
+          },
+          "dueTime": {
+            "type": "string",
+            "nullable": true,
+            "description": "The time rent is due, Chicago `HH:MM` (24 hours); null = not set (late when the due day ends)."
+          },
+          "amountDueCents": {
+            "type": "number",
+            "description": "The rent charge due today, in cents."
+          },
+          "openCents": {
+            "type": "number",
+            "description": "What is still unpaid of it after credits are applied oldest first; 0 = paid."
+          },
+          "onPaymentPlan": {
+            "type": "boolean",
+            "description": "Staff marked the driver \"On Payment Plan\"."
+          }
+        },
+        "required": [
+          "schedule",
+          "status",
+          "driverId",
+          "name",
+          "vehicle",
+          "rateCents",
+          "dueTime",
+          "amountDueCents",
+          "openCents",
+          "onPaymentPlan"
+        ]
+      },
+      "LateDriverDto": {
+        "type": "object",
+        "properties": {
+          "schedule": {
+            "nullable": true,
+            "description": "Rate type: weekly or daily, from the contract in force.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractSchedule"
+              }
+            ]
+          },
+          "driverId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "dueTime": {
+            "type": "string",
+            "nullable": true,
+            "description": "The time rent is due, Chicago `HH:MM`; null = not set."
+          },
+          "pastDueCents": {
+            "type": "number",
+            "description": "The unpaid part of every late rent charge added up, in cents."
+          },
+          "lateCount": {
+            "type": "number",
+            "description": "How many rent charges are late."
+          },
+          "daysLate": {
+            "type": "number",
+            "description": "Whole days the oldest late charge is late, counted on the Chicago clock (1 = the same time on the next day has come)."
+          },
+          "hoursLate": {
+            "type": "number",
+            "description": "Real hours since the oldest late charge was due."
+          },
+          "onPaymentPlan": {
+            "type": "boolean",
+            "description": "Staff marked the driver \"On Payment Plan\"."
+          }
+        },
+        "required": [
+          "schedule",
+          "driverId",
+          "name",
+          "dueTime",
+          "pastDueCents",
+          "lateCount",
+          "daysLate",
+          "hoursLate",
+          "onPaymentPlan"
+        ]
+      },
+      "DriverStatus": {
+        "type": "string",
+        "enum": [
+          "onboarding",
+          "active",
+          "inactive"
+        ],
+        "description": "Active, or onboarding (an unpaid deposit puts a driver who is still onboarding on the list)."
+      },
+      "ShouldBeDeactivatedRowDto": {
+        "type": "object",
+        "properties": {
+          "schedule": {
+            "nullable": true,
+            "description": "Weekly or daily, from the contract in force; null if the driver has none.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractSchedule"
+              }
+            ]
+          },
+          "driverStatus": {
+            "description": "Active, or onboarding (an unpaid deposit puts a driver who is still onboarding on the list).",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DriverStatus"
+              }
+            ]
+          },
+          "reasons": {
+            "type": "array",
+            "description": "Why: `daily_late` (2 or more daily payments late), `weekly_late` (a weekly payment 2 days late), `deposit_unpaid`\n(deposit still unpaid 7 days after its due date). At least one; the rows can show several.",
+            "items": {
+              "type": "string",
+              "enum": [
+                "daily_late",
+                "weekly_late",
+                "deposit_unpaid"
+              ]
+            }
+          },
+          "driverId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "balanceCents": {
+            "type": "number",
+            "description": "Ledger balance in cents: credits minus debits; negative = the driver owes."
+          },
+          "daysLate": {
+            "type": "number",
+            "description": "Whole days the oldest late rent payment is late (Chicago clock); 0 when the reason is the deposit only."
+          },
+          "depositDaysSinceDue": {
+            "type": "number",
+            "nullable": true,
+            "description": "Days since the unpaid deposit was due (the contract start date); null when the deposit is not what is unpaid."
+          },
+          "depositCents": {
+            "type": "number",
+            "nullable": true,
+            "description": "The unpaid deposit in cents; null when the deposit is not what is unpaid."
+          }
+        },
+        "required": [
+          "schedule",
+          "driverStatus",
+          "reasons",
+          "driverId",
+          "name",
+          "balanceCents",
+          "daysLate",
+          "depositDaysSinceDue",
+          "depositCents"
+        ]
+      },
+      "WeekTotalDto": {
+        "type": "object",
+        "properties": {
+          "weekStart": {
+            "type": "string",
+            "description": "The Monday, Chicago day `YYYY-MM-DD`."
+          },
+          "weekEnd": {
+            "type": "string",
+            "description": "The Sunday, Chicago day `YYYY-MM-DD`."
+          },
+          "totalCents": {
+            "type": "number",
+            "description": "Confirmed payments that came in that week, in cents; 0 for a quiet week."
+          },
+          "paymentCount": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "weekStart",
+          "weekEnd",
+          "totalCents",
+          "paymentCount"
+        ]
+      },
+      "DepositCollectedRowDto": {
+        "type": "object",
+        "properties": {
+          "driverId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "amountCents": {
+            "type": "number",
+            "nullable": true,
+            "description": "The amount typed when the step was ticked (D82), in cents; null for a step ticked before amounts were recorded."
+          },
+          "paidAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "When the step was ticked."
+          }
+        },
+        "required": [
+          "driverId",
+          "name",
+          "amountCents",
+          "paidAt"
+        ]
+      },
+      "DepositsCollectedDto": {
+        "type": "object",
+        "properties": {
+          "totalCents": {
+            "type": "number",
+            "description": "The recorded amounts added up, in cents."
+          },
+          "withoutAmountCount": {
+            "type": "number",
+            "description": "How many drivers have no amount recorded; they are in the list and not in the total."
+          },
+          "drivers": {
+            "description": "Newest first.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DepositCollectedRowDto"
+            }
+          }
+        },
+        "required": [
+          "totalCents",
+          "withoutAmountCount",
+          "drivers"
+        ]
+      },
+      "DepositPendingRowDto": {
+        "type": "object",
+        "properties": {
+          "driverId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "amountCents": {
+            "type": "number",
+            "description": "The deposit the signed contract asks for, in cents."
+          },
+          "dueDate": {
+            "type": "string",
+            "description": "The day it is due: the contract start date, `YYYY-MM-DD`."
+          },
+          "daysSinceDue": {
+            "type": "number",
+            "description": "Days since the due date; negative before it."
+          },
+          "overdue": {
+            "type": "boolean",
+            "description": "7 or more days since the due date: the driver is also on the Should Be Deactivated list (unless on a payment plan)."
+          },
+          "onPaymentPlan": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "driverId",
+          "name",
+          "amountCents",
+          "dueDate",
+          "daysSinceDue",
+          "overdue",
+          "onPaymentPlan"
+        ]
+      },
+      "DepositsPendingDto": {
+        "type": "object",
+        "properties": {
+          "totalCents": {
+            "type": "number"
+          },
+          "drivers": {
+            "description": "Longest overdue first.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DepositPendingRowDto"
+            }
+          }
+        },
+        "required": [
+          "totalCents",
+          "drivers"
+        ]
+      },
+      "DriverLeftReason": {
+        "type": "string",
+        "enum": [
+          "contract_ended",
+          "bad_driver",
+          "cooperative_returned_car"
+        ],
+        "description": "How the driver left (D81); null for a driver deactivated before reasons existed."
+      },
+      "CollectionsRowDto": {
+        "type": "object",
+        "properties": {
+          "leftReason": {
+            "nullable": true,
+            "description": "How the driver left (D81); null for a driver deactivated before reasons existed.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DriverLeftReason"
+              }
+            ]
+          },
+          "driverId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "balanceCents": {
+            "type": "number",
+            "description": "Ledger balance in cents: credits minus debits; negative = the driver owes."
+          },
+          "sentToCollectionsAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "When an admin sent the driver to collections."
+          }
+        },
+        "required": [
+          "leftReason",
+          "driverId",
+          "name",
+          "balanceCents",
+          "sentToCollectionsAt"
+        ]
+      },
+      "CollectionsDto": {
+        "type": "object",
+        "properties": {
+          "totalOwedCents": {
+            "type": "number",
+            "description": "What is owed by the drivers in the list (only the ones with a negative balance count), in cents."
+          },
+          "drivers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CollectionsRowDto"
+            }
+          }
+        },
+        "required": [
+          "totalOwedCents",
+          "drivers"
+        ]
+      },
+      "DailyOperationsDto": {
+        "type": "object",
+        "properties": {
+          "asOf": {
+            "format": "date-time",
+            "type": "string",
+            "description": "When the figures were worked out."
+          },
+          "today": {
+            "type": "string",
+            "description": "Today's Chicago day, `YYYY-MM-DD`."
+          },
+          "dueToday": {
+            "description": "Payments due today: weekly drivers first, then daily, then by name.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DueTodayRowDto"
+            }
+          },
+          "late": {
+            "description": "Drivers with a late rent payment, the longest late first.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LateDriverDto"
+            }
+          },
+          "earlyWarning": {
+            "description": "Drivers whose oldest late payment is a full day or more late, the longest late first.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LateDriverDto"
+            }
+          },
+          "shouldBeDeactivated": {
+            "description": "Drivers who meet a deactivation rule and are not on a payment plan, the longest overdue first. List only.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ShouldBeDeactivatedRowDto"
+            }
+          },
+          "weeks": {
+            "description": "The current week and the 25 before it, newest first (D5). Monday to Sunday, Chicago days.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WeekTotalDto"
+            }
+          },
+          "depositsCollected": {
+            "$ref": "#/components/schemas/DepositsCollectedDto"
+          },
+          "depositsPending": {
+            "$ref": "#/components/schemas/DepositsPendingDto"
+          },
+          "collections": {
+            "$ref": "#/components/schemas/CollectionsDto"
+          }
+        },
+        "required": [
+          "asOf",
+          "today",
+          "dueToday",
+          "late",
+          "earlyWarning",
+          "shouldBeDeactivated",
+          "weeks",
+          "depositsCollected",
+          "depositsPending",
+          "collections"
         ]
       }
     }

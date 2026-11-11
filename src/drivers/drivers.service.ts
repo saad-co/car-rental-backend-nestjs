@@ -40,6 +40,7 @@ import { CreateDriverDto } from "./dto/create-driver.dto.js";
 import type { UpdateDriverProfileDto } from "./dto/driver-profile.dto.js";
 import { DriverDetailDto, DriverDto, DriverListDto } from "./dto/driver.dto.js";
 import { ListDriversQueryDto } from "./dto/list-drivers-query.dto.js";
+import type { UpdateDriverRentSettingsDto } from "./dto/rent-settings.dto.js";
 import { OnboardingStep } from "./dto/set-onboarding-step.dto.js";
 import { toUsE164 } from "./us-phone.js";
 
@@ -278,6 +279,7 @@ export class DriversService {
             zip: dto.zip ?? null,
             dateOfBirth: dto.dateOfBirth ?? null,
             hasInsurance: dto.hasInsurance ?? null,
+            rentDueTime: dto.rentDueTime ?? null,
           }),
         );
         for (const item of stored) {
@@ -337,6 +339,31 @@ export class DriversService {
     });
     // Ids only: the profile holds a date of birth and an address.
     this.logger.log(`Admin ${adminId} edited the profile of driver ${id}.`);
+    return this.findOne(id);
+  }
+
+  /**
+   * Changes the rent settings of a driver (D92): the time of day rent is due (Chicago time) and the "On Payment Plan"
+   * flag. A field left out stays; `rentDueTime` sent as `null` is cleared. Nothing else changes: no ledger entry, no
+   * billing (rent comes from the signed contract, D83), only what the dashboard reads.
+   * @throws NotFoundException unknown driver.
+   */
+  async updateRentSettings(
+    id: string,
+    dto: UpdateDriverRentSettingsDto,
+    adminId: string,
+  ): Promise<DriverDetailDto> {
+    await this.drivers.manager.transaction(async (manager) => {
+      const driver = await this.lockDriver(manager, id);
+      if (dto.rentDueTime !== undefined) driver.rentDueTime = dto.rentDueTime;
+      if (dto.onPaymentPlan !== undefined) {
+        driver.onPaymentPlan = dto.onPaymentPlan;
+      }
+      await manager.save(driver);
+    });
+    this.logger.log(
+      `Admin ${adminId} changed the rent settings of driver ${id}.`,
+    );
     return this.findOne(id);
   }
 
@@ -888,6 +915,8 @@ export class DriversService {
       leftReason: driver.leftReason,
       leftAt: driver.leftAt,
       sentToCollectionsAt: driver.sentToCollectionsAt,
+      rentDueTime: driver.rentDueTime?.slice(0, 5) ?? null, // `18:00:00` from Postgres -> `18:00`
+      onPaymentPlan: driver.onPaymentPlan,
     };
   }
 }

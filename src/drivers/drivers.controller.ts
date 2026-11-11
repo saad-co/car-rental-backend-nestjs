@@ -30,6 +30,7 @@ import {
   SendToCollectionsDto,
 } from "./dto/leaving.dto.js";
 import { ListDriversQueryDto } from "./dto/list-drivers-query.dto.js";
+import { UpdateDriverRentSettingsDto } from "./dto/rent-settings.dto.js";
 import { SetOnboardingStepDto } from "./dto/set-onboarding-step.dto.js";
 
 /** Admin driver routes under `/drivers`. All need a logged-in admin (global JwtAuthGuard). */
@@ -82,6 +83,10 @@ export class DriversController {
         zip: { type: "string" },
         dateOfBirth: { type: "string", description: "YYYY-MM-DD" },
         hasInsurance: { type: "string", description: "true or false" },
+        rentDueTime: {
+          type: "string",
+          description: "Time rent is due, Chicago time, HH:MM (24 hours)",
+        },
         aliases: {
           type: "string",
           description:
@@ -124,6 +129,20 @@ export class DriversController {
     @CurrentUser() admin: AuthenticatedUser,
   ): Promise<DriverDetailDto> {
     return this.drivers.updateProfile(id, body, admin.id);
+  }
+
+  /**
+   * `PATCH /drivers/:id/rent-settings`: changes the time of day rent is due (Chicago time, `HH:MM`) and the "On Payment
+   * Plan" flag (D92). A field left out stays; `rentDueTime: null` clears it. Returns the updated driver. `400` for a bad
+   * time, `404` if unknown.
+   */
+  @Patch(":id/rent-settings")
+  updateRentSettings(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() body: UpdateDriverRentSettingsDto,
+    @CurrentUser() admin: AuthenticatedUser,
+  ): Promise<DriverDetailDto> {
+    return this.drivers.updateRentSettings(id, body, admin.id);
   }
 
   /**

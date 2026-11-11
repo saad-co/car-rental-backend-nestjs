@@ -65,10 +65,10 @@ export function weekdayIndex(day: string): number {
  * start date, the one signed last. The same choice `rentSchedule` makes when the rent job bills each due date.
  * `null` when none has started yet.
  */
-export function contractInForce(
-  contracts: BillableContract[],
+export function contractInForce<T extends BillableContract>(
+  contracts: T[],
   day: string,
-): BillableContract | null {
+): T | null {
   const started = contracts
     .filter((contract) => contract.startDate <= day)
     .sort(

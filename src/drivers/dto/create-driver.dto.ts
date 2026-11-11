@@ -10,6 +10,7 @@ import {
 } from "class-validator";
 import { AddAliasDto } from "./add-alias.dto.js";
 import { DriverProfileFieldsDto, trimOrNull } from "./driver-profile.dto.js";
+import { IsRentDueTime } from "./rent-settings.dto.js";
 
 /**
  * Body of `POST /drivers` (D85): an admin adds a driver directly, without an application. Sent as multipart form data
@@ -46,6 +47,10 @@ export class CreateDriverDto extends DriverProfileFieldsDto {
   @IsNotEmpty({ message: "phone is required" })
   @MaxLength(30)
   phone: string;
+
+  /** The time of day rent is due, Chicago time `HH:MM` (D92); optional, can be set later on the driver page. */
+  @IsRentDueTime()
+  rentDueTime?: string | null;
 
   /**
    * The payment methods and handles the driver pays from (payment method + ID / alias), as a JSON text because the body is

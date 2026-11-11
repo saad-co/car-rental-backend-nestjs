@@ -82,7 +82,7 @@ so the two repos cannot silently drift apart.
 `billingActive`, `smsOptedOut`, `archivedAt` (D80: archived drivers are hidden and not billed or reminded),
 `depositPaidCents` (D82: the deposit amount typed when the deposit step is ticked), `leftReason` (`contract_ended` |
 `bad_driver` | `cooperative_returned_car`), `leftAt` (D81: set when the driver is deactivated or sent to collections),
-`sentToCollectionsAt` (D81: a flag on an inactive driver, shown on the Collections page). A driver is created by "Start onboarding" on an approved application, not by approving (D80), or directly by an admin without an application (D85). New drivers start `onboarding`; `active` only when all three steps are done (CHECK);
+`sentToCollectionsAt` (D81: a flag on an inactive driver, shown on the Collections page). `rentDueTime` (D92: `HH:MM`, nullable, Chicago wall clock; when the rent is due each day, set per driver; none = due at the end of the day) and `onPaymentPlan` (D92: leaves the driver out of Should Be Deactivated only). A driver is created by "Start onboarding" on an approved application, not by approving (D80), or directly by an admin without an application (D85). New drivers start `onboarding`; `active` only when all three steps are done (CHECK);
 an `inactive` driver cannot log in.
 
 **PaymentAlias** — links a payment identity to a driver.
@@ -234,6 +234,7 @@ An admin assigns an unmatched payment to a driver. This posts the payment and **
 ## 10. Admin UI
 
 - **Login.**
+- **Daily operations** (D92; the default page, `GET /dashboard/daily-operations`; the D88 page below is now "Statistics" at `/admin/statistics`) — headline counts; drivers due today (weekly group, daily group; Paid / Not yet paid / Late); late payments; early warning (a full day or more late); should be deactivated (daily driver with 2 late payments, weekly driver 2 days late, deposit unpaid 7 days after the contract start date; reasons, red, list only, never deactivates, payment-plan drivers left out); weekly total collected (Monday to Sunday, Chicago, with earlier weeks); deposits collected and pending; collections. Everything is worked out on read from the ledger and the signed contract.
 - **Dashboard** (D88; one card per card of the client's existing dashboard, worked out on the server by `GET /dashboard`) —
   headline tiles (gross processed, matched value, queue value, fleet balance); collected today / 7 days / 30 days / this week,
   average and largest payment; drivers active (daily / weekly), weekly due today, billing due today, applications pending;

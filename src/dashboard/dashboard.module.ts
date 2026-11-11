@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { SmsModule } from "../sms/sms.module.js";
 import { DashboardController } from "./dashboard.controller.js";
+import { DailyOperationsService } from "./daily-ops.service.js";
 import { DashboardService } from "./dashboard.service.js";
 
 /**
@@ -10,6 +11,6 @@ import { DashboardService } from "./dashboard.service.js";
 @Module({
   imports: [SmsModule],
   controllers: [DashboardController],
-  providers: [DashboardService],
+  providers: [DashboardService, DailyOperationsService],
 })
 export class DashboardModule {}

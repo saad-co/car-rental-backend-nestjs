@@ -56,6 +56,10 @@ export class DriverDto {
   balanceCents: number;
   /** The application this driver came from (D84), for the link between the two pages; null for imported drivers. */
   applicationId: string | null;
+  /** The time of day rent is due, Chicago time as `HH:MM` (24 hours), or null = not set (D92). */
+  rentDueTime: string | null;
+  /** Marked "On Payment Plan" by staff (D92): left out of the Should Be Deactivated list while true. */
+  onPaymentPlan: boolean;
 }
 
 /**
