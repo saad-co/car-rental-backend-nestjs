@@ -6,6 +6,7 @@ import {
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
+  type Relation,
   Unique,
   UpdateDateColumn,
 } from "typeorm";
@@ -48,7 +49,8 @@ export class SmsAttachment {
     onDelete: "CASCADE",
   })
   @JoinColumn({ name: "message_id" })
-  message?: SmsMessage;
+  // `Relation<>` keeps the compiled ESM from reading `SmsMessage` while its module is still loading (the entity import cycle).
+  message?: Relation<SmsMessage>;
 
   /** 0, 1, 2... the order of the files in the text. */
   @Column({ type: "integer" })
