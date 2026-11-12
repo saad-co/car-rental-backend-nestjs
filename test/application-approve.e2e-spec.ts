@@ -149,7 +149,7 @@ describe("Approve and decline send texts (test database)", () => {
         applicationId,
         adminId,
       );
-      await db.query(`TRUNCATE sms_attachments, sms_messages`);
+      await db.query(`TRUNCATE sms_attachments, sms_messages CASCADE`);
       [{ id: applicationId }] = (await db.query(
         `INSERT INTO applications (request_id, first_name, last_name, email, phone, payload)
          VALUES ('r2', 'Pat', 'Again', 'pat@test.dev', '(305) 721-0911', '{}') RETURNING id`,

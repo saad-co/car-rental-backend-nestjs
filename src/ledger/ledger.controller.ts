@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
 } from "@nestjs/common";
@@ -19,6 +20,7 @@ import {
 } from "./dto/ledger-read.dto.js";
 import {
   CreateLedgerEntryDto,
+  EditLedgerEntryDto,
   LedgerEntryDto,
   ReverseLedgerEntryDto,
 } from "./dto/ledger-entry.dto.js";
@@ -92,6 +94,23 @@ export class LedgerController {
     @CurrentUser() admin: AuthenticatedUser,
   ): Promise<LedgerEntryDto> {
     return this.ledger.addManualEntry(id, body, admin.id);
+  }
+
+  /**
+   * `PATCH /drivers/:id/ledger/entries/:entryId`: corrects an entry's amount, date, description or memo IN PLACE (D99): the
+   * entry itself changes, nothing is added (a payment is changed on the payment itself too, so the two never disagree), and
+   * the audit trail records who, when and the before and after values. `200` the entry; `400` nothing changed, a future
+   * date, an amount below the credits applied to a charge or above what is left on its charge, or a field a payment from
+   * an email cannot take; `404` no such entry on this driver; `409` a reversal or an entry that was reversed.
+   */
+  @Patch("entries/:entryId")
+  edit(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Param("entryId", ParseUUIDPipe) entryId: string,
+    @Body() body: EditLedgerEntryDto,
+    @CurrentUser() admin: AuthenticatedUser,
+  ): Promise<LedgerEntryDto> {
+    return this.ledger.edit(id, entryId, body, admin.id);
   }
 
   /**

@@ -8,7 +8,7 @@ import {
 } from "@nestjs/common";
 import { InjectDataSource } from "@nestjs/typeorm";
 import { randomUUID } from "node:crypto";
-import { DataSource } from "typeorm";
+import { DataSource, In } from "typeorm";
 import { FILE_LINK_SECONDS } from "../../sms/storage/file-storage.js";
 import { Driver } from "../../drivers/driver.entity.js";
 import { Application } from "../application.entity.js";
@@ -19,6 +19,7 @@ import {
 import {
   ApplicationDocument,
   ApplicationDocumentKind,
+  OTHER_SLOT_COUNT,
   ApplicationDocumentOrigin,
   ApplicationDocumentStatus,
 } from "./application-document.entity.js";
@@ -29,6 +30,7 @@ import type {
 import {
   DOCUMENT_LABEL,
   DRIVER_DOCUMENT_KINDS,
+  DRIVER_OWNED_KINDS,
   checkUpload,
   documentStorageKey,
   driverDocumentStorageKey,
@@ -87,16 +89,18 @@ export class ApplicationDocumentsService {
       relations: { uploadedBy: true },
     });
     if (contractOf !== undefined && "applicationId" in owner) {
-      const contract = await repository.findOne({
-        where: { driverId: contractOf, kind: ApplicationDocumentKind.contract },
-        relations: { uploadedBy: true },
-      });
-      if (contract) rows.push(contract);
+      // The driver's own files (contract, licence back, "Other") are never kept on the application.
+      rows.push(
+        ...(await repository.find({
+          where: { driverId: contractOf, kind: In([...DRIVER_OWNED_KINDS]) },
+          relations: { uploadedBy: true },
+        })),
+      );
     }
     rows.sort(
       (a, b) =>
         DRIVER_DOCUMENT_KINDS.indexOf(a.kind) -
-        DRIVER_DOCUMENT_KINDS.indexOf(b.kind),
+          DRIVER_DOCUMENT_KINDS.indexOf(b.kind) || a.slot - b.slot,
     );
     return {
       items: await Promise.all(rows.map((row) => this.toDto(row))),
@@ -122,20 +126,21 @@ export class ApplicationDocumentsService {
     file: Express.Multer.File,
     adminId: string,
   ): Promise<ApplicationDocumentDto> {
-    if (kind === ApplicationDocumentKind.contract) {
-      // Application rows are deleted with the application (CASCADE); a signed contract must outlive it (D90).
+    if (DRIVER_OWNED_KINDS.includes(kind)) {
+      // Application rows are deleted with the application (CASCADE); these files must outlive it (D90).
       throw new BadRequestException(
-        "A signed contract belongs to a driver, not an application. Upload it on the driver's page.",
+        `${DOCUMENT_LABEL[kind]} belongs to a driver, not an application. Upload it on the driver's page.`,
       );
     }
     await this.requireApplication(applicationId);
-    return this.store({ applicationId }, kind, file, adminId);
+    return this.store({ applicationId }, kind, 0, null, file, adminId);
   }
 
   /**
    * Puts `file` in the `kind` slot of a driver (D85). A driver that came from an application uses that application's slot,
    * so the two pages always show the same file; one added directly has its own rows. The signed contract (D90) is the
-   * exception: it is always the driver's own row, whether or not the driver has an application.
+   * exception: it is always the driver's own row, whether or not the driver has an application. So are the back of the
+   * licence and the "Other" files (fleet revisions section 3); an "Other" file needs a `slot` (1 to 5) and a `label`.
    * @throws NotFoundException unknown driver.
    * @throws BadRequestException / ServiceUnavailableException as `upload`.
    */
@@ -144,18 +149,36 @@ export class ApplicationDocumentsService {
     kind: ApplicationDocumentKind,
     file: Express.Multer.File,
     adminId: string,
+    other?: { slot?: number; label?: string },
   ): Promise<ApplicationDocumentDto> {
-    const owner: Owner =
-      kind === ApplicationDocumentKind.contract
-        ? await this.driverOwnRows(driverId)
-        : await this.ownerOfDriver(driverId);
-    return this.store(owner, kind, file, adminId);
+    let slot = 0;
+    let label: string | null = null;
+    if (kind === ApplicationDocumentKind.other) {
+      slot = other?.slot ?? 0;
+      label = other?.label?.trim() || null;
+      if (!Number.isInteger(slot) || slot < 1 || slot > OTHER_SLOT_COUNT) {
+        throw new BadRequestException(
+          `slot must be a number from 1 to ${OTHER_SLOT_COUNT} for an "Other" document.`,
+        );
+      }
+      if (!label || label.length > 60) {
+        throw new BadRequestException(
+          'label is required for an "Other" document (1 to 60 characters).',
+        );
+      }
+    }
+    const owner: Owner = DRIVER_OWNED_KINDS.includes(kind)
+      ? await this.driverOwnRows(driverId)
+      : await this.ownerOfDriver(driverId);
+    return this.store(owner, kind, slot, label, file, adminId);
   }
 
   /** The shared body of both uploads: the slot of `owner` gets the new file. */
   private async store(
     owner: Owner,
     kind: ApplicationDocumentKind,
+    slot: number,
+    label: string | null,
     file: Express.Multer.File,
     adminId: string,
   ): Promise<ApplicationDocumentDto> {
@@ -191,10 +214,11 @@ export class ApplicationDocumentsService {
           // Lock the slot's row (if there is one), so a copy finishing at the same moment, or a second upload,
           // waits here and then sees this result.
           const existing = await manager.findOne(ApplicationDocument, {
-            where: { ...owner, kind },
+            where: { ...owner, kind, slot },
             lock: { mode: "pessimistic_write" },
           });
           const values = {
+            label,
             origin: ApplicationDocumentOrigin.admin,
             // An upload over a firma copy makes the slot the admin's (D90); the contract page keeps its own file.
             contractId: null,
@@ -216,6 +240,7 @@ export class ApplicationDocumentsService {
               "applicationId" in owner ? owner.applicationId : null,
             driverId: "driverId" in owner ? owner.driverId : null,
             kind,
+            slot,
             ...values,
           });
           return {
@@ -287,6 +312,8 @@ export class ApplicationDocumentsService {
     return {
       id: row.id,
       kind: row.kind,
+      slot: row.slot,
+      label: row.label,
       status: row.status,
       origin: row.origin,
       contentType: row.contentType,

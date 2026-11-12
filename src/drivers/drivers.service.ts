@@ -343,8 +343,8 @@ export class DriversService {
   }
 
   /**
-   * Changes the rent settings of a driver (D92): the time of day rent is due (Chicago time) and the "On Payment Plan"
-   * flag. A field left out stays; `rentDueTime` sent as `null` is cleared. Nothing else changes: no ledger entry, no
+   * Changes the rent settings of a driver (D92): the time of day rent is due (Chicago time), the "On Payment Plan"
+   * flag and the two reminder switches (Fleet revisions section 6). A field left out stays; `rentDueTime` sent as `null` is cleared. Nothing else changes: no ledger entry, no
    * billing (rent comes from the signed contract, D83), only what the dashboard reads.
    * @throws NotFoundException unknown driver.
    */
@@ -358,6 +358,12 @@ export class DriversService {
       if (dto.rentDueTime !== undefined) driver.rentDueTime = dto.rentDueTime;
       if (dto.onPaymentPlan !== undefined) {
         driver.onPaymentPlan = dto.onPaymentPlan;
+      }
+      if (dto.upcomingRemindersEnabled !== undefined) {
+        driver.upcomingRemindersEnabled = dto.upcomingRemindersEnabled;
+      }
+      if (dto.balanceRemindersEnabled !== undefined) {
+        driver.balanceRemindersEnabled = dto.balanceRemindersEnabled;
       }
       await manager.save(driver);
     });
@@ -917,6 +923,9 @@ export class DriversService {
       sentToCollectionsAt: driver.sentToCollectionsAt,
       rentDueTime: driver.rentDueTime?.slice(0, 5) ?? null, // `18:00:00` from Postgres -> `18:00`
       onPaymentPlan: driver.onPaymentPlan,
+      smsOptedOut: driver.smsOptedOut,
+      upcomingRemindersEnabled: driver.upcomingRemindersEnabled,
+      balanceRemindersEnabled: driver.balanceRemindersEnabled,
     };
   }
 }

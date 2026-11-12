@@ -33,15 +33,31 @@ export const DOCUMENT_KINDS = [
   ApplicationDocumentKind.earnings,
 ] as const;
 
-/** Every slot a driver's page can show, in display order: the three above, then the signed contract (D90). */
+/** Every kind a driver's page can show, in display order: licence front and back, rating, earnings, contract, others. */
 export const DRIVER_DOCUMENT_KINDS = [
-  ...DOCUMENT_KINDS,
+  ApplicationDocumentKind.license,
+  ApplicationDocumentKind.license_back,
+  ApplicationDocumentKind.rating,
+  ApplicationDocumentKind.earnings,
   ApplicationDocumentKind.contract,
+  ApplicationDocumentKind.other,
 ] as const;
+
+/**
+ * The kinds that are always the driver's own rows, never an application's (so deleting an application cannot take them
+ * with it): the signed contract (D90) and the fleet-revisions additions.
+ */
+export const DRIVER_OWNED_KINDS: readonly ApplicationDocumentKind[] = [
+  ApplicationDocumentKind.contract,
+  ApplicationDocumentKind.license_back,
+  ApplicationDocumentKind.other,
+];
 
 /** How a slot is named in messages. */
 export const DOCUMENT_LABEL: Record<ApplicationDocumentKind, string> = {
-  [ApplicationDocumentKind.license]: "Driver's licence",
+  [ApplicationDocumentKind.license]: "Driver's licence (front)",
+  [ApplicationDocumentKind.license_back]: "Driver's licence (back)",
+  [ApplicationDocumentKind.other]: "Other document",
   [ApplicationDocumentKind.rating]: "Rating screenshot",
   [ApplicationDocumentKind.earnings]: "Proof of earnings",
   [ApplicationDocumentKind.contract]: "Signed contract",

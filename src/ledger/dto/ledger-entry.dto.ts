@@ -96,6 +96,41 @@ export class ReverseLedgerEntryDto {
   reason: string;
 }
 
+/**
+ * Body of `PATCH /drivers/:id/ledger/entries/:entryId`: staff correct an entry that was logged wrongly (Fleet revisions
+ * section 5, confirmed by the client). Send only what changes; at least one field must differ from the entry.
+ */
+export class EditLedgerEntryDto {
+  /** The new amount in whole cents, 1 to 1,000,000 ($10,000). */
+  @IsOptional()
+  @IsInt({ message: "The amount must be a whole number of cents." })
+  @Min(1, { message: "The amount must be more than $0." })
+  @Max(MAX_MANUAL_ENTRY_CENTS, {
+    message: "The amount can be at most $10,000.",
+  })
+  amountCents?: number;
+
+  /** The new day the entry belongs to, `YYYY-MM-DD` in Chicago: a real day, not in the future. */
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: "The date must be YYYY-MM-DD." })
+  effectiveDate?: string;
+
+  /** The new description, 1 to 500 characters after trimming. */
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MinLength(1, { message: "The description is empty." })
+  @MaxLength(MAX_DESCRIPTION_LENGTH)
+  description?: string;
+
+  /** The new staff-only memo, up to 500 characters; an empty string clears it. */
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(MAX_DESCRIPTION_LENGTH)
+  internalNote?: string;
+}
+
 /** One ledger entry, as the driver page shows it. */
 export class LedgerEntryDto {
   id: string;
@@ -124,6 +159,10 @@ export class LedgerEntryDto {
   reversedById: string | null;
   /** True when an admin may reverse it here: not a reversal, not a payment credit, not reversed already. */
   canReverse: boolean;
+  /**
+   * True when an admin may correct it here: not a reversal and not reversed (a reversed entry is cancelled).
+   */
+  canEdit: boolean;
   /** Null for entries made by the system (payment credits from matching). */
   createdById: string | null;
   createdByEmail: string | null;

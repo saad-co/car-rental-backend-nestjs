@@ -1,4 +1,3 @@
-import { ConflictException } from "@nestjs/common";
 import type { MessageTemplatesService } from "../src/message-templates/message-templates.service.js";
 import { plainToInstance } from "class-transformer";
 import { validateSync } from "class-validator";
@@ -125,6 +124,10 @@ describe("ApplicationsService.deleteMany (test database)", () => {
       "TRUNCATE sms_attachments, sms_messages, application_documents, applications, drivers, users CASCADE",
     );
     storage = new FakeStorage();
+    await db.query(
+      `INSERT INTO users (id, email, password_hash, role) VALUES ($1, 'deleter@admin.test', 'x', 'admin')`,
+      [ADMIN_ID],
+    );
   });
 
   afterAll(async () => {
@@ -180,20 +183,89 @@ describe("ApplicationsService.deleteMany (test database)", () => {
     expect(storage.files.has(samPhoto)).toBe(true);
   });
 
-  it("refuses the whole batch if one is approved, naming it, and deletes nothing", async () => {
+  it("deletes an approved application too: its driver stays with the files, and each delete is logged with who and what", async () => {
     const pending = await addApplication("Pat", "3125550101");
     const approved = await addApplication("Ada", "3125550199", "approved");
+    const [{ driver_id: driverId }] = (await db.query(
+      `SELECT driver_id FROM applications WHERE id = $1`,
+      [approved],
+    )) as [{ driver_id: string }];
 
-    const error = await service()
-      .deleteMany([pending, approved], ADMIN_ID)
-      .catch((e: unknown) => e);
+    const result = await service().deleteMany([pending, approved], ADMIN_ID);
 
-    expect(error).toBeInstanceOf(ConflictException);
-    expect((error as Error).message).toContain("Ada Applicant");
-    expect((error as Error).message).toContain("Nothing was deleted");
-    expect(await count("applications")).toBe(2);
-    expect(await count("application_documents")).toBe(2);
-    expect(storage.files.size).toBe(2);
+    expect(result).toEqual({ deleted: 2, filesNotRemoved: 0 });
+    expect(await count("applications")).toBe(0);
+    expect(await count("drivers")).toBe(1);
+    // Pat's licence went with the application; Ada's was handed to her driver and its file is still in the bucket.
+    const kept = (await db.query(
+      `SELECT application_id, driver_id, kind, origin, storage_key FROM application_documents`,
+    )) as {
+      application_id: string | null;
+      driver_id: string | null;
+      kind: string;
+      origin: string;
+      storage_key: string;
+    }[];
+    expect(kept).toHaveLength(1);
+    expect(kept[0]).toMatchObject({
+      application_id: null,
+      driver_id: driverId,
+      kind: "license",
+      origin: "website",
+    });
+    expect(storage.files.has(kept[0].storage_key)).toBe(true);
+    expect(storage.files.size).toBe(1);
+
+    const log = (await db.query(
+      `SELECT actor_id, actor_email, action, entity_type, entity_id, before, after, created_at
+       FROM audit_logs ORDER BY before->>'firstName'`,
+    )) as {
+      actor_id: string;
+      actor_email: string;
+      action: string;
+      entity_type: string;
+      entity_id: string;
+      before: Record<string, unknown>;
+      after: unknown;
+      created_at: Date;
+    }[];
+    expect(log).toHaveLength(2);
+    expect(log[0]).toMatchObject({
+      actor_id: ADMIN_ID,
+      actor_email: "deleter@admin.test",
+      action: "application.delete",
+      entity_type: "application",
+      entity_id: approved,
+      after: null,
+    });
+    expect(log[0].before).toMatchObject({
+      firstName: "Ada",
+      lastName: "Applicant",
+      status: "approved",
+      driverId,
+    });
+    expect(log[1]).toMatchObject({ entity_id: pending });
+    expect(log[1].before).toMatchObject({
+      firstName: "Pat",
+      status: "pending",
+    });
+    expect(log[0].created_at).toBeInstanceOf(Date);
+  });
+
+  it("writes no audit line when nothing was deleted", async () => {
+    await service().deleteMany([UNKNOWN_ID], ADMIN_ID);
+    expect(await count("audit_logs")).toBe(0);
+  });
+
+  it("the audit trail refuses an update or a delete", async () => {
+    const id = await addApplication("Pat", "3125550101");
+    await service().deleteMany([id], ADMIN_ID);
+    await expect(
+      db.query(`UPDATE audit_logs SET action = 'x'`),
+    ).rejects.toThrow(/append-only/);
+    await expect(db.query(`DELETE FROM audit_logs`)).rejects.toThrow(
+      /append-only/,
+    );
   });
 
   it("ignores unknown ids, so deleting twice is not an error", async () => {

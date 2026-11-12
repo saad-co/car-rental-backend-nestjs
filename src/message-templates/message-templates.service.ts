@@ -11,10 +11,32 @@ import { isUniqueViolation } from "../database/postgres-errors.js";
 import { MessageTemplateDto } from "./dto/message-template.dto.js";
 import { MessageTemplate, TemplateKind } from "./message-template.entity.js";
 
-/** The placeholders each kind of text may use. Payment reminders (M6) will add `{balance}`, `{daysLate}`, `{rate}`. */
+/**
+ * The placeholders each kind of text may use. `{paymentLink}` is the optional link where drivers pay (one setting, empty
+ * until the client says what it is): a line that contains it is left out of the text while the link is empty.
+ */
 const PLACEHOLDERS: Record<TemplateKind, readonly string[]> = {
   [TemplateKind.application_approved]: ["firstName", "lastName"],
   [TemplateKind.application_declined]: ["firstName", "lastName"],
+  [TemplateKind.reminder_upcoming]: [
+    "firstName",
+    "amount",
+    "due",
+    "paymentLink",
+  ],
+  [TemplateKind.reminder_late]: ["firstName", "balance", "paymentLink"],
+  [TemplateKind.reminder_high_balance]: [
+    "firstName",
+    "missedCount",
+    "balance",
+    "paymentLink",
+  ],
+  [TemplateKind.reminder_balance]: ["firstName", "balance", "paymentLink"],
+  [TemplateKind.reminder_payment_received]: [
+    "firstName",
+    "balance",
+    "paymentLink",
+  ],
 };
 
 /** Every `{word}` in a text. */
@@ -139,6 +161,18 @@ export class MessageTemplatesService {
       text = first.body;
     }
     this.checkPlaceholders(kind, text);
+    // A line whose placeholder has an empty value (the payment link, until it is set) is left out, so no "Pay here:" is
+    // texted with nothing after it.
+    text = text
+      .split("\n")
+      .filter(
+        (line) =>
+          ![...line.matchAll(PLACEHOLDER_PATTERN)].some(
+            (match) => values[match[1]] === "",
+          ),
+      )
+      .join("\n")
+      .trim();
     return text.replace(PLACEHOLDER_PATTERN, (whole, name: string) =>
       Object.hasOwn(values, name) ? values[name] : whole,
     );

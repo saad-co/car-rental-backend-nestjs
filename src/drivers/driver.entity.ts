@@ -214,6 +214,41 @@ export class Driver {
   onPaymentPlan: boolean;
 
   /**
+   * The driver texted STOP (or a variant): never text them again until they text START (spec section 8). Set by the Quo
+   * webhook only.
+   */
+  @Column({ name: "sms_opted_out", type: "boolean", default: false })
+  smsOptedOut: boolean;
+
+  /** Staff switch (Fleet revisions section 6): send this weekly driver the "payment due in 48 hours" text. On by default. */
+  @Column({
+    name: "upcoming_reminders_enabled",
+    type: "boolean",
+    default: true,
+  })
+  upcomingRemindersEnabled: boolean;
+
+  /** Staff switch (Fleet revisions section 6): send this driver balance reminders. On by default. */
+  @Column({
+    name: "balance_reminders_enabled",
+    type: "boolean",
+    default: true,
+  })
+  balanceRemindersEnabled: boolean;
+
+  /**
+   * When the driver's current "behind" stretch began: set by the reminder job when it first sees a late rent charge, cleared
+   * when the driver has none. It makes "each threshold sends once" mean once per time the driver falls behind. Null = not
+   * behind. Written only by the job.
+   */
+  @Column({
+    name: "late_episode_started_at",
+    type: "timestamptz",
+    nullable: true,
+  })
+  lateEpisodeStartedAt: Date | null;
+
+  /**
    * How the driver left, when it was noted and by whom (D81). Set when they are deactivated or sent to collections;
    * cleared on reactivation. Null for drivers deactivated before this existed ("reason not recorded").
    */

@@ -258,6 +258,37 @@ describe("SmsService (test database)", () => {
       });
     });
 
+    it("STOP from a driver switches texts to them off, START back on, and a longer message changes nothing (spec section 8)", async () => {
+      const optedOut = async () =>
+        (
+          (await db.query(
+            `SELECT sms_opted_out AS "optedOut" FROM drivers WHERE id = $1`,
+            [driverId],
+          )) as [{ optedOut: boolean }]
+        )[0].optedOut;
+      const text = (id: string, body: string) =>
+        webhook(
+          "message.received",
+          { id, text: body },
+          { senderIdentifier: DRIVER },
+        );
+
+      await service().applyWebhookEvent(text("AC10", "please stop by later"));
+      expect(await optedOut()).toBe(false);
+
+      await service().applyWebhookEvent(text("AC11", "STOP"));
+      expect(await optedOut()).toBe(true);
+      // The same event delivered again changes nothing.
+      await service().applyWebhookEvent(text("AC11", "STOP"));
+      expect(await optedOut()).toBe(true);
+
+      await service().applyWebhookEvent(text("AC12", "Start"));
+      expect(await optedOut()).toBe(false);
+      // A late repeat of the old STOP must not undo the START.
+      await service().applyWebhookEvent(text("AC11", "STOP"));
+      expect(await optedOut()).toBe(false);
+    });
+
     it("status only moves forward, whatever order the events arrive in", async () => {
       const outgoing = { direction: "outgoing" };
       const context = {

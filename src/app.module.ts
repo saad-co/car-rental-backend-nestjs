@@ -8,6 +8,9 @@ import { AppService } from "./app.service.js";
 import { validateEnv } from "./config/env.validation.js";
 import { buildBaseOptions } from "./database/typeorm-options.js";
 import { DriversModule } from "./drivers/drivers.module.js";
+import { AuditModule } from "./audit/audit.module.js";
+import { RemindersModule } from "./reminders/reminders.module.js";
+import { SettingsModule } from "./settings/settings.module.js";
 import { ApplicationsModule } from "./applications/applications.module.js";
 import { ContractsModule } from "./contracts/contracts.module.js";
 import { DashboardModule } from "./dashboard/dashboard.module.js";
@@ -37,6 +40,9 @@ import { UsersModule } from "./users/users.module.js";
     ScheduleModule.forRoot(),
     UsersModule,
     AuthModule,
+    AuditModule,
+    SettingsModule,
+    RemindersModule,
     ApplicationsModule,
     LedgerPresetsModule,
     ContractsModule,

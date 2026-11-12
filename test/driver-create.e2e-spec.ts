@@ -647,6 +647,114 @@ describe("an admin adds a driver directly (D85, test database)", () => {
       ).rejects.toThrow(NotFoundException);
     });
 
+    describe("licence back and Other files (fleet revisions section 3)", () => {
+      it("keeps the back and up to five labelled Other files on the driver, in display order, apart from the application's files", async () => {
+        const [{ id: driverId }] = (await db.query(
+          `INSERT INTO drivers (first_name, last_name, email, phone) VALUES ('Sam', 'Applied', 'sam@test.dev', '+13125550102') RETURNING id`,
+        )) as [{ id: string }];
+        const [{ id: applicationId }] = (await db.query(
+          `INSERT INTO applications (request_id, first_name, last_name, email, phone, payload, status, driver_id)
+           VALUES (gen_random_uuid(), 'Sam', 'Applied', 'sam@test.dev', '3125550102', '{}', 'approved', $1) RETURNING id`,
+          [driverId],
+        )) as [{ id: string }];
+        const documents = documentsService();
+
+        await documents.uploadForDriver(
+          driverId,
+          ApplicationDocumentKind.license_back,
+          upload(PNG),
+          adminId,
+        );
+        await documents.uploadForDriver(
+          driverId,
+          ApplicationDocumentKind.other,
+          upload(PNG),
+          adminId,
+          { slot: 2, label: "Insurance card" },
+        );
+        const first = await documents.uploadForDriver(
+          driverId,
+          ApplicationDocumentKind.other,
+          upload(PDF),
+          adminId,
+          { slot: 1, label: "  Proof of address " },
+        );
+
+        expect(first).toMatchObject({
+          kind: "other",
+          slot: 1,
+          label: "Proof of address",
+        });
+        const listed = (await documents.listForDriver(driverId)).items;
+        expect(listed.map((d) => [d.kind, d.slot, d.label])).toEqual([
+          ["license_back", 0, null],
+          ["other", 1, "Proof of address"],
+          ["other", 2, "Insurance card"],
+        ]);
+        // All three are the driver's own rows: none on the application, so deleting the application keeps them.
+        const rows = (await db.query(
+          `SELECT application_id, driver_id FROM application_documents`,
+        )) as { application_id: string | null; driver_id: string | null }[];
+        expect(rows.every((r) => r.application_id === null)).toBe(true);
+        await db.query(`DELETE FROM applications WHERE id = $1`, [
+          applicationId,
+        ]);
+        expect(
+          (await documents.listForDriver(driverId)).items.map((d) => d.kind),
+        ).toEqual(["license_back", "other", "other"]);
+
+        // Uploading into a filled slot replaces it, with the new label, and removes the old file.
+        const oldKey = (await documentRows(driverId)).find(
+          (r) => r.kind === "other",
+        )!.storage_key;
+        await documents.uploadForDriver(
+          driverId,
+          ApplicationDocumentKind.other,
+          upload(PNG),
+          adminId,
+          { slot: 1, label: "Utility bill" },
+        );
+        expect(storage.files.has(oldKey)).toBe(false);
+        expect(
+          (await documents.listForDriver(driverId)).items.map((d) => d.label),
+        ).toEqual([null, "Utility bill", "Insurance card"]);
+      });
+
+      it("refuses an Other file without a label or with a slot outside 1 to 5, and these kinds on an application", async () => {
+        const driver = await create();
+        const documents = documentsService();
+        const other = (extra?: { slot?: number; label?: string }) =>
+          documents.uploadForDriver(
+            driver.id,
+            ApplicationDocumentKind.other,
+            upload(PNG),
+            adminId,
+            extra,
+          );
+
+        await expect(other()).rejects.toThrow(BadRequestException);
+        await expect(other({ slot: 1 })).rejects.toThrow(/label is required/);
+        await expect(other({ slot: 1, label: "   " })).rejects.toThrow(
+          /label is required/,
+        );
+        await expect(other({ slot: 6, label: "Six" })).rejects.toThrow(
+          /from 1 to 5/,
+        );
+        await expect(other({ slot: 0, label: "Zero" })).rejects.toThrow(
+          /from 1 to 5/,
+        );
+        expect(await documentRows(driver.id)).toHaveLength(0);
+        await expect(
+          documents.upload(
+            "00000000-0000-0000-0000-000000000000",
+            ApplicationDocumentKind.license_back,
+            upload(PNG),
+            adminId,
+          ),
+        ).rejects.toThrow(/belongs to a driver/);
+      });
+    });
+
     describe("the signed contract (D90)", () => {
       /** A driver that came from an application that already holds a licence file. */
       async function driverWithApplication() {
