@@ -6,6 +6,7 @@ import {
   ParseEnumPipe,
   ParseUUIDPipe,
   Put,
+  Query,
   UploadedFile,
   UseFilters,
   UseInterceptors,
@@ -14,6 +15,7 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiBody, ApiConsumes } from "@nestjs/swagger";
 import { CurrentUser } from "../../auth/current-user.decorator.js";
 import type { AuthenticatedUser } from "../../auth/jwt-auth.guard.js";
+import { UploadDocumentQueryDto } from "./dto/upload-document-query.dto.js";
 import { ApplicationDocumentKind } from "./application-document.entity.js";
 import { ApplicationDocumentsService } from "./application-documents.service.js";
 import type {
@@ -43,8 +45,9 @@ export class DriverDocumentsController {
 
   /**
    * `PUT /drivers/:id/documents/:kind`: puts one file (multipart field `file`) in the licence, rating, earnings or
-   * contract slot, replacing what is there. The contract (D90) is always kept on the driver itself. JPG, PNG or PDF,
-   * at most 10 MB; `400` otherwise. Returns the slot.
+   * contract slot, replacing what is there. The contract (D90), the back of the licence (`license_back`) and the
+   * "Other" files (`other`, with `?slot=1..5&label=...`) are always kept on the driver itself. JPG, PNG or PDF, at most
+   * 10 MB; `400` otherwise. Returns the slot.
    */
   @Put(":id/documents/:kind")
   @UseFilters(UploadTooLargeFilter)
@@ -63,10 +66,11 @@ export class DriverDocumentsController {
     @Param("id", ParseUUIDPipe) id: string,
     @Param("kind", new ParseEnumPipe(ApplicationDocumentKind))
     kind: ApplicationDocumentKind,
+    @Query() query: UploadDocumentQueryDto,
     @UploadedFile() file: Express.Multer.File | undefined,
     @CurrentUser() admin: AuthenticatedUser,
   ): Promise<ApplicationDocumentDto> {
     if (!file) throw new BadRequestException("file is required.");
-    return this.documents.uploadForDriver(id, kind, file, admin.id);
+    return this.documents.uploadForDriver(id, kind, file, admin.id, query);
   }
 }

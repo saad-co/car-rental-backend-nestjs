@@ -31,6 +31,7 @@ import {
 } from "./quo/quo-failure-message.js";
 import type { QuoMessageEvent } from "./quo/quo-webhook-event.js";
 import { SmsAttachment, SmsAttachmentStatus } from "./sms-attachment.entity.js";
+import { optOutKeyword } from "./opt-out.js";
 import { SmsContactKind } from "./sms-contact.js";
 import {
   SMS_STATUS_RANK,
@@ -167,6 +168,21 @@ export class SmsService {
       `Check the number on the ${kind === SmsContactKind.drivers ? "driver" : "application"}.`,
     );
     return this.toMessageDto(await this.loadWithRelations(message.id));
+  }
+
+  /**
+   * Texts a driver's phone on behalf of the system (a payment reminder, Fleet revisions section 6), according to
+   * SMS_MODE: `dry_run` only saves the text, `live` sends it, `off` is refused. Every attempt, failures included, is saved
+   * in `sms_messages` (so it shows in the driver's chat). Throws `HttpException`s with plain messages, which the caller
+   * records; unlike `sendAlert` it returns the saved text, whose `mode` says what really happened.
+   */
+  sendSystem(contactPhone: string, text: string): Promise<SmsMessage> {
+    return this.deliver(
+      contactPhone,
+      text,
+      null,
+      "Check the number on the driver.",
+    );
   }
 
   /**
@@ -448,6 +464,22 @@ export class SmsService {
       event.contactPhone,
       null,
     );
+    // STOP and START from a driver switch every text to them off and on (spec section 8). Only a new inbound text counts,
+    // so a late or repeated webhook cannot undo a later START.
+    if (created && event.message.direction === "incoming") {
+      const keyword = optOutKeyword(event.message.text);
+      if (keyword) {
+        await this.dataSource
+          .getRepository(Driver)
+          .update(
+            { phone: event.contactPhone },
+            { smsOptedOut: keyword === "stop" },
+          );
+        this.logger.log(
+          `A driver texted ${keyword.toUpperCase()}: texts to ${event.contactPhone} are now ${keyword === "stop" ? "off" : "on"}.`,
+        );
+      }
+    }
     return created
       ? `stored ${event.message.id}`
       : `updated ${event.message.id}`;

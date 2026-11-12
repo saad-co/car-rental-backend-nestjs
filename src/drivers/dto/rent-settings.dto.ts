@@ -31,4 +31,14 @@ export class UpdateDriverRentSettingsDto {
   @IsOptional()
   @IsBoolean()
   onPaymentPlan?: boolean;
+
+  /** Send this weekly driver the "payment due in 48 hours" text (Fleet revisions section 6). */
+  @IsOptional()
+  @IsBoolean()
+  upcomingRemindersEnabled?: boolean;
+
+  /** Send this driver balance reminders (Fleet revisions section 6). */
+  @IsOptional()
+  @IsBoolean()
+  balanceRemindersEnabled?: boolean;
 }

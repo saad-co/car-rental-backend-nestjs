@@ -134,6 +134,659 @@
         ]
       }
     },
+    "/settings/reminders": {
+      "get": {
+        "operationId": "RemindersController_getSettings",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReminderSettingsDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`GET /settings/reminders`: the switch, the payment link, and how texting is set up.",
+        "tags": [
+          "Reminders"
+        ]
+      },
+      "put": {
+        "operationId": "RemindersController_saveSettings",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateReminderSettingsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReminderSettingsDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`PUT /settings/reminders`: turns the automatic reminders on or off and sets the payment link. Off by default: nothing is\ntexted until an admin turns it on. `400` for a link that is not an http(s) address.",
+        "tags": [
+          "Reminders"
+        ]
+      }
+    },
+    "/drivers/{id}/reminders": {
+      "get": {
+        "operationId": "RemindersController_listForDriver",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "description": "Page number, starting at 1.",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "description": "Items per page (1 to 100).",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReminderLogListDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`GET /drivers/:id/reminders`: the reminders sent to the driver, newest first. `404` unknown driver.",
+        "tags": [
+          "Reminders"
+        ]
+      }
+    },
+    "/dashboard": {
+      "get": {
+        "operationId": "DashboardController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`GET /dashboard`: every number on the dashboard in one response (money in cents, Chicago days). `401` no token.",
+        "tags": [
+          "Dashboard"
+        ]
+      }
+    },
+    "/dashboard/daily-operations": {
+      "get": {
+        "operationId": "DashboardController_dailyOperationsPage",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DailyOperationsDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`GET /dashboard/daily-operations`: the daily operations page (D92): payments due today, late payments, early warning.\nComputed from the ledger and the signed contracts when read. `401` no token.",
+        "tags": [
+          "Dashboard"
+        ]
+      }
+    },
+    "/dashboard/collections": {
+      "get": {
+        "operationId": "DashboardController_collectionsPage",
+        "parameters": [
+          {
+            "name": "view",
+            "required": true,
+            "in": "query",
+            "description": "How to group: one row per month, per Monday-to-Sunday week, or per day.",
+            "schema": {
+              "$ref": "#/components/schemas/CollectionView"
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "First day to include, e.g. `2026-10-01`.",
+            "schema": {
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Last day to include, e.g. `2026-10-15` (the whole day counts).",
+            "schema": {
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "description": "Page number, starting at 1.",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "description": "Items per page (1 to 100).",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionPeriodsDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`GET /dashboard/collections?view=monthly|weekly|daily`: confirmed payments received per month, Monday-to-Sunday week or\nday (Chicago), newest first, paginated, with the total of the whole filter (page 2, D93). Optional `from` / `to` days\n(a custom range). `400` a bad view or day, or `from` after `to`; `401` no token.",
+        "tags": [
+          "Dashboard"
+        ]
+      }
+    },
+    "/dashboard/revenue-by-driver": {
+      "get": {
+        "operationId": "DashboardController_revenueByDriver",
+        "parameters": [
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "description": "Page number, starting at 1.",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "description": "Items per page (1 to 100).",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "First day to include, e.g. `2026-10-01`.",
+            "schema": {
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Last day to include, e.g. `2026-10-15` (the whole day counts).",
+            "schema": {
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevenueByDriverDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`GET /dashboard/revenue-by-driver`: confirmed payments received per driver, biggest first, paginated, with the total of\nthe whole filter (page 2, D93). Optional `from` / `to` days. `400` a bad day, or `from` after `to`; `401` no token.",
+        "tags": [
+          "Dashboard"
+        ]
+      }
+    },
+    "/sms/status": {
+      "get": {
+        "operationId": "SmsController_status",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SmsStatusDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`GET /sms/status`: SMS mode and what is connected.",
+        "tags": [
+          "Sms"
+        ]
+      }
+    },
+    "/sms/{kind}/{id}/messages": {
+      "get": {
+        "operationId": "SmsController_list",
+        "parameters": [
+          {
+            "name": "kind",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "description": "Texts per page (1 to 100), newest first.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 30,
+              "type": "number"
+            }
+          },
+          {
+            "name": "before",
+            "required": false,
+            "in": "query",
+            "description": "The `nextCursor` of the previous page, to get the texts before it. Omit for the newest.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SmsMessageListDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`GET /sms/:kind/:id/messages`: one page of the chat, newest first.",
+        "tags": [
+          "Sms"
+        ]
+      },
+      "post": {
+        "operationId": "SmsController_send",
+        "parameters": [
+          {
+            "name": "kind",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendSmsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SmsMessageDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`POST /sms/:kind/:id/messages`: sends a text, according to SMS_MODE.\n`409` texting is off, `502` Quo refused (the failure is saved and shown in the chat),\n`400` the application's phone is not a US number, `404` unknown record.",
+        "tags": [
+          "Sms"
+        ]
+      }
+    },
+    "/sms/{kind}/{id}/sync": {
+      "post": {
+        "operationId": "SmsController_sync",
+        "parameters": [
+          {
+            "name": "kind",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SmsSyncResultDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`POST /sms/:kind/:id/sync`: pulls this contact's history from Quo (texts sent from the Quo app too).",
+        "tags": [
+          "Sms"
+        ]
+      }
+    },
+    "/sms/{kind}/{id}/files": {
+      "get": {
+        "operationId": "SmsController_files",
+        "parameters": [
+          {
+            "name": "kind",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "description": "Page number, starting at 1.",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "description": "Items per page (1 to 100).",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SmsFileListDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`GET /sms/:kind/:id/files`: the files in this contact's conversation, newest first.",
+        "tags": [
+          "Sms"
+        ]
+      }
+    },
+    "/webhooks/quo": {
+      "post": {
+        "operationId": "QuoWebhookController_receive",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "QuoWebhook"
+        ]
+      }
+    },
+    "/message-templates": {
+      "get": {
+        "operationId": "MessageTemplatesController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MessageTemplateDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "`GET /message-templates`: every template, grouped by kind, with its placeholders and last edit.",
+        "tags": [
+          "MessageTemplates"
+        ]
+      },
+      "post": {
+        "operationId": "MessageTemplatesController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMessageTemplateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageTemplateDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`POST /message-templates`: adds a template. `400` empty, too long or unknown placeholder; `409` name taken.",
+        "tags": [
+          "MessageTemplates"
+        ]
+      }
+    },
+    "/message-templates/{id}": {
+      "put": {
+        "operationId": "MessageTemplatesController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMessageTemplateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageTemplateDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`PUT /message-templates/:id`: replaces a template's name and text. PUT because both are replaced. `400` empty,\ntoo long or unknown placeholder; `404` unknown id; `409` name taken.",
+        "tags": [
+          "MessageTemplates"
+        ]
+      },
+      "delete": {
+        "operationId": "MessageTemplatesController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "summary": "`DELETE /message-templates/:id`: `404` unknown id; `409` if it is the last template of its kind.",
+        "tags": [
+          "MessageTemplates"
+        ]
+      }
+    },
     "/applications": {
       "post": {
         "operationId": "ApplicationsController_receive",
@@ -170,6 +823,29 @@
       "get": {
         "operationId": "ApplicationsController_list",
         "parameters": [
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "description": "Page number, starting at 1.",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "description": "Items per page (1 to 100).",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          },
           {
             "name": "status",
             "required": false,
@@ -231,29 +907,6 @@
             "schema": {
               "maxLength": 100,
               "type": "string"
-            }
-          },
-          {
-            "name": "page",
-            "required": true,
-            "in": "query",
-            "description": "Page number, starting at 1.",
-            "schema": {
-              "minimum": 1,
-              "default": 1,
-              "type": "number"
-            }
-          },
-          {
-            "name": "limit",
-            "required": true,
-            "in": "query",
-            "description": "Items per page (1 to 100).",
-            "schema": {
-              "minimum": 1,
-              "maximum": 100,
-              "default": 20,
-              "type": "number"
             }
           }
         ],
@@ -434,6 +1087,29 @@
         "operationId": "ApplicationsController_listApproved",
         "parameters": [
           {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "description": "Page number, starting at 1.",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "description": "Items per page (1 to 100).",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
             "name": "status",
             "required": false,
             "in": "query",
@@ -494,29 +1170,6 @@
             "schema": {
               "maxLength": 100,
               "type": "string"
-            }
-          },
-          {
-            "name": "page",
-            "required": true,
-            "in": "query",
-            "description": "Page number, starting at 1.",
-            "schema": {
-              "minimum": 1,
-              "default": 1,
-              "type": "number"
-            }
-          },
-          {
-            "name": "limit",
-            "required": true,
-            "in": "query",
-            "description": "Items per page (1 to 100).",
-            "schema": {
-              "minimum": 1,
-              "maximum": 100,
-              "default": 20,
-              "type": "number"
             }
           }
         ],
@@ -946,6 +1599,27 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "slot",
+            "required": false,
+            "in": "query",
+            "description": "Which \"Other\" slot (1 to 5). Required for kind `other`, ignored otherwise.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 5,
+              "type": "number"
+            }
+          },
+          {
+            "name": "label",
+            "required": false,
+            "in": "query",
+            "description": "What the document is, for example \"Insurance card\". Required for kind `other`, ignored otherwise.",
+            "schema": {
+              "maxLength": 60,
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -979,7 +1653,7 @@
             }
           }
         },
-        "summary": "`PUT /drivers/:id/documents/:kind`: puts one file (multipart field `file`) in the licence, rating, earnings or\ncontract slot, replacing what is there. The contract (D90) is always kept on the driver itself. JPG, PNG or PDF,\nat most 10 MB; `400` otherwise. Returns the slot.",
+        "summary": "`PUT /drivers/:id/documents/:kind`: puts one file (multipart field `file`) in the licence, rating, earnings or\ncontract slot, replacing what is there. The contract (D90), the back of the licence (`license_back`) and the\n\"Other\" files (`other`, with `?slot=1..5&label=...`) are always kept on the driver itself. JPG, PNG or PDF, at most\n10 MB; `400` otherwise. Returns the slot.",
         "tags": [
           "DriverDocuments"
         ]
@@ -1107,368 +1781,6 @@
         "summary": "`DELETE /applications/:id/notes/:noteId`: deletes one of your own notes. `204` with no body; `403` someone\nelse's note; `404` unknown note.",
         "tags": [
           "ApplicationNotes"
-        ]
-      }
-    },
-    "/sms/status": {
-      "get": {
-        "operationId": "SmsController_status",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SmsStatusDto"
-                }
-              }
-            }
-          }
-        },
-        "summary": "`GET /sms/status`: SMS mode and what is connected.",
-        "tags": [
-          "Sms"
-        ]
-      }
-    },
-    "/sms/{kind}/{id}/messages": {
-      "get": {
-        "operationId": "SmsController_list",
-        "parameters": [
-          {
-            "name": "kind",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "limit",
-            "required": true,
-            "in": "query",
-            "description": "Texts per page (1 to 100), newest first.",
-            "schema": {
-              "minimum": 1,
-              "maximum": 100,
-              "default": 30,
-              "type": "number"
-            }
-          },
-          {
-            "name": "before",
-            "required": false,
-            "in": "query",
-            "description": "The `nextCursor` of the previous page, to get the texts before it. Omit for the newest.",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SmsMessageListDto"
-                }
-              }
-            }
-          }
-        },
-        "summary": "`GET /sms/:kind/:id/messages`: one page of the chat, newest first.",
-        "tags": [
-          "Sms"
-        ]
-      },
-      "post": {
-        "operationId": "SmsController_send",
-        "parameters": [
-          {
-            "name": "kind",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SendSmsDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SmsMessageDto"
-                }
-              }
-            }
-          }
-        },
-        "summary": "`POST /sms/:kind/:id/messages`: sends a text, according to SMS_MODE.\n`409` texting is off, `502` Quo refused (the failure is saved and shown in the chat),\n`400` the application's phone is not a US number, `404` unknown record.",
-        "tags": [
-          "Sms"
-        ]
-      }
-    },
-    "/sms/{kind}/{id}/sync": {
-      "post": {
-        "operationId": "SmsController_sync",
-        "parameters": [
-          {
-            "name": "kind",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SmsSyncResultDto"
-                }
-              }
-            }
-          }
-        },
-        "summary": "`POST /sms/:kind/:id/sync`: pulls this contact's history from Quo (texts sent from the Quo app too).",
-        "tags": [
-          "Sms"
-        ]
-      }
-    },
-    "/sms/{kind}/{id}/files": {
-      "get": {
-        "operationId": "SmsController_files",
-        "parameters": [
-          {
-            "name": "kind",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "page",
-            "required": true,
-            "in": "query",
-            "description": "Page number, starting at 1.",
-            "schema": {
-              "minimum": 1,
-              "default": 1,
-              "type": "number"
-            }
-          },
-          {
-            "name": "limit",
-            "required": true,
-            "in": "query",
-            "description": "Items per page (1 to 100).",
-            "schema": {
-              "minimum": 1,
-              "maximum": 100,
-              "default": 20,
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SmsFileListDto"
-                }
-              }
-            }
-          }
-        },
-        "summary": "`GET /sms/:kind/:id/files`: the files in this contact's conversation, newest first.",
-        "tags": [
-          "Sms"
-        ]
-      }
-    },
-    "/webhooks/quo": {
-      "post": {
-        "operationId": "QuoWebhookController_receive",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "QuoWebhook"
-        ]
-      }
-    },
-    "/message-templates": {
-      "get": {
-        "operationId": "MessageTemplatesController_list",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/MessageTemplateDto"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "summary": "`GET /message-templates`: every template, grouped by kind, with its placeholders and last edit.",
-        "tags": [
-          "MessageTemplates"
-        ]
-      },
-      "post": {
-        "operationId": "MessageTemplatesController_create",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateMessageTemplateDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MessageTemplateDto"
-                }
-              }
-            }
-          }
-        },
-        "summary": "`POST /message-templates`: adds a template. `400` empty, too long or unknown placeholder; `409` name taken.",
-        "tags": [
-          "MessageTemplates"
-        ]
-      }
-    },
-    "/message-templates/{id}": {
-      "put": {
-        "operationId": "MessageTemplatesController_update",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateMessageTemplateDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MessageTemplateDto"
-                }
-              }
-            }
-          }
-        },
-        "summary": "`PUT /message-templates/:id`: replaces a template's name and text. PUT because both are replaced. `400` empty,\ntoo long or unknown placeholder; `404` unknown id; `409` name taken.",
-        "tags": [
-          "MessageTemplates"
-        ]
-      },
-      "delete": {
-        "operationId": "MessageTemplatesController_remove",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": ""
-          }
-        },
-        "summary": "`DELETE /message-templates/:id`: `404` unknown id; `409` if it is the last template of its kind.",
-        "tags": [
-          "MessageTemplates"
         ]
       }
     },
@@ -2274,7 +2586,7 @@
             }
           }
         },
-        "summary": "`PATCH /drivers/:id/rent-settings`: changes the time of day rent is due (Chicago time, `HH:MM`) and the \"On Payment\nPlan\" flag (D92). A field left out stays; `rentDueTime: null` clears it. Returns the updated driver. `400` for a bad\ntime, `404` if unknown.",
+        "summary": "`PATCH /drivers/:id/rent-settings`: changes the time of day rent is due (Chicago time, `HH:MM`), the \"On Payment\nPlan\" flag (D92) and the two reminder switches (`upcomingRemindersEnabled`, `balanceRemindersEnabled`). A field left out stays; `rentDueTime: null` clears it. Returns the updated driver. `400` for a bad\ntime, `404` if unknown.",
         "tags": [
           "Drivers"
         ]
@@ -2607,6 +2919,131 @@
         ]
       }
     },
+    "/drivers/{id}/notes": {
+      "get": {
+        "operationId": "DriverNotesController_list",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "description": "Page number, starting at 1.",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "description": "Items per page (1 to 100).",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverNoteListDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`GET /drivers/:id/notes`: one page of notes, newest first. `404` unknown driver.",
+        "tags": [
+          "DriverNotes"
+        ]
+      },
+      "post": {
+        "operationId": "DriverNotesController_add",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDriverNoteDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverNoteDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`POST /drivers/:id/notes`: adds a note by the logged-in admin. `400` empty or too long; `404` unknown driver.",
+        "tags": [
+          "DriverNotes"
+        ]
+      }
+    },
+    "/drivers/{id}/notes/{noteId}": {
+      "delete": {
+        "operationId": "DriverNotesController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "noteId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "summary": "`DELETE /drivers/:id/notes/:noteId`: deletes one of your own notes. `204` with no body; `403` someone else's note;\n`404` unknown note.",
+        "tags": [
+          "DriverNotes"
+        ]
+      }
+    },
     "/drivers/{id}/ledger": {
       "get": {
         "operationId": "LedgerController_list",
@@ -2833,6 +3270,53 @@
           }
         },
         "summary": "`GET /drivers/:id/ledger/entries/:entryId`: one entry with what it reverses or was reversed by, the charge it\nis applied against, the credits applied against it and its payment. `404` no such entry on this driver.",
+        "tags": [
+          "Ledger"
+        ]
+      },
+      "patch": {
+        "operationId": "LedgerController_edit",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "entryId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditLedgerEntryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LedgerEntryDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`PATCH /drivers/:id/ledger/entries/:entryId`: corrects an entry's amount, date, description or memo IN PLACE (D99): the\nentry itself changes, nothing is added (a payment is changed on the payment itself too, so the two never disagree), and\nthe audit trail records who, when and the before and after values. `200` the entry; `400` nothing changed, a future\ndate, an amount below the credits applied to a charge or above what is left on its charge, or a field a payment from\nan email cannot take; `404` no such entry on this driver; `409` a reversal or an entry that was reversed.",
         "tags": [
           "Ledger"
         ]
@@ -3275,191 +3759,6 @@
           "Payments"
         ]
       }
-    },
-    "/dashboard": {
-      "get": {
-        "operationId": "DashboardController_get",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DashboardDto"
-                }
-              }
-            }
-          }
-        },
-        "summary": "`GET /dashboard`: every number on the dashboard in one response (money in cents, Chicago days). `401` no token.",
-        "tags": [
-          "Dashboard"
-        ]
-      }
-    },
-    "/dashboard/daily-operations": {
-      "get": {
-        "operationId": "DashboardController_dailyOperationsPage",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DailyOperationsDto"
-                }
-              }
-            }
-          }
-        },
-        "summary": "`GET /dashboard/daily-operations`: the daily operations page (D92): payments due today, late payments, early warning.\nComputed from the ledger and the signed contracts when read. `401` no token.",
-        "tags": [
-          "Dashboard"
-        ]
-      }
-    },
-    "/dashboard/collections": {
-      "get": {
-        "operationId": "DashboardController_collectionsPage",
-        "parameters": [
-          {
-            "name": "view",
-            "required": true,
-            "in": "query",
-            "description": "How to group: one row per month, per Monday-to-Sunday week, or per day.",
-            "schema": {
-              "$ref": "#/components/schemas/CollectionView"
-            }
-          },
-          {
-            "name": "from",
-            "required": false,
-            "in": "query",
-            "description": "First day to include, e.g. `2026-10-01`.",
-            "schema": {
-              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-              "type": "string"
-            }
-          },
-          {
-            "name": "to",
-            "required": false,
-            "in": "query",
-            "description": "Last day to include, e.g. `2026-10-15` (the whole day counts).",
-            "schema": {
-              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-              "type": "string"
-            }
-          },
-          {
-            "name": "page",
-            "required": true,
-            "in": "query",
-            "description": "Page number, starting at 1.",
-            "schema": {
-              "minimum": 1,
-              "default": 1,
-              "type": "number"
-            }
-          },
-          {
-            "name": "limit",
-            "required": true,
-            "in": "query",
-            "description": "Items per page (1 to 100).",
-            "schema": {
-              "minimum": 1,
-              "maximum": 100,
-              "default": 20,
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CollectionPeriodsDto"
-                }
-              }
-            }
-          }
-        },
-        "summary": "`GET /dashboard/collections?view=monthly|weekly|daily`: confirmed payments received per month, Monday-to-Sunday week or\nday (Chicago), newest first, paginated, with the total of the whole filter (page 2, D93). Optional `from` / `to` days\n(a custom range). `400` a bad view or day, or `from` after `to`; `401` no token.",
-        "tags": [
-          "Dashboard"
-        ]
-      }
-    },
-    "/dashboard/revenue-by-driver": {
-      "get": {
-        "operationId": "DashboardController_revenueByDriver",
-        "parameters": [
-          {
-            "name": "page",
-            "required": true,
-            "in": "query",
-            "description": "Page number, starting at 1.",
-            "schema": {
-              "minimum": 1,
-              "default": 1,
-              "type": "number"
-            }
-          },
-          {
-            "name": "limit",
-            "required": true,
-            "in": "query",
-            "description": "Items per page (1 to 100).",
-            "schema": {
-              "minimum": 1,
-              "maximum": 100,
-              "default": 20,
-              "type": "number"
-            }
-          },
-          {
-            "name": "from",
-            "required": false,
-            "in": "query",
-            "description": "First day to include, e.g. `2026-10-01`.",
-            "schema": {
-              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-              "type": "string"
-            }
-          },
-          {
-            "name": "to",
-            "required": false,
-            "in": "query",
-            "description": "Last day to include, e.g. `2026-10-15` (the whole day counts).",
-            "schema": {
-              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RevenueByDriverDto"
-                }
-              }
-            }
-          }
-        },
-        "summary": "`GET /dashboard/revenue-by-driver`: confirmed payments received per driver, biggest first, paginated, with the total of\nthe whole filter (page 2, D93). Optional `from` / `to` days. `400` a bad day, or `from` after `to`; `401` no token.",
-        "tags": [
-          "Dashboard"
-        ]
-      }
     }
   },
   "info": {
@@ -3572,6 +3871,1796 @@
         "required": [
           "currentPassword",
           "newPassword"
+        ]
+      },
+      "ReminderSettingsDto": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "The master switch for all automatic reminders. Off until turned on."
+          },
+          "enabledAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "When it was last turned on; null if never."
+          },
+          "paymentLink": {
+            "type": "string",
+            "nullable": true,
+            "description": "Where drivers pay: put in the texts as `{paymentLink}`; null = none (the line with it is left out)."
+          },
+          "smsMode": {
+            "description": "How texting is set up on the server: `off` composes nothing, `dry_run` only saves texts, `live` sends them.",
+            "enum": [
+              "off",
+              "dry_run",
+              "live"
+            ],
+            "type": "string"
+          },
+          "quoConfigured": {
+            "type": "boolean",
+            "description": "Whether a Quo key is set (needed for `live`)."
+          }
+        },
+        "required": [
+          "enabled",
+          "enabledAt",
+          "paymentLink",
+          "smsMode",
+          "quoConfigured"
+        ]
+      },
+      "UpdateReminderSettingsDto": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "paymentLink": {
+            "type": "string",
+            "nullable": true,
+            "description": "An http or https address, up to 300 characters; empty or null clears it.",
+            "maxLength": 300,
+            "format": "uri"
+          }
+        },
+        "required": [
+          "enabled"
+        ]
+      },
+      "ReminderKind": {
+        "type": "string",
+        "enum": [
+          "upcoming",
+          "late",
+          "high_balance",
+          "balance",
+          "payment_received"
+        ]
+      },
+      "ReminderStatus": {
+        "type": "string",
+        "enum": [
+          "sent",
+          "composed",
+          "failed"
+        ]
+      },
+      "ReminderLogDto": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ReminderKind"
+              }
+            ]
+          },
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ReminderStatus"
+              }
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "tier": {
+            "type": "number",
+            "nullable": true,
+            "description": "For a high-balance reminder: how many payments behind."
+          },
+          "mode": {
+            "type": "string",
+            "description": "`live`: really texted. `dry_run`: composed and saved only.",
+            "enum": [
+              "dry_run",
+              "live"
+            ]
+          },
+          "error": {
+            "type": "string",
+            "nullable": true,
+            "description": "Why a send failed, in plain words; null unless `failed`."
+          },
+          "body": {
+            "type": "string",
+            "description": "The text as composed."
+          },
+          "pastDueCents": {
+            "type": "number",
+            "description": "What was past due when it was composed, in cents."
+          },
+          "balanceCents": {
+            "type": "number",
+            "description": "The ledger balance when it was composed, in cents."
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "status",
+          "id",
+          "tier",
+          "mode",
+          "error",
+          "body",
+          "pastDueCents",
+          "balanceCents",
+          "createdAt"
+        ]
+      },
+      "ReminderLogListDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReminderLogDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          },
+          "page": {
+            "type": "number"
+          },
+          "limit": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit"
+        ]
+      },
+      "DashboardPaymentsDto": {
+        "type": "object",
+        "properties": {
+          "processedCents": {
+            "type": "number",
+            "description": "Everything that came in: confirmed payments plus the unmatched queue (rejected ones left out), in cents."
+          },
+          "processedCount": {
+            "type": "number",
+            "description": "How many payments that is."
+          },
+          "grossCents": {
+            "type": "number",
+            "description": "Sum of the confirmed (matched) payments, in cents."
+          },
+          "grossCount": {
+            "type": "number",
+            "description": "How many confirmed payments."
+          },
+          "matchedPercent": {
+            "type": "number",
+            "description": "Confirmed payments as a share of (confirmed + unmatched), 0-100. Rejected payments are left out."
+          },
+          "queueCents": {
+            "type": "number",
+            "description": "Sum of the unmatched payments (the queue), in cents."
+          },
+          "queueCount": {
+            "type": "number",
+            "description": "How many unmatched payments."
+          },
+          "needsReviewCount": {
+            "type": "number",
+            "description": "Of the unmatched ones, how many the matcher has already tried and a person must assign."
+          },
+          "todayCents": {
+            "type": "number",
+            "description": "Confirmed payments on today's Chicago day, in cents."
+          },
+          "last7DaysCents": {
+            "type": "number",
+            "description": "Today and the 6 days before it (Chicago days), in cents."
+          },
+          "last30DaysCents": {
+            "type": "number",
+            "description": "Today and the 29 days before it (Chicago days), in cents."
+          },
+          "thisWeekCents": {
+            "type": "number",
+            "description": "Monday to today (Chicago), in cents."
+          },
+          "thisWeekCount": {
+            "type": "number",
+            "description": "How many confirmed payments came in this week."
+          },
+          "averageCents": {
+            "type": "number",
+            "description": "Average confirmed payment, in cents (rounded). 0 when there is none."
+          },
+          "largestCents": {
+            "type": "number",
+            "description": "The largest confirmed payment, in cents."
+          }
+        },
+        "required": [
+          "processedCents",
+          "processedCount",
+          "grossCents",
+          "grossCount",
+          "matchedPercent",
+          "queueCents",
+          "queueCount",
+          "needsReviewCount",
+          "todayCents",
+          "last7DaysCents",
+          "last30DaysCents",
+          "thisWeekCents",
+          "thisWeekCount",
+          "averageCents",
+          "largestCents"
+        ]
+      },
+      "DashboardTrendDayDto": {
+        "type": "object",
+        "properties": {
+          "day": {
+            "type": "string",
+            "description": "Chicago day, `YYYY-MM-DD`."
+          },
+          "amountCents": {
+            "type": "number",
+            "description": "Confirmed payments on that day, in cents. 0 for a quiet day."
+          }
+        },
+        "required": [
+          "day",
+          "amountCents"
+        ]
+      },
+      "PaymentSource": {
+        "type": "string",
+        "enum": [
+          "email_zelle",
+          "email_cashapp",
+          "email_venmo",
+          "email_stripe",
+          "email_chime",
+          "plaid_zelle",
+          "manual"
+        ]
+      },
+      "DashboardSourceDto": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PaymentSource"
+              }
+            ]
+          },
+          "amountCents": {
+            "type": "number",
+            "description": "Confirmed money from this source, in cents."
+          },
+          "count": {
+            "type": "number",
+            "description": "Confirmed payments from this source."
+          },
+          "unmatchedCount": {
+            "type": "number",
+            "description": "Unmatched payments from this source."
+          },
+          "sharePercent": {
+            "type": "number",
+            "description": "This source's share of all confirmed money, 0-100 (rounded, so the shares may not add up to exactly 100)."
+          }
+        },
+        "required": [
+          "source",
+          "amountCents",
+          "count",
+          "unmatchedCount",
+          "sharePercent"
+        ]
+      },
+      "DashboardDriversDto": {
+        "type": "object",
+        "properties": {
+          "active": {
+            "type": "number",
+            "description": "Active, not archived drivers."
+          },
+          "daily": {
+            "type": "number",
+            "description": "Of them, on a daily contract."
+          },
+          "weekly": {
+            "type": "number",
+            "description": "Of them, on a weekly contract."
+          },
+          "withoutContract": {
+            "type": "number",
+            "description": "Of them, with no signed contract in force yet (nothing to bill)."
+          },
+          "dailyPercent": {
+            "type": "number",
+            "description": "`daily` as a share of daily + weekly, 0-100."
+          },
+          "weeklyPercent": {
+            "type": "number",
+            "description": "`weekly` as a share of daily + weekly, 0-100."
+          }
+        },
+        "required": [
+          "active",
+          "daily",
+          "weekly",
+          "withoutContract",
+          "dailyPercent",
+          "weeklyPercent"
+        ]
+      },
+      "DashboardWeekday": {
+        "type": "string",
+        "enum": [
+          "monday",
+          "tuesday",
+          "wednesday",
+          "thursday",
+          "friday",
+          "saturday",
+          "sunday"
+        ]
+      },
+      "DashboardWeekdayDto": {
+        "type": "object",
+        "properties": {
+          "weekday": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DashboardWeekday"
+              }
+            ]
+          },
+          "drivers": {
+            "type": "number",
+            "description": "Active drivers on a weekly contract due that day."
+          },
+          "expectedCents": {
+            "type": "number",
+            "description": "Their weekly rent added up, in cents."
+          }
+        },
+        "required": [
+          "weekday",
+          "drivers",
+          "expectedCents"
+        ]
+      },
+      "DashboardBillingDto": {
+        "type": "object",
+        "properties": {
+          "dueTodayCents": {
+            "type": "number",
+            "description": "Rent that falls due today, in cents: exactly what the hourly rent job posts for today (daily + weekly)."
+          },
+          "dailyDueCents": {
+            "type": "number",
+            "description": "Of it, from daily contracts, in cents."
+          },
+          "weeklyDueCents": {
+            "type": "number",
+            "description": "Of it, from weekly contracts, in cents."
+          },
+          "dailyDueDrivers": {
+            "type": "number",
+            "description": "Drivers with daily rent due today."
+          },
+          "weeklyDueDrivers": {
+            "type": "number",
+            "description": "Drivers with weekly rent due today."
+          },
+          "inactiveOwedCents": {
+            "type": "number",
+            "description": "What inactive drivers (not in collections) still owe, in cents."
+          },
+          "collectionsOwedCents": {
+            "type": "number",
+            "description": "What drivers sent to collections still owe, in cents."
+          },
+          "weeklyByDay": {
+            "description": "The seven weekdays, Monday first.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DashboardWeekdayDto"
+            }
+          }
+        },
+        "required": [
+          "dueTodayCents",
+          "dailyDueCents",
+          "weeklyDueCents",
+          "dailyDueDrivers",
+          "weeklyDueDrivers",
+          "inactiveOwedCents",
+          "collectionsOwedCents",
+          "weeklyByDay"
+        ]
+      },
+      "DashboardWatchlistDriverDto": {
+        "type": "object",
+        "properties": {
+          "driverId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "description": "First and last name."
+          },
+          "balanceCents": {
+            "type": "number",
+            "description": "Negative: the driver owes this much, in cents."
+          }
+        },
+        "required": [
+          "driverId",
+          "name",
+          "balanceCents"
+        ]
+      },
+      "DashboardBalancesDto": {
+        "type": "object",
+        "properties": {
+          "driverCount": {
+            "type": "number",
+            "description": "How many drivers are counted."
+          },
+          "fleetBalanceCents": {
+            "type": "number",
+            "description": "All their balances added up (credits minus debits), in cents. Negative: the fleet owes more than it holds."
+          },
+          "positiveCount": {
+            "type": "number",
+            "description": "Drivers with a credit balance."
+          },
+          "zeroCount": {
+            "type": "number",
+            "description": "Drivers at exactly zero."
+          },
+          "negativeCount": {
+            "type": "number",
+            "description": "Drivers who owe money."
+          },
+          "creditCents": {
+            "type": "number",
+            "description": "The credits of the drivers in credit, added up, in cents."
+          },
+          "outstandingCents": {
+            "type": "number",
+            "description": "What the drivers who owe money owe, added up, in cents (a positive number): the total outstanding."
+          },
+          "watchlist": {
+            "description": "The 8 drivers who owe the most, most first.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DashboardWatchlistDriverDto"
+            }
+          }
+        },
+        "required": [
+          "driverCount",
+          "fleetBalanceCents",
+          "positiveCount",
+          "zeroCount",
+          "negativeCount",
+          "creditCents",
+          "outstandingCents",
+          "watchlist"
+        ]
+      },
+      "DashboardApplicationsDto": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "number"
+          },
+          "pending": {
+            "type": "number"
+          },
+          "approved": {
+            "type": "number"
+          },
+          "rejected": {
+            "type": "number"
+          },
+          "onHold": {
+            "type": "number"
+          },
+          "approvalPercent": {
+            "type": "number",
+            "description": "Approved as a share of approved + rejected + on hold, 0-100. 0 when none was reviewed."
+          },
+          "onboardingDrivers": {
+            "type": "number",
+            "description": "Drivers whose onboarding is not finished (not archived)."
+          }
+        },
+        "required": [
+          "total",
+          "pending",
+          "approved",
+          "rejected",
+          "onHold",
+          "approvalPercent",
+          "onboardingDrivers"
+        ]
+      },
+      "EmailIntakeOutcome": {
+        "type": "string",
+        "enum": [
+          "ok",
+          "failed",
+          "off"
+        ]
+      },
+      "DashboardIntakeRunDto": {
+        "type": "object",
+        "properties": {
+          "outcome": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EmailIntakeOutcome"
+              }
+            ]
+          },
+          "at": {
+            "format": "date-time",
+            "type": "string",
+            "description": "When the latest run ended."
+          },
+          "stored": {
+            "type": "number",
+            "description": "Emails the latest run stored."
+          },
+          "lastSuccessAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "When a run last worked; kept through later failures. Null: never."
+          },
+          "error": {
+            "type": "string",
+            "nullable": true,
+            "description": "Why the latest run failed. Set only when `outcome` is `failed`."
+          }
+        },
+        "required": [
+          "outcome",
+          "at",
+          "stored",
+          "lastSuccessAt",
+          "error"
+        ]
+      },
+      "DashboardMailCountsDto": {
+        "type": "object",
+        "properties": {
+          "processed": {
+            "type": "number"
+          },
+          "notPayment": {
+            "type": "number"
+          },
+          "rejectedUnverified": {
+            "type": "number"
+          },
+          "extractionFailed": {
+            "type": "number"
+          },
+          "duplicatePayment": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "processed",
+          "notPayment",
+          "rejectedUnverified",
+          "extractionFailed",
+          "duplicatePayment"
+        ]
+      },
+      "DashboardIntakeDto": {
+        "type": "object",
+        "properties": {
+          "lastRun": {
+            "nullable": true,
+            "description": "The latest run, or null when none has been recorded yet (a new database, or intake never started).",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DashboardIntakeRunDto"
+              }
+            ]
+          },
+          "last24Hours": {
+            "description": "Mails stored in the last 24 hours, by outcome.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DashboardMailCountsDto"
+              }
+            ]
+          },
+          "last7Days": {
+            "description": "Mails stored in the last 7 days, by outcome.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DashboardMailCountsDto"
+              }
+            ]
+          },
+          "lastEmailAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "When the newest stored mail arrived, or null when there is none."
+          },
+          "awaitingMatchCount": {
+            "type": "number",
+            "description": "Payments the matcher has not looked at yet."
+          }
+        },
+        "required": [
+          "lastRun",
+          "last24Hours",
+          "last7Days",
+          "lastEmailAt",
+          "awaitingMatchCount"
+        ]
+      },
+      "SmsServiceMode": {
+        "type": "string",
+        "enum": [
+          "off",
+          "dry_run",
+          "live"
+        ]
+      },
+      "DashboardSmsDto": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SmsServiceMode"
+              }
+            ]
+          },
+          "quoConfigured": {
+            "type": "boolean",
+            "description": "Whether a Quo key and number are set."
+          },
+          "failedLast7Days": {
+            "type": "number",
+            "description": "Texts sent in the last 7 days that failed or were not delivered."
+          }
+        },
+        "required": [
+          "mode",
+          "quoConfigured",
+          "failedLast7Days"
+        ]
+      },
+      "DashboardDto": {
+        "type": "object",
+        "properties": {
+          "asOf": {
+            "format": "date-time",
+            "type": "string",
+            "description": "When this was worked out."
+          },
+          "today": {
+            "type": "string",
+            "description": "Today's Chicago day, `YYYY-MM-DD`."
+          },
+          "payments": {
+            "$ref": "#/components/schemas/DashboardPaymentsDto"
+          },
+          "trend": {
+            "description": "The last 21 Chicago days, oldest first, quiet days included.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DashboardTrendDayDto"
+            }
+          },
+          "sources": {
+            "description": "Sources with confirmed money or unmatched payments, biggest first.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DashboardSourceDto"
+            }
+          },
+          "drivers": {
+            "$ref": "#/components/schemas/DashboardDriversDto"
+          },
+          "billing": {
+            "$ref": "#/components/schemas/DashboardBillingDto"
+          },
+          "balances": {
+            "$ref": "#/components/schemas/DashboardBalancesDto"
+          },
+          "applications": {
+            "$ref": "#/components/schemas/DashboardApplicationsDto"
+          },
+          "intake": {
+            "$ref": "#/components/schemas/DashboardIntakeDto"
+          },
+          "sms": {
+            "$ref": "#/components/schemas/DashboardSmsDto"
+          }
+        },
+        "required": [
+          "asOf",
+          "today",
+          "payments",
+          "trend",
+          "sources",
+          "drivers",
+          "billing",
+          "balances",
+          "applications",
+          "intake",
+          "sms"
+        ]
+      },
+      "ContractSchedule": {
+        "type": "string",
+        "enum": [
+          "weekly",
+          "daily"
+        ],
+        "description": "Weekly or daily, from the contract in force; null if the driver has none (not expected: rent comes from a contract)."
+      },
+      "DueTodayRowDto": {
+        "type": "object",
+        "properties": {
+          "schedule": {
+            "nullable": true,
+            "description": "Weekly or daily, from the contract in force; null if the driver has none (not expected: rent comes from a contract).",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractSchedule"
+              }
+            ]
+          },
+          "status": {
+            "description": "Paid: nothing open. Late: open and past the due time. Not yet paid: open, due time not reached.",
+            "enum": [
+              "paid",
+              "not_yet_paid",
+              "late"
+            ],
+            "type": "string"
+          },
+          "driverId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "vehicle": {
+            "type": "string",
+            "nullable": true,
+            "description": "The vehicle of the contract in force, \"Model (PLATE)\"; null when the contract names none."
+          },
+          "rateCents": {
+            "type": "number",
+            "nullable": true,
+            "description": "The contract's rent per period in cents; null without a contract."
+          },
+          "dueTime": {
+            "type": "string",
+            "nullable": true,
+            "description": "The time rent is due, Chicago `HH:MM` (24 hours); null = not set (late when the due day ends)."
+          },
+          "amountDueCents": {
+            "type": "number",
+            "description": "The rent charge due today, in cents."
+          },
+          "openCents": {
+            "type": "number",
+            "description": "What is still unpaid of it after credits are applied oldest first; 0 = paid."
+          },
+          "onPaymentPlan": {
+            "type": "boolean",
+            "description": "Staff marked the driver \"On Payment Plan\"."
+          }
+        },
+        "required": [
+          "schedule",
+          "status",
+          "driverId",
+          "name",
+          "vehicle",
+          "rateCents",
+          "dueTime",
+          "amountDueCents",
+          "openCents",
+          "onPaymentPlan"
+        ]
+      },
+      "LateDriverDto": {
+        "type": "object",
+        "properties": {
+          "schedule": {
+            "nullable": true,
+            "description": "Rate type: weekly or daily, from the contract in force.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractSchedule"
+              }
+            ]
+          },
+          "driverId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "dueTime": {
+            "type": "string",
+            "nullable": true,
+            "description": "The time rent is due, Chicago `HH:MM`; null = not set."
+          },
+          "pastDueCents": {
+            "type": "number",
+            "description": "The unpaid part of every late rent charge added up, in cents."
+          },
+          "lateCount": {
+            "type": "number",
+            "description": "How many rent charges are late."
+          },
+          "daysLate": {
+            "type": "number",
+            "description": "Whole days the oldest late charge is late, counted on the Chicago clock (1 = the same time on the next day has come)."
+          },
+          "hoursLate": {
+            "type": "number",
+            "description": "Real hours since the oldest late charge was due."
+          },
+          "onPaymentPlan": {
+            "type": "boolean",
+            "description": "Staff marked the driver \"On Payment Plan\"."
+          }
+        },
+        "required": [
+          "schedule",
+          "driverId",
+          "name",
+          "dueTime",
+          "pastDueCents",
+          "lateCount",
+          "daysLate",
+          "hoursLate",
+          "onPaymentPlan"
+        ]
+      },
+      "DriverStatus": {
+        "type": "string",
+        "enum": [
+          "onboarding",
+          "active",
+          "inactive"
+        ],
+        "description": "Active, or onboarding (an unpaid deposit puts a driver who is still onboarding on the list)."
+      },
+      "ShouldBeDeactivatedRowDto": {
+        "type": "object",
+        "properties": {
+          "schedule": {
+            "nullable": true,
+            "description": "Weekly or daily, from the contract in force; null if the driver has none.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractSchedule"
+              }
+            ]
+          },
+          "driverStatus": {
+            "description": "Active, or onboarding (an unpaid deposit puts a driver who is still onboarding on the list).",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DriverStatus"
+              }
+            ]
+          },
+          "reasons": {
+            "type": "array",
+            "description": "Why: `daily_late` (2 or more daily payments late), `weekly_late` (a weekly payment 2 days late), `deposit_unpaid`\n(deposit still unpaid 7 days after its due date). At least one; the rows can show several.",
+            "items": {
+              "type": "string",
+              "enum": [
+                "daily_late",
+                "weekly_late",
+                "deposit_unpaid"
+              ]
+            }
+          },
+          "driverId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "balanceCents": {
+            "type": "number",
+            "description": "Ledger balance in cents: credits minus debits; negative = the driver owes."
+          },
+          "daysLate": {
+            "type": "number",
+            "description": "Whole days the oldest late rent payment is late (Chicago clock); 0 when the reason is the deposit only."
+          },
+          "depositDaysSinceDue": {
+            "type": "number",
+            "nullable": true,
+            "description": "Days since the unpaid deposit was due (the contract start date); null when the deposit is not what is unpaid."
+          },
+          "depositCents": {
+            "type": "number",
+            "nullable": true,
+            "description": "The unpaid deposit in cents; null when the deposit is not what is unpaid."
+          }
+        },
+        "required": [
+          "schedule",
+          "driverStatus",
+          "reasons",
+          "driverId",
+          "name",
+          "balanceCents",
+          "daysLate",
+          "depositDaysSinceDue",
+          "depositCents"
+        ]
+      },
+      "WeekTotalDto": {
+        "type": "object",
+        "properties": {
+          "weekStart": {
+            "type": "string",
+            "description": "The Monday, Chicago day `YYYY-MM-DD`."
+          },
+          "weekEnd": {
+            "type": "string",
+            "description": "The Sunday, Chicago day `YYYY-MM-DD`."
+          },
+          "totalCents": {
+            "type": "number",
+            "description": "Confirmed payments that came in that week, in cents; 0 for a quiet week."
+          },
+          "paymentCount": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "weekStart",
+          "weekEnd",
+          "totalCents",
+          "paymentCount"
+        ]
+      },
+      "DepositCollectedRowDto": {
+        "type": "object",
+        "properties": {
+          "driverId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "amountCents": {
+            "type": "number",
+            "nullable": true,
+            "description": "The amount typed when the step was ticked (D82), in cents; null for a step ticked before amounts were recorded."
+          },
+          "paidAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "When the step was ticked."
+          }
+        },
+        "required": [
+          "driverId",
+          "name",
+          "amountCents",
+          "paidAt"
+        ]
+      },
+      "DepositsCollectedDto": {
+        "type": "object",
+        "properties": {
+          "totalCents": {
+            "type": "number",
+            "description": "The recorded amounts added up, in cents."
+          },
+          "withoutAmountCount": {
+            "type": "number",
+            "description": "How many drivers have no amount recorded; they are in the list and not in the total."
+          },
+          "drivers": {
+            "description": "Newest first.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DepositCollectedRowDto"
+            }
+          }
+        },
+        "required": [
+          "totalCents",
+          "withoutAmountCount",
+          "drivers"
+        ]
+      },
+      "DepositPendingRowDto": {
+        "type": "object",
+        "properties": {
+          "driverId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "amountCents": {
+            "type": "number",
+            "description": "The deposit the signed contract asks for, in cents."
+          },
+          "dueDate": {
+            "type": "string",
+            "description": "The day it is due: the contract start date, `YYYY-MM-DD`."
+          },
+          "daysSinceDue": {
+            "type": "number",
+            "description": "Days since the due date; negative before it."
+          },
+          "overdue": {
+            "type": "boolean",
+            "description": "7 or more days since the due date: the driver is also on the Should Be Deactivated list (unless on a payment plan)."
+          },
+          "onPaymentPlan": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "driverId",
+          "name",
+          "amountCents",
+          "dueDate",
+          "daysSinceDue",
+          "overdue",
+          "onPaymentPlan"
+        ]
+      },
+      "DepositsPendingDto": {
+        "type": "object",
+        "properties": {
+          "totalCents": {
+            "type": "number"
+          },
+          "drivers": {
+            "description": "Longest overdue first.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DepositPendingRowDto"
+            }
+          }
+        },
+        "required": [
+          "totalCents",
+          "drivers"
+        ]
+      },
+      "DriverLeftReason": {
+        "type": "string",
+        "enum": [
+          "contract_ended",
+          "bad_driver",
+          "cooperative_returned_car"
+        ],
+        "description": "How the driver left (D81); null for a driver deactivated before reasons existed."
+      },
+      "CollectionsRowDto": {
+        "type": "object",
+        "properties": {
+          "leftReason": {
+            "nullable": true,
+            "description": "How the driver left (D81); null for a driver deactivated before reasons existed.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DriverLeftReason"
+              }
+            ]
+          },
+          "driverId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "balanceCents": {
+            "type": "number",
+            "description": "Ledger balance in cents: credits minus debits; negative = the driver owes."
+          },
+          "sentToCollectionsAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "When an admin sent the driver to collections."
+          }
+        },
+        "required": [
+          "leftReason",
+          "driverId",
+          "name",
+          "balanceCents",
+          "sentToCollectionsAt"
+        ]
+      },
+      "CollectionsDto": {
+        "type": "object",
+        "properties": {
+          "totalOwedCents": {
+            "type": "number",
+            "description": "What is owed by the drivers in the list (only the ones with a negative balance count), in cents."
+          },
+          "drivers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CollectionsRowDto"
+            }
+          }
+        },
+        "required": [
+          "totalOwedCents",
+          "drivers"
+        ]
+      },
+      "DailyOperationsDto": {
+        "type": "object",
+        "properties": {
+          "asOf": {
+            "format": "date-time",
+            "type": "string",
+            "description": "When the figures were worked out."
+          },
+          "today": {
+            "type": "string",
+            "description": "Today's Chicago day, `YYYY-MM-DD`."
+          },
+          "dueToday": {
+            "description": "Payments due today: weekly drivers first, then daily, then by name.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DueTodayRowDto"
+            }
+          },
+          "late": {
+            "description": "Drivers with a late rent payment, the longest late first.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LateDriverDto"
+            }
+          },
+          "earlyWarning": {
+            "description": "Drivers whose oldest late payment is a full day or more late, the longest late first.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LateDriverDto"
+            }
+          },
+          "shouldBeDeactivated": {
+            "description": "Drivers who meet a deactivation rule and are not on a payment plan, the longest overdue first. List only.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ShouldBeDeactivatedRowDto"
+            }
+          },
+          "weeks": {
+            "description": "The current week and the 25 before it, newest first (D5). Monday to Sunday, Chicago days.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WeekTotalDto"
+            }
+          },
+          "depositsCollected": {
+            "$ref": "#/components/schemas/DepositsCollectedDto"
+          },
+          "depositsPending": {
+            "$ref": "#/components/schemas/DepositsPendingDto"
+          },
+          "collections": {
+            "$ref": "#/components/schemas/CollectionsDto"
+          }
+        },
+        "required": [
+          "asOf",
+          "today",
+          "dueToday",
+          "late",
+          "earlyWarning",
+          "shouldBeDeactivated",
+          "weeks",
+          "depositsCollected",
+          "depositsPending",
+          "collections"
+        ]
+      },
+      "CollectionView": {
+        "type": "string",
+        "enum": [
+          "monthly",
+          "weekly",
+          "daily"
+        ]
+      },
+      "CollectionPeriodDto": {
+        "type": "object",
+        "properties": {
+          "periodStart": {
+            "type": "string",
+            "description": "First Chicago day of the period (the 1st, a Monday, or the day itself), `YYYY-MM-DD`."
+          },
+          "periodEnd": {
+            "type": "string",
+            "description": "Last Chicago day of the period (the end of the month, a Sunday, or the day itself)."
+          },
+          "totalCents": {
+            "type": "number",
+            "description": "Confirmed payments received in the period, in cents. 0 for a quiet period."
+          },
+          "paymentCount": {
+            "type": "number",
+            "description": "How many confirmed payments that is."
+          }
+        },
+        "required": [
+          "periodStart",
+          "periodEnd",
+          "totalCents",
+          "paymentCount"
+        ]
+      },
+      "CollectionPeriodsDto": {
+        "type": "object",
+        "properties": {
+          "view": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CollectionView"
+              }
+            ]
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CollectionPeriodDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "description": "How many periods there are in all, so the page count can be worked out."
+          },
+          "page": {
+            "type": "number"
+          },
+          "limit": {
+            "type": "number"
+          },
+          "totalCents": {
+            "type": "number",
+            "description": "Confirmed payments in the whole filter (every period, every page), in cents."
+          },
+          "paymentCount": {
+            "type": "number",
+            "description": "How many confirmed payments that is."
+          }
+        },
+        "required": [
+          "view",
+          "items",
+          "total",
+          "page",
+          "limit",
+          "totalCents",
+          "paymentCount"
+        ]
+      },
+      "DriverRevenueDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DriverStatus"
+              }
+            ]
+          },
+          "driverId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "archived": {
+            "type": "boolean",
+            "description": "An archived driver is listed too: money received stays revenue (D93)."
+          },
+          "totalCents": {
+            "type": "number",
+            "description": "Confirmed payments received from them in the filter, in cents."
+          },
+          "paymentCount": {
+            "type": "number",
+            "description": "How many confirmed payments that is."
+          },
+          "lastPaymentAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "When the latest of those payments was received."
+          }
+        },
+        "required": [
+          "status",
+          "driverId",
+          "name",
+          "archived",
+          "totalCents",
+          "paymentCount",
+          "lastPaymentAt"
+        ]
+      },
+      "RevenueByDriverDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DriverRevenueDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "description": "How many drivers have at least one payment in the filter."
+          },
+          "page": {
+            "type": "number"
+          },
+          "limit": {
+            "type": "number"
+          },
+          "totalCents": {
+            "type": "number",
+            "description": "Confirmed payments of every driver in the filter, in cents (the same figure as the collections total)."
+          },
+          "paymentCount": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit",
+          "totalCents",
+          "paymentCount"
+        ]
+      },
+      "SmsStatusDto": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "description": "`off`: sending refused. `dry_run`: texts are saved, not sent. `live`: really sent.",
+            "enum": [
+              "off",
+              "dry_run",
+              "live"
+            ]
+          },
+          "quoConfigured": {
+            "type": "boolean",
+            "description": "Whether the Quo API key and number are set, which syncing the history needs."
+          },
+          "filesConfigured": {
+            "type": "boolean",
+            "description": "Whether the file bucket is set; without it files stay pending."
+          }
+        },
+        "required": [
+          "mode",
+          "quoConfigured",
+          "filesConfigured"
+        ]
+      },
+      "SmsAttachmentDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "contentType": {
+            "type": "string",
+            "nullable": true,
+            "description": "MIME type, e.g. `image/jpeg`; null if unknown."
+          },
+          "sizeBytes": {
+            "type": "number",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "description": "`stored` files can be opened; `pending` ones are still being copied; `failed` ones never will be.",
+            "enum": [
+              "pending",
+              "stored",
+              "failed"
+            ]
+          },
+          "url": {
+            "type": "string",
+            "nullable": true,
+            "description": "Short-lived link to open the file (about 10 minutes). Null unless `stored`."
+          }
+        },
+        "required": [
+          "id",
+          "contentType",
+          "sizeBytes",
+          "status",
+          "url"
+        ]
+      },
+      "SmsMessageDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "direction": {
+            "enum": [
+              "inbound",
+              "outbound"
+            ],
+            "type": "string"
+          },
+          "body": {
+            "type": "string",
+            "description": "The words; empty for a text that is only a file."
+          },
+          "mode": {
+            "nullable": true,
+            "description": "Null for inbound texts. `dry_run` texts were never sent.",
+            "enum": [
+              "dry_run",
+              "live"
+            ],
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "composed",
+              "queued",
+              "sent",
+              "delivered",
+              "undelivered",
+              "failed",
+              "received"
+            ],
+            "type": "string"
+          },
+          "error": {
+            "type": "string",
+            "nullable": true,
+            "description": "Why it failed, when it did."
+          },
+          "sentByEmail": {
+            "type": "string",
+            "nullable": true,
+            "description": "The admin who sent it from this app; null for inbound texts and texts sent from the Quo app."
+          },
+          "occurredAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "When it happened (Quo's time)."
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SmsAttachmentDto"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "direction",
+          "body",
+          "mode",
+          "status",
+          "error",
+          "sentByEmail",
+          "occurredAt",
+          "attachments"
+        ]
+      },
+      "SmsMessageListDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SmsMessageDto"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true,
+            "description": "Pass as `before` to get the next, older page. Null when there is nothing older."
+          },
+          "contactPhone": {
+            "type": "string",
+            "description": "The contact's number the chat is with (E.164)."
+          },
+          "contactPhoneProblem": {
+            "type": "string",
+            "nullable": true,
+            "description": "Why no text can be sent to this number (for example it cannot exist in the US); null when it can."
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor",
+          "contactPhone",
+          "contactPhoneProblem"
+        ]
+      },
+      "SendSmsDto": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "The words to send, 1 to 1600 characters (Quo's limit). Plain text only: Quo's API cannot send files.",
+            "minLength": 1,
+            "maxLength": 1600
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "SmsSyncResultDto": {
+        "type": "object",
+        "properties": {
+          "fetched": {
+            "type": "number",
+            "description": "Texts Quo returned."
+          },
+          "added": {
+            "type": "number",
+            "description": "Of those, how many were new to us."
+          }
+        },
+        "required": [
+          "fetched",
+          "added"
+        ]
+      },
+      "SmsFileDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "contentType": {
+            "type": "string",
+            "nullable": true,
+            "description": "MIME type, e.g. `image/jpeg`; null if unknown."
+          },
+          "sizeBytes": {
+            "type": "number",
+            "nullable": true
+          },
+          "status": {
+            "description": "`stored` files can be opened; `pending` ones are still being copied; `failed` ones never will be.",
+            "enum": [
+              "pending",
+              "stored",
+              "failed"
+            ],
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "nullable": true,
+            "description": "Short-lived link to open the file (about 10 minutes). Null unless `stored`."
+          },
+          "direction": {
+            "type": "string",
+            "description": "Who sent it: `inbound` = the contact texted it to us.",
+            "enum": [
+              "inbound",
+              "outbound"
+            ]
+          },
+          "occurredAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "contentType",
+          "sizeBytes",
+          "status",
+          "url",
+          "direction",
+          "occurredAt"
+        ]
+      },
+      "SmsFileListDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SmsFileDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          },
+          "page": {
+            "type": "number"
+          },
+          "limit": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit"
+        ]
+      },
+      "MessageTemplateDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "application_approved",
+              "application_declined",
+              "reminder_upcoming",
+              "reminder_late",
+              "reminder_high_balance",
+              "reminder_balance",
+              "reminder_payment_received"
+            ],
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "description": "The label in the dropdown, e.g. \"No valid licence\"."
+          },
+          "body": {
+            "type": "string",
+            "description": "The text with its placeholders, e.g. `Hi {firstName}, ...`."
+          },
+          "placeholders": {
+            "description": "The placeholders this template may use, e.g. `[\"firstName\", \"lastName\"]`.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedByEmail": {
+            "type": "string",
+            "nullable": true,
+            "description": "Email of the admin who last edited it; null for the default text (or a removed account)."
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "body",
+          "placeholders",
+          "updatedAt",
+          "updatedByEmail"
+        ]
+      },
+      "CreateMessageTemplateDto": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "application_approved",
+              "application_declined",
+              "reminder_upcoming",
+              "reminder_late",
+              "reminder_high_balance",
+              "reminder_balance",
+              "reminder_payment_received"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "description": "1 to 60 characters after trimming. Two templates of a kind cannot share a name (409).",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "body": {
+            "type": "string",
+            "description": "The new text, 1 to 1000 characters after trimming; line breaks kept. Unknown placeholders are refused (400).",
+            "minLength": 1,
+            "maxLength": 1000
+          }
+        },
+        "required": [
+          "kind",
+          "name",
+          "body"
+        ]
+      },
+      "UpdateMessageTemplateDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "1 to 60 characters after trimming. Two templates of a kind cannot share a name (409).",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "body": {
+            "type": "string",
+            "description": "The new text, 1 to 1000 characters after trimming; line breaks kept. Unknown placeholders are refused (400).",
+            "minLength": 1,
+            "maxLength": 1000
+          }
+        },
+        "required": [
+          "name",
+          "body"
         ]
       },
       "ApplicationReceivedDto": {
@@ -4116,9 +6205,20 @@
               "license",
               "rating",
               "earnings",
-              "contract"
+              "contract",
+              "license_back",
+              "other"
             ],
             "type": "string"
+          },
+          "slot": {
+            "type": "number",
+            "description": "0 for every fixed kind; 1 to 5 for an \"Other\" file."
+          },
+          "label": {
+            "type": "string",
+            "nullable": true,
+            "description": "The name staff gave an \"Other\" file; null for every fixed kind."
           },
           "status": {
             "description": "`stored`: our copy can be opened; `pending`: still being copied; `failed`: it cannot be copied (see `error`).",
@@ -4166,6 +6266,8 @@
         "required": [
           "id",
           "kind",
+          "slot",
+          "label",
           "status",
           "origin",
           "contentType",
@@ -4269,381 +6371,6 @@
           }
         },
         "required": [
-          "body"
-        ]
-      },
-      "SmsStatusDto": {
-        "type": "object",
-        "properties": {
-          "mode": {
-            "type": "string",
-            "description": "`off`: sending refused. `dry_run`: texts are saved, not sent. `live`: really sent.",
-            "enum": [
-              "off",
-              "dry_run",
-              "live"
-            ]
-          },
-          "quoConfigured": {
-            "type": "boolean",
-            "description": "Whether the Quo API key and number are set, which syncing the history needs."
-          },
-          "filesConfigured": {
-            "type": "boolean",
-            "description": "Whether the file bucket is set; without it files stay pending."
-          }
-        },
-        "required": [
-          "mode",
-          "quoConfigured",
-          "filesConfigured"
-        ]
-      },
-      "SmsAttachmentDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "contentType": {
-            "type": "string",
-            "nullable": true,
-            "description": "MIME type, e.g. `image/jpeg`; null if unknown."
-          },
-          "sizeBytes": {
-            "type": "number",
-            "nullable": true
-          },
-          "status": {
-            "type": "string",
-            "description": "`stored` files can be opened; `pending` ones are still being copied; `failed` ones never will be.",
-            "enum": [
-              "pending",
-              "stored",
-              "failed"
-            ]
-          },
-          "url": {
-            "type": "string",
-            "nullable": true,
-            "description": "Short-lived link to open the file (about 10 minutes). Null unless `stored`."
-          }
-        },
-        "required": [
-          "id",
-          "contentType",
-          "sizeBytes",
-          "status",
-          "url"
-        ]
-      },
-      "SmsMessageDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "direction": {
-            "enum": [
-              "inbound",
-              "outbound"
-            ],
-            "type": "string"
-          },
-          "body": {
-            "type": "string",
-            "description": "The words; empty for a text that is only a file."
-          },
-          "mode": {
-            "nullable": true,
-            "description": "Null for inbound texts. `dry_run` texts were never sent.",
-            "enum": [
-              "dry_run",
-              "live"
-            ],
-            "type": "string"
-          },
-          "status": {
-            "enum": [
-              "composed",
-              "queued",
-              "sent",
-              "delivered",
-              "undelivered",
-              "failed",
-              "received"
-            ],
-            "type": "string"
-          },
-          "error": {
-            "type": "string",
-            "nullable": true,
-            "description": "Why it failed, when it did."
-          },
-          "sentByEmail": {
-            "type": "string",
-            "nullable": true,
-            "description": "The admin who sent it from this app; null for inbound texts and texts sent from the Quo app."
-          },
-          "occurredAt": {
-            "format": "date-time",
-            "type": "string",
-            "description": "When it happened (Quo's time)."
-          },
-          "attachments": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/SmsAttachmentDto"
-            }
-          }
-        },
-        "required": [
-          "id",
-          "direction",
-          "body",
-          "mode",
-          "status",
-          "error",
-          "sentByEmail",
-          "occurredAt",
-          "attachments"
-        ]
-      },
-      "SmsMessageListDto": {
-        "type": "object",
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/SmsMessageDto"
-            }
-          },
-          "nextCursor": {
-            "type": "string",
-            "nullable": true,
-            "description": "Pass as `before` to get the next, older page. Null when there is nothing older."
-          },
-          "contactPhone": {
-            "type": "string",
-            "description": "The contact's number the chat is with (E.164)."
-          },
-          "contactPhoneProblem": {
-            "type": "string",
-            "nullable": true,
-            "description": "Why no text can be sent to this number (for example it cannot exist in the US); null when it can."
-          }
-        },
-        "required": [
-          "items",
-          "nextCursor",
-          "contactPhone",
-          "contactPhoneProblem"
-        ]
-      },
-      "SendSmsDto": {
-        "type": "object",
-        "properties": {
-          "text": {
-            "type": "string",
-            "description": "The words to send, 1 to 1600 characters (Quo's limit). Plain text only: Quo's API cannot send files.",
-            "minLength": 1,
-            "maxLength": 1600
-          }
-        },
-        "required": [
-          "text"
-        ]
-      },
-      "SmsSyncResultDto": {
-        "type": "object",
-        "properties": {
-          "fetched": {
-            "type": "number",
-            "description": "Texts Quo returned."
-          },
-          "added": {
-            "type": "number",
-            "description": "Of those, how many were new to us."
-          }
-        },
-        "required": [
-          "fetched",
-          "added"
-        ]
-      },
-      "SmsFileDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "contentType": {
-            "type": "string",
-            "nullable": true,
-            "description": "MIME type, e.g. `image/jpeg`; null if unknown."
-          },
-          "sizeBytes": {
-            "type": "number",
-            "nullable": true
-          },
-          "status": {
-            "description": "`stored` files can be opened; `pending` ones are still being copied; `failed` ones never will be.",
-            "enum": [
-              "pending",
-              "stored",
-              "failed"
-            ],
-            "type": "string"
-          },
-          "url": {
-            "type": "string",
-            "nullable": true,
-            "description": "Short-lived link to open the file (about 10 minutes). Null unless `stored`."
-          },
-          "direction": {
-            "type": "string",
-            "description": "Who sent it: `inbound` = the contact texted it to us.",
-            "enum": [
-              "inbound",
-              "outbound"
-            ]
-          },
-          "occurredAt": {
-            "format": "date-time",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "contentType",
-          "sizeBytes",
-          "status",
-          "url",
-          "direction",
-          "occurredAt"
-        ]
-      },
-      "SmsFileListDto": {
-        "type": "object",
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/SmsFileDto"
-            }
-          },
-          "total": {
-            "type": "number"
-          },
-          "page": {
-            "type": "number"
-          },
-          "limit": {
-            "type": "number"
-          }
-        },
-        "required": [
-          "items",
-          "total",
-          "page",
-          "limit"
-        ]
-      },
-      "MessageTemplateDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "kind": {
-            "enum": [
-              "application_approved",
-              "application_declined"
-            ],
-            "type": "string"
-          },
-          "name": {
-            "type": "string",
-            "description": "The label in the dropdown, e.g. \"No valid licence\"."
-          },
-          "body": {
-            "type": "string",
-            "description": "The text with its placeholders, e.g. `Hi {firstName}, ...`."
-          },
-          "placeholders": {
-            "description": "The placeholders this template may use, e.g. `[\"firstName\", \"lastName\"]`.",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "updatedAt": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "updatedByEmail": {
-            "type": "string",
-            "nullable": true,
-            "description": "Email of the admin who last edited it; null for the default text (or a removed account)."
-          }
-        },
-        "required": [
-          "id",
-          "kind",
-          "name",
-          "body",
-          "placeholders",
-          "updatedAt",
-          "updatedByEmail"
-        ]
-      },
-      "CreateMessageTemplateDto": {
-        "type": "object",
-        "properties": {
-          "kind": {
-            "type": "string",
-            "enum": [
-              "application_approved",
-              "application_declined"
-            ]
-          },
-          "name": {
-            "type": "string",
-            "description": "1 to 60 characters after trimming. Two templates of a kind cannot share a name (409).",
-            "minLength": 1,
-            "maxLength": 60
-          },
-          "body": {
-            "type": "string",
-            "description": "The new text, 1 to 1000 characters after trimming; line breaks kept. Unknown placeholders are refused (400).",
-            "minLength": 1,
-            "maxLength": 1000
-          }
-        },
-        "required": [
-          "kind",
-          "name",
-          "body"
-        ]
-      },
-      "UpdateMessageTemplateDto": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "description": "1 to 60 characters after trimming. Two templates of a kind cannot share a name (409).",
-            "minLength": 1,
-            "maxLength": 60
-          },
-          "body": {
-            "type": "string",
-            "description": "The new text, 1 to 1000 characters after trimming; line breaks kept. Unknown placeholders are refused (400).",
-            "minLength": 1,
-            "maxLength": 1000
-          }
-        },
-        "required": [
-          "name",
           "body"
         ]
       },
@@ -4788,14 +6515,6 @@
           "name",
           "description"
         ]
-      },
-      "ContractSchedule": {
-        "type": "string",
-        "enum": [
-          "weekly",
-          "daily"
-        ],
-        "description": "How often the driver pays: weekly or daily."
       },
       "ContractNumbersInputDto": {
         "type": "object",
@@ -5631,6 +7350,18 @@
           "onPaymentPlan": {
             "type": "boolean",
             "description": "Marked \"On Payment Plan\" by staff (D92): left out of the Should Be Deactivated list while true."
+          },
+          "smsOptedOut": {
+            "type": "boolean",
+            "description": "The driver texted STOP: no text of any kind is sent to them until they text START (spec section 8)."
+          },
+          "upcomingRemindersEnabled": {
+            "type": "boolean",
+            "description": "Staff switch: the weekly driver gets the \"payment due in 48 hours\" text (Fleet revisions section 6)."
+          },
+          "balanceRemindersEnabled": {
+            "type": "boolean",
+            "description": "Staff switch: the driver gets balance reminders (Fleet revisions section 6)."
           }
         },
         "required": [
@@ -5652,7 +7383,10 @@
           "balanceCents",
           "applicationId",
           "rentDueTime",
-          "onPaymentPlan"
+          "onPaymentPlan",
+          "smsOptedOut",
+          "upcomingRemindersEnabled",
+          "balanceRemindersEnabled"
         ]
       },
       "DriverListDto": {
@@ -5837,6 +7571,18 @@
             "type": "boolean",
             "description": "Marked \"On Payment Plan\" by staff (D92): left out of the Should Be Deactivated list while true."
           },
+          "smsOptedOut": {
+            "type": "boolean",
+            "description": "The driver texted STOP: no text of any kind is sent to them until they text START (spec section 8)."
+          },
+          "upcomingRemindersEnabled": {
+            "type": "boolean",
+            "description": "Staff switch: the weekly driver gets the \"payment due in 48 hours\" text (Fleet revisions section 6)."
+          },
+          "balanceRemindersEnabled": {
+            "type": "boolean",
+            "description": "Staff switch: the driver gets balance reminders (Fleet revisions section 6)."
+          },
           "profile": {
             "$ref": "#/components/schemas/DriverProfileDto"
           }
@@ -5861,6 +7607,9 @@
           "applicationId",
           "rentDueTime",
           "onPaymentPlan",
+          "smsOptedOut",
+          "upcomingRemindersEnabled",
+          "balanceRemindersEnabled",
           "profile"
         ]
       },
@@ -5923,6 +7672,14 @@
           "onPaymentPlan": {
             "type": "boolean",
             "description": "Staff marked the driver \"On Payment Plan\": left out of the Should Be Deactivated list while true."
+          },
+          "upcomingRemindersEnabled": {
+            "type": "boolean",
+            "description": "Send this weekly driver the \"payment due in 48 hours\" text (Fleet revisions section 6)."
+          },
+          "balanceRemindersEnabled": {
+            "type": "boolean",
+            "description": "Send this driver balance reminders (Fleet revisions section 6)."
           }
         }
       },
@@ -6009,6 +7766,79 @@
           }
         }
       },
+      "DriverNoteDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "authorId": {
+            "type": "string",
+            "nullable": true,
+            "description": "The admin who wrote it; null if that account was removed since."
+          },
+          "authorEmail": {
+            "type": "string",
+            "nullable": true,
+            "description": "The author's email, shown as their name (admins have no name field). Null if the account was removed."
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "body",
+          "authorId",
+          "authorEmail",
+          "createdAt"
+        ]
+      },
+      "DriverNoteListDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DriverNoteDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "description": "All notes of the driver, across pages."
+          },
+          "page": {
+            "type": "number"
+          },
+          "limit": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit"
+        ]
+      },
+      "CreateDriverNoteDto": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": "string",
+            "description": "The note, 1 to 2000 characters after trimming; line breaks are kept. `@Transform` trims it before the checks, so\na note of only spaces is refused (400) instead of saved empty.",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "body"
+        ]
+      },
       "LedgerTypeFilter": {
         "type": "string",
         "enum": [
@@ -6041,19 +7871,6 @@
           "reversal",
           "contract_charge"
         ]
-      },
-      "PaymentSource": {
-        "type": "string",
-        "enum": [
-          "email_zelle",
-          "email_cashapp",
-          "email_venmo",
-          "email_stripe",
-          "email_chime",
-          "plaid_zelle",
-          "manual"
-        ],
-        "description": "For a payment row: where the payment came from."
       },
       "PaymentManualMethod": {
         "type": "string",
@@ -6187,6 +8004,10 @@
             "type": "boolean",
             "description": "True when an admin may reverse it here: not a reversal, not a payment credit, not reversed already."
           },
+          "canEdit": {
+            "type": "boolean",
+            "description": "True when an admin may correct it here: not a reversal and not reversed (a reversed entry is cancelled)."
+          },
           "createdById": {
             "type": "string",
             "nullable": true,
@@ -6226,6 +8047,7 @@
           "internalNote",
           "reversedById",
           "canReverse",
+          "canEdit",
           "createdById",
           "createdByEmail",
           "createdAt"
@@ -6536,6 +8358,10 @@
             "type": "boolean",
             "description": "True when an admin may reverse it here: not a reversal, not a payment credit, not reversed already."
           },
+          "canEdit": {
+            "type": "boolean",
+            "description": "True when an admin may correct it here: not a reversal and not reversed (a reversed entry is cancelled)."
+          },
           "createdById": {
             "type": "string",
             "nullable": true,
@@ -6567,6 +8393,7 @@
           "internalNote",
           "reversedById",
           "canReverse",
+          "canEdit",
           "createdById",
           "createdByEmail",
           "createdAt"
@@ -6832,6 +8659,33 @@
           "reason",
           "requestKey"
         ]
+      },
+      "EditLedgerEntryDto": {
+        "type": "object",
+        "properties": {
+          "amountCents": {
+            "type": "number",
+            "description": "The new amount in whole cents, 1 to 1,000,000 ($10,000).",
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          "effectiveDate": {
+            "type": "string",
+            "description": "The new day the entry belongs to, `YYYY-MM-DD` in Chicago: a real day, not in the future.",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "description": {
+            "type": "string",
+            "description": "The new description, 1 to 500 characters after trimming.",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "internalNote": {
+            "type": "string",
+            "description": "The new staff-only memo, up to 500 characters; an empty string clears it.",
+            "maxLength": 500
+          }
+        }
       },
       "ReverseLedgerEntryDto": {
         "type": "object",
@@ -7262,1221 +9116,6 @@
           "payment",
           "aliasSaved",
           "aliasOwnedBy"
-        ]
-      },
-      "DashboardPaymentsDto": {
-        "type": "object",
-        "properties": {
-          "processedCents": {
-            "type": "number",
-            "description": "Everything that came in: confirmed payments plus the unmatched queue (rejected ones left out), in cents."
-          },
-          "processedCount": {
-            "type": "number",
-            "description": "How many payments that is."
-          },
-          "grossCents": {
-            "type": "number",
-            "description": "Sum of the confirmed (matched) payments, in cents."
-          },
-          "grossCount": {
-            "type": "number",
-            "description": "How many confirmed payments."
-          },
-          "matchedPercent": {
-            "type": "number",
-            "description": "Confirmed payments as a share of (confirmed + unmatched), 0-100. Rejected payments are left out."
-          },
-          "queueCents": {
-            "type": "number",
-            "description": "Sum of the unmatched payments (the queue), in cents."
-          },
-          "queueCount": {
-            "type": "number",
-            "description": "How many unmatched payments."
-          },
-          "needsReviewCount": {
-            "type": "number",
-            "description": "Of the unmatched ones, how many the matcher has already tried and a person must assign."
-          },
-          "todayCents": {
-            "type": "number",
-            "description": "Confirmed payments on today's Chicago day, in cents."
-          },
-          "last7DaysCents": {
-            "type": "number",
-            "description": "Today and the 6 days before it (Chicago days), in cents."
-          },
-          "last30DaysCents": {
-            "type": "number",
-            "description": "Today and the 29 days before it (Chicago days), in cents."
-          },
-          "thisWeekCents": {
-            "type": "number",
-            "description": "Monday to today (Chicago), in cents."
-          },
-          "thisWeekCount": {
-            "type": "number",
-            "description": "How many confirmed payments came in this week."
-          },
-          "averageCents": {
-            "type": "number",
-            "description": "Average confirmed payment, in cents (rounded). 0 when there is none."
-          },
-          "largestCents": {
-            "type": "number",
-            "description": "The largest confirmed payment, in cents."
-          }
-        },
-        "required": [
-          "processedCents",
-          "processedCount",
-          "grossCents",
-          "grossCount",
-          "matchedPercent",
-          "queueCents",
-          "queueCount",
-          "needsReviewCount",
-          "todayCents",
-          "last7DaysCents",
-          "last30DaysCents",
-          "thisWeekCents",
-          "thisWeekCount",
-          "averageCents",
-          "largestCents"
-        ]
-      },
-      "DashboardTrendDayDto": {
-        "type": "object",
-        "properties": {
-          "day": {
-            "type": "string",
-            "description": "Chicago day, `YYYY-MM-DD`."
-          },
-          "amountCents": {
-            "type": "number",
-            "description": "Confirmed payments on that day, in cents. 0 for a quiet day."
-          }
-        },
-        "required": [
-          "day",
-          "amountCents"
-        ]
-      },
-      "DashboardSourceDto": {
-        "type": "object",
-        "properties": {
-          "source": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/PaymentSource"
-              }
-            ]
-          },
-          "amountCents": {
-            "type": "number",
-            "description": "Confirmed money from this source, in cents."
-          },
-          "count": {
-            "type": "number",
-            "description": "Confirmed payments from this source."
-          },
-          "unmatchedCount": {
-            "type": "number",
-            "description": "Unmatched payments from this source."
-          },
-          "sharePercent": {
-            "type": "number",
-            "description": "This source's share of all confirmed money, 0-100 (rounded, so the shares may not add up to exactly 100)."
-          }
-        },
-        "required": [
-          "source",
-          "amountCents",
-          "count",
-          "unmatchedCount",
-          "sharePercent"
-        ]
-      },
-      "DashboardDriversDto": {
-        "type": "object",
-        "properties": {
-          "active": {
-            "type": "number",
-            "description": "Active, not archived drivers."
-          },
-          "daily": {
-            "type": "number",
-            "description": "Of them, on a daily contract."
-          },
-          "weekly": {
-            "type": "number",
-            "description": "Of them, on a weekly contract."
-          },
-          "withoutContract": {
-            "type": "number",
-            "description": "Of them, with no signed contract in force yet (nothing to bill)."
-          },
-          "dailyPercent": {
-            "type": "number",
-            "description": "`daily` as a share of daily + weekly, 0-100."
-          },
-          "weeklyPercent": {
-            "type": "number",
-            "description": "`weekly` as a share of daily + weekly, 0-100."
-          }
-        },
-        "required": [
-          "active",
-          "daily",
-          "weekly",
-          "withoutContract",
-          "dailyPercent",
-          "weeklyPercent"
-        ]
-      },
-      "DashboardWeekday": {
-        "type": "string",
-        "enum": [
-          "monday",
-          "tuesday",
-          "wednesday",
-          "thursday",
-          "friday",
-          "saturday",
-          "sunday"
-        ]
-      },
-      "DashboardWeekdayDto": {
-        "type": "object",
-        "properties": {
-          "weekday": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/DashboardWeekday"
-              }
-            ]
-          },
-          "drivers": {
-            "type": "number",
-            "description": "Active drivers on a weekly contract due that day."
-          },
-          "expectedCents": {
-            "type": "number",
-            "description": "Their weekly rent added up, in cents."
-          }
-        },
-        "required": [
-          "weekday",
-          "drivers",
-          "expectedCents"
-        ]
-      },
-      "DashboardBillingDto": {
-        "type": "object",
-        "properties": {
-          "dueTodayCents": {
-            "type": "number",
-            "description": "Rent that falls due today, in cents: exactly what the hourly rent job posts for today (daily + weekly)."
-          },
-          "dailyDueCents": {
-            "type": "number",
-            "description": "Of it, from daily contracts, in cents."
-          },
-          "weeklyDueCents": {
-            "type": "number",
-            "description": "Of it, from weekly contracts, in cents."
-          },
-          "dailyDueDrivers": {
-            "type": "number",
-            "description": "Drivers with daily rent due today."
-          },
-          "weeklyDueDrivers": {
-            "type": "number",
-            "description": "Drivers with weekly rent due today."
-          },
-          "inactiveOwedCents": {
-            "type": "number",
-            "description": "What inactive drivers (not in collections) still owe, in cents."
-          },
-          "collectionsOwedCents": {
-            "type": "number",
-            "description": "What drivers sent to collections still owe, in cents."
-          },
-          "weeklyByDay": {
-            "description": "The seven weekdays, Monday first.",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/DashboardWeekdayDto"
-            }
-          }
-        },
-        "required": [
-          "dueTodayCents",
-          "dailyDueCents",
-          "weeklyDueCents",
-          "dailyDueDrivers",
-          "weeklyDueDrivers",
-          "inactiveOwedCents",
-          "collectionsOwedCents",
-          "weeklyByDay"
-        ]
-      },
-      "DashboardWatchlistDriverDto": {
-        "type": "object",
-        "properties": {
-          "driverId": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string",
-            "description": "First and last name."
-          },
-          "balanceCents": {
-            "type": "number",
-            "description": "Negative: the driver owes this much, in cents."
-          }
-        },
-        "required": [
-          "driverId",
-          "name",
-          "balanceCents"
-        ]
-      },
-      "DashboardBalancesDto": {
-        "type": "object",
-        "properties": {
-          "driverCount": {
-            "type": "number",
-            "description": "How many drivers are counted."
-          },
-          "fleetBalanceCents": {
-            "type": "number",
-            "description": "All their balances added up (credits minus debits), in cents. Negative: the fleet owes more than it holds."
-          },
-          "positiveCount": {
-            "type": "number",
-            "description": "Drivers with a credit balance."
-          },
-          "zeroCount": {
-            "type": "number",
-            "description": "Drivers at exactly zero."
-          },
-          "negativeCount": {
-            "type": "number",
-            "description": "Drivers who owe money."
-          },
-          "creditCents": {
-            "type": "number",
-            "description": "The credits of the drivers in credit, added up, in cents."
-          },
-          "outstandingCents": {
-            "type": "number",
-            "description": "What the drivers who owe money owe, added up, in cents (a positive number): the total outstanding."
-          },
-          "watchlist": {
-            "description": "The 8 drivers who owe the most, most first.",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/DashboardWatchlistDriverDto"
-            }
-          }
-        },
-        "required": [
-          "driverCount",
-          "fleetBalanceCents",
-          "positiveCount",
-          "zeroCount",
-          "negativeCount",
-          "creditCents",
-          "outstandingCents",
-          "watchlist"
-        ]
-      },
-      "DashboardApplicationsDto": {
-        "type": "object",
-        "properties": {
-          "total": {
-            "type": "number"
-          },
-          "pending": {
-            "type": "number"
-          },
-          "approved": {
-            "type": "number"
-          },
-          "rejected": {
-            "type": "number"
-          },
-          "onHold": {
-            "type": "number"
-          },
-          "approvalPercent": {
-            "type": "number",
-            "description": "Approved as a share of approved + rejected + on hold, 0-100. 0 when none was reviewed."
-          },
-          "onboardingDrivers": {
-            "type": "number",
-            "description": "Drivers whose onboarding is not finished (not archived)."
-          }
-        },
-        "required": [
-          "total",
-          "pending",
-          "approved",
-          "rejected",
-          "onHold",
-          "approvalPercent",
-          "onboardingDrivers"
-        ]
-      },
-      "EmailIntakeOutcome": {
-        "type": "string",
-        "enum": [
-          "ok",
-          "failed",
-          "off"
-        ]
-      },
-      "DashboardIntakeRunDto": {
-        "type": "object",
-        "properties": {
-          "outcome": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/EmailIntakeOutcome"
-              }
-            ]
-          },
-          "at": {
-            "format": "date-time",
-            "type": "string",
-            "description": "When the latest run ended."
-          },
-          "stored": {
-            "type": "number",
-            "description": "Emails the latest run stored."
-          },
-          "lastSuccessAt": {
-            "format": "date-time",
-            "type": "string",
-            "nullable": true,
-            "description": "When a run last worked; kept through later failures. Null: never."
-          },
-          "error": {
-            "type": "string",
-            "nullable": true,
-            "description": "Why the latest run failed. Set only when `outcome` is `failed`."
-          }
-        },
-        "required": [
-          "outcome",
-          "at",
-          "stored",
-          "lastSuccessAt",
-          "error"
-        ]
-      },
-      "DashboardMailCountsDto": {
-        "type": "object",
-        "properties": {
-          "processed": {
-            "type": "number"
-          },
-          "notPayment": {
-            "type": "number"
-          },
-          "rejectedUnverified": {
-            "type": "number"
-          },
-          "extractionFailed": {
-            "type": "number"
-          },
-          "duplicatePayment": {
-            "type": "number"
-          }
-        },
-        "required": [
-          "processed",
-          "notPayment",
-          "rejectedUnverified",
-          "extractionFailed",
-          "duplicatePayment"
-        ]
-      },
-      "DashboardIntakeDto": {
-        "type": "object",
-        "properties": {
-          "lastRun": {
-            "nullable": true,
-            "description": "The latest run, or null when none has been recorded yet (a new database, or intake never started).",
-            "type": "object",
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/DashboardIntakeRunDto"
-              }
-            ]
-          },
-          "last24Hours": {
-            "description": "Mails stored in the last 24 hours, by outcome.",
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/DashboardMailCountsDto"
-              }
-            ]
-          },
-          "last7Days": {
-            "description": "Mails stored in the last 7 days, by outcome.",
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/DashboardMailCountsDto"
-              }
-            ]
-          },
-          "lastEmailAt": {
-            "format": "date-time",
-            "type": "string",
-            "nullable": true,
-            "description": "When the newest stored mail arrived, or null when there is none."
-          },
-          "awaitingMatchCount": {
-            "type": "number",
-            "description": "Payments the matcher has not looked at yet."
-          }
-        },
-        "required": [
-          "lastRun",
-          "last24Hours",
-          "last7Days",
-          "lastEmailAt",
-          "awaitingMatchCount"
-        ]
-      },
-      "SmsServiceMode": {
-        "type": "string",
-        "enum": [
-          "off",
-          "dry_run",
-          "live"
-        ]
-      },
-      "DashboardSmsDto": {
-        "type": "object",
-        "properties": {
-          "mode": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/SmsServiceMode"
-              }
-            ]
-          },
-          "quoConfigured": {
-            "type": "boolean",
-            "description": "Whether a Quo key and number are set."
-          },
-          "failedLast7Days": {
-            "type": "number",
-            "description": "Texts sent in the last 7 days that failed or were not delivered."
-          }
-        },
-        "required": [
-          "mode",
-          "quoConfigured",
-          "failedLast7Days"
-        ]
-      },
-      "DashboardDto": {
-        "type": "object",
-        "properties": {
-          "asOf": {
-            "format": "date-time",
-            "type": "string",
-            "description": "When this was worked out."
-          },
-          "today": {
-            "type": "string",
-            "description": "Today's Chicago day, `YYYY-MM-DD`."
-          },
-          "payments": {
-            "$ref": "#/components/schemas/DashboardPaymentsDto"
-          },
-          "trend": {
-            "description": "The last 21 Chicago days, oldest first, quiet days included.",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/DashboardTrendDayDto"
-            }
-          },
-          "sources": {
-            "description": "Sources with confirmed money or unmatched payments, biggest first.",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/DashboardSourceDto"
-            }
-          },
-          "drivers": {
-            "$ref": "#/components/schemas/DashboardDriversDto"
-          },
-          "billing": {
-            "$ref": "#/components/schemas/DashboardBillingDto"
-          },
-          "balances": {
-            "$ref": "#/components/schemas/DashboardBalancesDto"
-          },
-          "applications": {
-            "$ref": "#/components/schemas/DashboardApplicationsDto"
-          },
-          "intake": {
-            "$ref": "#/components/schemas/DashboardIntakeDto"
-          },
-          "sms": {
-            "$ref": "#/components/schemas/DashboardSmsDto"
-          }
-        },
-        "required": [
-          "asOf",
-          "today",
-          "payments",
-          "trend",
-          "sources",
-          "drivers",
-          "billing",
-          "balances",
-          "applications",
-          "intake",
-          "sms"
-        ]
-      },
-      "DueTodayRowDto": {
-        "type": "object",
-        "properties": {
-          "schedule": {
-            "nullable": true,
-            "description": "Weekly or daily, from the contract in force; null if the driver has none (not expected: rent comes from a contract).",
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/ContractSchedule"
-              }
-            ]
-          },
-          "status": {
-            "description": "Paid: nothing open. Late: open and past the due time. Not yet paid: open, due time not reached.",
-            "enum": [
-              "paid",
-              "not_yet_paid",
-              "late"
-            ],
-            "type": "string"
-          },
-          "driverId": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "vehicle": {
-            "type": "string",
-            "nullable": true,
-            "description": "The vehicle of the contract in force, \"Model (PLATE)\"; null when the contract names none."
-          },
-          "rateCents": {
-            "type": "number",
-            "nullable": true,
-            "description": "The contract's rent per period in cents; null without a contract."
-          },
-          "dueTime": {
-            "type": "string",
-            "nullable": true,
-            "description": "The time rent is due, Chicago `HH:MM` (24 hours); null = not set (late when the due day ends)."
-          },
-          "amountDueCents": {
-            "type": "number",
-            "description": "The rent charge due today, in cents."
-          },
-          "openCents": {
-            "type": "number",
-            "description": "What is still unpaid of it after credits are applied oldest first; 0 = paid."
-          },
-          "onPaymentPlan": {
-            "type": "boolean",
-            "description": "Staff marked the driver \"On Payment Plan\"."
-          }
-        },
-        "required": [
-          "schedule",
-          "status",
-          "driverId",
-          "name",
-          "vehicle",
-          "rateCents",
-          "dueTime",
-          "amountDueCents",
-          "openCents",
-          "onPaymentPlan"
-        ]
-      },
-      "LateDriverDto": {
-        "type": "object",
-        "properties": {
-          "schedule": {
-            "nullable": true,
-            "description": "Rate type: weekly or daily, from the contract in force.",
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/ContractSchedule"
-              }
-            ]
-          },
-          "driverId": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "dueTime": {
-            "type": "string",
-            "nullable": true,
-            "description": "The time rent is due, Chicago `HH:MM`; null = not set."
-          },
-          "pastDueCents": {
-            "type": "number",
-            "description": "The unpaid part of every late rent charge added up, in cents."
-          },
-          "lateCount": {
-            "type": "number",
-            "description": "How many rent charges are late."
-          },
-          "daysLate": {
-            "type": "number",
-            "description": "Whole days the oldest late charge is late, counted on the Chicago clock (1 = the same time on the next day has come)."
-          },
-          "hoursLate": {
-            "type": "number",
-            "description": "Real hours since the oldest late charge was due."
-          },
-          "onPaymentPlan": {
-            "type": "boolean",
-            "description": "Staff marked the driver \"On Payment Plan\"."
-          }
-        },
-        "required": [
-          "schedule",
-          "driverId",
-          "name",
-          "dueTime",
-          "pastDueCents",
-          "lateCount",
-          "daysLate",
-          "hoursLate",
-          "onPaymentPlan"
-        ]
-      },
-      "DriverStatus": {
-        "type": "string",
-        "enum": [
-          "onboarding",
-          "active",
-          "inactive"
-        ],
-        "description": "Active, or onboarding (an unpaid deposit puts a driver who is still onboarding on the list)."
-      },
-      "ShouldBeDeactivatedRowDto": {
-        "type": "object",
-        "properties": {
-          "schedule": {
-            "nullable": true,
-            "description": "Weekly or daily, from the contract in force; null if the driver has none.",
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/ContractSchedule"
-              }
-            ]
-          },
-          "driverStatus": {
-            "description": "Active, or onboarding (an unpaid deposit puts a driver who is still onboarding on the list).",
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/DriverStatus"
-              }
-            ]
-          },
-          "reasons": {
-            "type": "array",
-            "description": "Why: `daily_late` (2 or more daily payments late), `weekly_late` (a weekly payment 2 days late), `deposit_unpaid`\n(deposit still unpaid 7 days after its due date). At least one; the rows can show several.",
-            "items": {
-              "type": "string",
-              "enum": [
-                "daily_late",
-                "weekly_late",
-                "deposit_unpaid"
-              ]
-            }
-          },
-          "driverId": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "balanceCents": {
-            "type": "number",
-            "description": "Ledger balance in cents: credits minus debits; negative = the driver owes."
-          },
-          "daysLate": {
-            "type": "number",
-            "description": "Whole days the oldest late rent payment is late (Chicago clock); 0 when the reason is the deposit only."
-          },
-          "depositDaysSinceDue": {
-            "type": "number",
-            "nullable": true,
-            "description": "Days since the unpaid deposit was due (the contract start date); null when the deposit is not what is unpaid."
-          },
-          "depositCents": {
-            "type": "number",
-            "nullable": true,
-            "description": "The unpaid deposit in cents; null when the deposit is not what is unpaid."
-          }
-        },
-        "required": [
-          "schedule",
-          "driverStatus",
-          "reasons",
-          "driverId",
-          "name",
-          "balanceCents",
-          "daysLate",
-          "depositDaysSinceDue",
-          "depositCents"
-        ]
-      },
-      "WeekTotalDto": {
-        "type": "object",
-        "properties": {
-          "weekStart": {
-            "type": "string",
-            "description": "The Monday, Chicago day `YYYY-MM-DD`."
-          },
-          "weekEnd": {
-            "type": "string",
-            "description": "The Sunday, Chicago day `YYYY-MM-DD`."
-          },
-          "totalCents": {
-            "type": "number",
-            "description": "Confirmed payments that came in that week, in cents; 0 for a quiet week."
-          },
-          "paymentCount": {
-            "type": "number"
-          }
-        },
-        "required": [
-          "weekStart",
-          "weekEnd",
-          "totalCents",
-          "paymentCount"
-        ]
-      },
-      "DepositCollectedRowDto": {
-        "type": "object",
-        "properties": {
-          "driverId": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "amountCents": {
-            "type": "number",
-            "nullable": true,
-            "description": "The amount typed when the step was ticked (D82), in cents; null for a step ticked before amounts were recorded."
-          },
-          "paidAt": {
-            "format": "date-time",
-            "type": "string",
-            "description": "When the step was ticked."
-          }
-        },
-        "required": [
-          "driverId",
-          "name",
-          "amountCents",
-          "paidAt"
-        ]
-      },
-      "DepositsCollectedDto": {
-        "type": "object",
-        "properties": {
-          "totalCents": {
-            "type": "number",
-            "description": "The recorded amounts added up, in cents."
-          },
-          "withoutAmountCount": {
-            "type": "number",
-            "description": "How many drivers have no amount recorded; they are in the list and not in the total."
-          },
-          "drivers": {
-            "description": "Newest first.",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/DepositCollectedRowDto"
-            }
-          }
-        },
-        "required": [
-          "totalCents",
-          "withoutAmountCount",
-          "drivers"
-        ]
-      },
-      "DepositPendingRowDto": {
-        "type": "object",
-        "properties": {
-          "driverId": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "amountCents": {
-            "type": "number",
-            "description": "The deposit the signed contract asks for, in cents."
-          },
-          "dueDate": {
-            "type": "string",
-            "description": "The day it is due: the contract start date, `YYYY-MM-DD`."
-          },
-          "daysSinceDue": {
-            "type": "number",
-            "description": "Days since the due date; negative before it."
-          },
-          "overdue": {
-            "type": "boolean",
-            "description": "7 or more days since the due date: the driver is also on the Should Be Deactivated list (unless on a payment plan)."
-          },
-          "onPaymentPlan": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "driverId",
-          "name",
-          "amountCents",
-          "dueDate",
-          "daysSinceDue",
-          "overdue",
-          "onPaymentPlan"
-        ]
-      },
-      "DepositsPendingDto": {
-        "type": "object",
-        "properties": {
-          "totalCents": {
-            "type": "number"
-          },
-          "drivers": {
-            "description": "Longest overdue first.",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/DepositPendingRowDto"
-            }
-          }
-        },
-        "required": [
-          "totalCents",
-          "drivers"
-        ]
-      },
-      "DriverLeftReason": {
-        "type": "string",
-        "enum": [
-          "contract_ended",
-          "bad_driver",
-          "cooperative_returned_car"
-        ],
-        "description": "How the driver left (D81); null for a driver deactivated before reasons existed."
-      },
-      "CollectionsRowDto": {
-        "type": "object",
-        "properties": {
-          "leftReason": {
-            "nullable": true,
-            "description": "How the driver left (D81); null for a driver deactivated before reasons existed.",
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/DriverLeftReason"
-              }
-            ]
-          },
-          "driverId": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "balanceCents": {
-            "type": "number",
-            "description": "Ledger balance in cents: credits minus debits; negative = the driver owes."
-          },
-          "sentToCollectionsAt": {
-            "format": "date-time",
-            "type": "string",
-            "description": "When an admin sent the driver to collections."
-          }
-        },
-        "required": [
-          "leftReason",
-          "driverId",
-          "name",
-          "balanceCents",
-          "sentToCollectionsAt"
-        ]
-      },
-      "CollectionsDto": {
-        "type": "object",
-        "properties": {
-          "totalOwedCents": {
-            "type": "number",
-            "description": "What is owed by the drivers in the list (only the ones with a negative balance count), in cents."
-          },
-          "drivers": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/CollectionsRowDto"
-            }
-          }
-        },
-        "required": [
-          "totalOwedCents",
-          "drivers"
-        ]
-      },
-      "DailyOperationsDto": {
-        "type": "object",
-        "properties": {
-          "asOf": {
-            "format": "date-time",
-            "type": "string",
-            "description": "When the figures were worked out."
-          },
-          "today": {
-            "type": "string",
-            "description": "Today's Chicago day, `YYYY-MM-DD`."
-          },
-          "dueToday": {
-            "description": "Payments due today: weekly drivers first, then daily, then by name.",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/DueTodayRowDto"
-            }
-          },
-          "late": {
-            "description": "Drivers with a late rent payment, the longest late first.",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/LateDriverDto"
-            }
-          },
-          "earlyWarning": {
-            "description": "Drivers whose oldest late payment is a full day or more late, the longest late first.",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/LateDriverDto"
-            }
-          },
-          "shouldBeDeactivated": {
-            "description": "Drivers who meet a deactivation rule and are not on a payment plan, the longest overdue first. List only.",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ShouldBeDeactivatedRowDto"
-            }
-          },
-          "weeks": {
-            "description": "The current week and the 25 before it, newest first (D5). Monday to Sunday, Chicago days.",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/WeekTotalDto"
-            }
-          },
-          "depositsCollected": {
-            "$ref": "#/components/schemas/DepositsCollectedDto"
-          },
-          "depositsPending": {
-            "$ref": "#/components/schemas/DepositsPendingDto"
-          },
-          "collections": {
-            "$ref": "#/components/schemas/CollectionsDto"
-          }
-        },
-        "required": [
-          "asOf",
-          "today",
-          "dueToday",
-          "late",
-          "earlyWarning",
-          "shouldBeDeactivated",
-          "weeks",
-          "depositsCollected",
-          "depositsPending",
-          "collections"
-        ]
-      },
-      "CollectionView": {
-        "type": "string",
-        "enum": [
-          "monthly",
-          "weekly",
-          "daily"
-        ]
-      },
-      "CollectionPeriodDto": {
-        "type": "object",
-        "properties": {
-          "periodStart": {
-            "type": "string",
-            "description": "First Chicago day of the period (the 1st, a Monday, or the day itself), `YYYY-MM-DD`."
-          },
-          "periodEnd": {
-            "type": "string",
-            "description": "Last Chicago day of the period (the end of the month, a Sunday, or the day itself)."
-          },
-          "totalCents": {
-            "type": "number",
-            "description": "Confirmed payments received in the period, in cents. 0 for a quiet period."
-          },
-          "paymentCount": {
-            "type": "number",
-            "description": "How many confirmed payments that is."
-          }
-        },
-        "required": [
-          "periodStart",
-          "periodEnd",
-          "totalCents",
-          "paymentCount"
-        ]
-      },
-      "CollectionPeriodsDto": {
-        "type": "object",
-        "properties": {
-          "view": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/CollectionView"
-              }
-            ]
-          },
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/CollectionPeriodDto"
-            }
-          },
-          "total": {
-            "type": "number",
-            "description": "How many periods there are in all, so the page count can be worked out."
-          },
-          "page": {
-            "type": "number"
-          },
-          "limit": {
-            "type": "number"
-          },
-          "totalCents": {
-            "type": "number",
-            "description": "Confirmed payments in the whole filter (every period, every page), in cents."
-          },
-          "paymentCount": {
-            "type": "number",
-            "description": "How many confirmed payments that is."
-          }
-        },
-        "required": [
-          "view",
-          "items",
-          "total",
-          "page",
-          "limit",
-          "totalCents",
-          "paymentCount"
-        ]
-      },
-      "DriverRevenueDto": {
-        "type": "object",
-        "properties": {
-          "status": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/DriverStatus"
-              }
-            ]
-          },
-          "driverId": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "archived": {
-            "type": "boolean",
-            "description": "An archived driver is listed too: money received stays revenue (D93)."
-          },
-          "totalCents": {
-            "type": "number",
-            "description": "Confirmed payments received from them in the filter, in cents."
-          },
-          "paymentCount": {
-            "type": "number",
-            "description": "How many confirmed payments that is."
-          },
-          "lastPaymentAt": {
-            "format": "date-time",
-            "type": "string",
-            "description": "When the latest of those payments was received."
-          }
-        },
-        "required": [
-          "status",
-          "driverId",
-          "name",
-          "archived",
-          "totalCents",
-          "paymentCount",
-          "lastPaymentAt"
-        ]
-      },
-      "RevenueByDriverDto": {
-        "type": "object",
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/DriverRevenueDto"
-            }
-          },
-          "total": {
-            "type": "number",
-            "description": "How many drivers have at least one payment in the filter."
-          },
-          "page": {
-            "type": "number"
-          },
-          "limit": {
-            "type": "number"
-          },
-          "totalCents": {
-            "type": "number",
-            "description": "Confirmed payments of every driver in the filter, in cents (the same figure as the collections total)."
-          },
-          "paymentCount": {
-            "type": "number"
-          }
-        },
-        "required": [
-          "items",
-          "total",
-          "page",
-          "limit",
-          "totalCents",
-          "paymentCount"
         ]
       }
     }

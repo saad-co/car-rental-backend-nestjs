@@ -9,6 +9,10 @@ export class ApplicationDocumentDto {
   id: string;
   /** Which upload on the form: licence, rating screenshot or earnings screenshot. */
   kind: ApplicationDocumentKind;
+  /** 0 for every fixed kind; 1 to 5 for an "Other" file. */
+  slot: number;
+  /** The name staff gave an "Other" file; null for every fixed kind. */
+  label: string | null;
   /** `stored`: our copy can be opened; `pending`: still being copied; `failed`: it cannot be copied (see `error`). */
   status: ApplicationDocumentStatus;
   /** `website`: copied from the website's storage; `admin`: uploaded by an admin (D68). */

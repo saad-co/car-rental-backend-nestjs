@@ -348,12 +348,16 @@ describe("Approved applications, start onboarding, archive (D80, test database)"
       ).rejects.toBeInstanceOf(NotFoundException);
     });
 
-    it("delete is unchanged: an approved application still cannot be deleted", async () => {
+    it("an approved application can be deleted, archived or not (Fleet revisions section 4), and the delete is logged", async () => {
       const id = await approved("Ann");
       await applications.archive(id, adminId);
-      await expect(applications.deleteMany([id], adminId)).rejects.toThrow(
-        "Approved applications cannot be deleted",
-      );
+      expect(await applications.deleteMany([id], adminId)).toMatchObject({
+        deleted: 1,
+      });
+      const lines = (await db.query(
+        `SELECT action, entity_id FROM audit_logs`,
+      )) as { action: string; entity_id: string }[];
+      expect(lines).toEqual([{ action: "application.delete", entity_id: id }]);
     });
   });
 

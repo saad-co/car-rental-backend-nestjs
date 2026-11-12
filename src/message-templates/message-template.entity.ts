@@ -20,6 +20,16 @@ export enum TemplateKind {
   application_approved = "application_approved",
   /** Sent when an application is declined and the admin chooses to text the applicant (B72). */
   application_declined = "application_declined",
+  /** Reminder to a weekly driver 48 hours before the rent is due (Fleet revisions section 6). */
+  reminder_upcoming = "reminder_upcoming",
+  /** The one text when a payment is missed. */
+  reminder_late = "reminder_late",
+  /** A daily driver is 2, 3, 4 or 5 payments behind. */
+  reminder_high_balance = "reminder_high_balance",
+  /** The past-due balance is over $100: every 3 days. */
+  reminder_balance = "reminder_balance",
+  /** After a payment, with what is still past due. */
+  reminder_payment_received = "reminder_payment_received",
 }
 
 /** Longest template body: a few SMS segments at most. */

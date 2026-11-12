@@ -5,9 +5,11 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { DataSource, EntityManager, FindOptionsWhere, In } from "typeorm";
+import { recordAudit } from "../audit/record-audit.js";
 import {
   addDays,
   chicagoDate,
+  chicagoInstant,
   isCalendarDate,
 } from "../common/chicago-date.js";
 import { isUniqueViolation } from "../database/postgres-errors.js";
@@ -48,6 +50,7 @@ import {
 import { ledgerRef, parseLedgerRef } from "./ledger-ref.js";
 import {
   CreateLedgerEntryDto,
+  EditLedgerEntryDto,
   LedgerEntryDto,
   MAX_BACKDATE_DAYS,
 } from "./dto/ledger-entry.dto.js";
@@ -333,6 +336,192 @@ export class LedgerService {
       ).id;
     });
     return this.findDto(reversalId);
+  }
+
+  /**
+   * Corrects an entry that was logged wrongly: amount, date, description and/or memo, IN PLACE (Fleet revisions section 5,
+   * D99). The client asked for edits because payments and charges are sometimes entered incorrectly, and wants the entry
+   * itself changed, not a reversal and a second entry.
+   *
+   * This is the one place the ledger's append-only rule bends. The database trigger refuses every UPDATE except one that
+   * changes only those four columns inside a transaction that switched `app.ledger_edit` on, which is what this method does;
+   * everything else about an entry (driver, direction, kind, payment, links, key) can never change. The old values are not on
+   * the ledger any more, so the audit line `ledger_entry.edit` written in the same transaction records who changed what, when,
+   * and the old and new values.
+   *
+   * A payment is edited on the payment row first (amount, date, and for a payment recorded by hand its text), then its credit
+   * is updated to match, so the payment and its credit can never disagree and the collected totals follow.
+   *
+   * Refused: a reversal, an entry that was reversed (it is cancelled; nothing to correct), an amount that would leave a
+   * charge below the credits already applied to it, or a credit above what is left on its charge, a date in the future, and a
+   * field the entry cannot take (a payment from an email has no text of its own to change).
+   *
+   * @returns the corrected entry.
+   * @throws NotFoundException no such entry on this driver.
+   * @throws BadRequestException nothing changed, a bad date, an amount that does not fit, or a field a payment from an email cannot take.
+   * @throws ConflictException see above.
+   */
+  async edit(
+    driverId: string,
+    entryId: string,
+    input: EditLedgerEntryDto,
+    adminId: string,
+  ): Promise<LedgerEntryDto> {
+    await this.dataSource.transaction(async (manager) => {
+      // The row lock makes a second admin editing the same entry wait, then see the new values.
+      const original = await manager.findOne(LedgerEntry, {
+        where: { id: entryId, driverId },
+        lock: { mode: "pessimistic_write" },
+      });
+      if (!original) throw new NotFoundException("Ledger entry not found.");
+      if (original.kind === LedgerEntryKind.reversal) {
+        throw new ConflictException("A reversal cannot be edited.");
+      }
+      if (await manager.existsBy(LedgerEntry, { reversalOfId: original.id })) {
+        throw new ConflictException(
+          "This entry was reversed, so it is cancelled and cannot be edited.",
+        );
+      }
+      const ref = ledgerRef(
+        original.kind,
+        original.direction,
+        original.entryNo,
+      );
+
+      const next = {
+        amountCents: input.amountCents ?? original.amountCents,
+        effectiveDate: input.effectiveDate ?? original.effectiveDate,
+        description: input.description ?? original.description,
+        internalNote:
+          input.internalNote === undefined
+            ? original.internalNote
+            : input.internalNote || null,
+      };
+      const before = {
+        amountCents: original.amountCents,
+        effectiveDate: original.effectiveDate,
+        description: original.description,
+        internalNote: original.internalNote,
+      };
+      const changed = (Object.keys(next) as (keyof typeof next)[]).filter(
+        (key) => next[key] !== before[key],
+      );
+      if (changed.length === 0) {
+        throw new BadRequestException("Nothing was changed.");
+      }
+      if (
+        input.effectiveDate !== undefined &&
+        (!isCalendarDate(next.effectiveDate) ||
+          next.effectiveDate > chicagoDate(new Date()))
+      ) {
+        throw new BadRequestException(
+          "The date must be a real day, not in the future.",
+        );
+      }
+
+      // The amount must still fit with the credits applied against a charge, and a credit on a charge must fit on it.
+      if (changed.includes("amountCents")) {
+        if (
+          original.direction === LedgerDirection.debit &&
+          next.amountCents < (await this.appliedCents(manager, original.id))
+        ) {
+          throw new BadRequestException(
+            `${ref} has ${formatCents(await this.appliedCents(manager, original.id))} of credits applied to it, so it cannot be less than that. Reverse a credit first.`,
+          );
+        }
+        if (original.appliesToId) {
+          const charge = await this.lockCharge(
+            manager,
+            driverId,
+            original.appliesToId,
+          );
+          const left =
+            charge.amountCents -
+            (await this.appliedCents(manager, charge.id)) +
+            original.amountCents;
+          if (next.amountCents > left) {
+            throw new BadRequestException(
+              `At most ${formatCents(left)} can be credited on ${ledgerRef(charge.kind, charge.direction, charge.entryNo)}.`,
+            );
+          }
+        }
+      }
+
+      if (original.kind === LedgerEntryKind.payment) {
+        await this.editPaymentRow(manager, original, next, changed);
+      }
+
+      // Switch the edit on for this transaction only (the third argument): the trigger refuses a ledger UPDATE without it.
+      await manager.query(`SELECT set_config('app.ledger_edit', 'on', true)`);
+      await manager.update(
+        LedgerEntry,
+        { id: original.id },
+        {
+          amountCents: next.amountCents,
+          effectiveDate: next.effectiveDate,
+          description: next.description,
+          internalNote: next.internalNote,
+        },
+      );
+
+      await recordAudit(manager, [
+        {
+          actorId: adminId,
+          action: "ledger_entry.edit",
+          entityType: "ledger_entry",
+          entityId: original.id,
+          before: { ref, driverId, ...before },
+          after: { ...next },
+        },
+      ]);
+    });
+    return this.findDto(entryId);
+  }
+
+  /**
+   * The payment case of `edit`: changes the payment row itself (amount, date, memo, and the text of a payment recorded by
+   * hand), so the payment, its credit and the reports that read `payments` all agree. A payment from an email keeps its
+   * sender-built text, so only its amount, date and memo can be edited; the database allows text on a manual payment only.
+   */
+  private async editPaymentRow(
+    manager: EntityManager,
+    original: LedgerEntry,
+    next: {
+      amountCents: number;
+      effectiveDate: string;
+      description: string;
+      internalNote: string | null;
+    },
+    changed: string[],
+  ): Promise<void> {
+    const payment = await manager.findOne(Payment, {
+      where: { id: original.paymentId! },
+      lock: { mode: "pessimistic_write" },
+    });
+    if (
+      !payment ||
+      payment.status !== PaymentStatus.confirmed ||
+      payment.driverId !== original.driverId
+    ) {
+      throw new ConflictException(
+        "This payment is no longer confirmed for this driver, so its credit cannot be edited here.",
+      );
+    }
+    const manual = payment.source === PaymentSource.manual;
+    if (!manual && changed.includes("description")) {
+      throw new BadRequestException(
+        "A payment that came from an email can change its amount, date and memo only; its text comes from the sender.",
+      );
+    }
+    payment.amountCents = next.amountCents;
+    if (changed.includes("effectiveDate")) {
+      // Noon in Chicago on the chosen day: that day, whatever the daylight-saving hour, and the payment reports
+      // (collected per day) agree with the ledger.
+      payment.occurredAt = chicagoInstant(next.effectiveDate, "12:00");
+    }
+    if (manual) payment.description = next.description;
+    payment.internalNote = next.internalNote;
+    await manager.save(Payment, payment);
   }
 
   /**
@@ -679,6 +868,7 @@ export class LedgerService {
       internalNote: row.internal_note,
       reversedById: row.reversed_by_id,
       canReverse: this.canReverse(row.kind, reversed),
+      canEdit: !reversed && row.kind !== LedgerEntryKind.reversal,
       createdById: row.created_by_id,
       createdByEmail: row.created_by_email,
       createdAt: row.created_at,
@@ -987,6 +1177,7 @@ export class LedgerService {
       internalNote: entry.internalNote,
       reversedById,
       canReverse: this.canReverse(entry.kind, reversedById !== null),
+      canEdit: reversedById === null && entry.kind !== LedgerEntryKind.reversal,
       createdById: entry.createdById,
       createdByEmail: entry.createdBy?.email ?? null,
       createdAt: entry.createdAt,

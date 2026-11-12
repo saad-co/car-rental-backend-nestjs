@@ -1,5 +1,8 @@
 import "reflect-metadata";
 import { DataSource } from "typeorm";
+import { AuditLog } from "../audit/audit-log.entity.js";
+import { ReminderLog } from "../reminders/reminder-log.entity.js";
+import { AppSetting } from "../settings/app-setting.entity.js";
 import { PaymentAlias } from "../aliases/payment-alias.entity.js";
 import { Application } from "../applications/application.entity.js";
 import { ApplicationDocument } from "../applications/documents/application-document.entity.js";
@@ -9,6 +12,7 @@ import { Contract } from "../contracts/contract.entity.js";
 import { LedgerPreset } from "../ledger-presets/ledger-preset.entity.js";
 import { MessageTemplate } from "../message-templates/message-template.entity.js";
 import { Driver } from "../drivers/driver.entity.js";
+import { DriverNote } from "../drivers/notes/driver-note.entity.js";
 import { LedgerEntry } from "../ledger/ledger-entry.entity.js";
 import { EmailIntakeStatus } from "../email-intake/email-intake-status.entity.js";
 import { InboundEmail } from "../email-intake/inbound-email.entity.js";
@@ -45,6 +49,10 @@ export default new DataSource({
     LedgerEntry,
     Contract,
     ContractCompany,
+    AuditLog,
+    AppSetting,
+    ReminderLog,
+    DriverNote,
   ],
   // `.ts` when run from the sources (tsx, local), `.js` when run compiled (production). Never
   // both: the build also writes `.d.ts` type files next to each migration, which are not migrations.

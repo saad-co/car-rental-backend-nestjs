@@ -132,8 +132,8 @@ export class DriversController {
   }
 
   /**
-   * `PATCH /drivers/:id/rent-settings`: changes the time of day rent is due (Chicago time, `HH:MM`) and the "On Payment
-   * Plan" flag (D92). A field left out stays; `rentDueTime: null` clears it. Returns the updated driver. `400` for a bad
+   * `PATCH /drivers/:id/rent-settings`: changes the time of day rent is due (Chicago time, `HH:MM`), the "On Payment
+   * Plan" flag (D92) and the two reminder switches (`upcomingRemindersEnabled`, `balanceRemindersEnabled`). A field left out stays; `rentDueTime: null` clears it. Returns the updated driver. `400` for a bad
    * time, `404` if unknown.
    */
   @Patch(":id/rent-settings")

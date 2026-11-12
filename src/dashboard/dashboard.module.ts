@@ -13,5 +13,7 @@ import { DashboardService } from "./dashboard.service.js";
   imports: [SmsModule],
   controllers: [DashboardController],
   providers: [DashboardService, DailyOperationsService, CollectionsService],
+  // The payment reminders reuse the daily-operations lateness figures (Fleet revisions section 6).
+  exports: [DailyOperationsService],
 })
 export class DashboardModule {}

@@ -430,7 +430,7 @@ describe("an admin adds an application by hand (D68, test database)", () => {
         adminId,
       ),
     ).rejects.toThrow(
-      "Driver's licence: Only JPG, PNG or PDF files, at most 10 MB.",
+      "Driver's licence (front): Only JPG, PNG or PDF files, at most 10 MB.",
     );
     await expect(
       build().createManual(

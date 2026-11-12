@@ -91,10 +91,11 @@ export enum MatchMethod {
   "payments_match_confidence_range",
   `"match_confidence" IS NULL OR ("match_confidence" >= 0 AND "match_confidence" <= 1)`,
 )
-// The description and the staff note are only ever set on payments an admin recorded, and are not blank.
+// The description is only ever set on payments an admin recorded; the staff note may be on any payment (Fleet revisions
+// section 5). Neither is blank.
 @Check(
   "payments_manual_text_shape",
-  `("description" IS NULL OR ("source" = 'manual' AND length(btrim("description")) BETWEEN 1 AND 500)) AND ("internal_note" IS NULL OR ("source" = 'manual' AND length(btrim("internal_note")) BETWEEN 1 AND 500))`,
+  `("description" IS NULL OR ("source" = 'manual' AND length(btrim("description")) BETWEEN 1 AND 500)) AND ("internal_note" IS NULL OR length(btrim("internal_note")) BETWEEN 1 AND 500)`,
 )
 // The method is only ever set on payments an admin recorded (older manual rows may have none).
 @Check(

@@ -62,7 +62,7 @@ so the two repos cannot silently drift apart.
 ## 3. Core rules (non-negotiable)
 
 1. **Money is integer cents** (`Int`). Never floats, never strings in arithmetic.
-2. **Ledger is append-only.** No updates or deletes. Corrections are reversal entries.
+2. **Ledger is append-only, with one controlled exception.** No deletes, and no updates, except a staff edit of an entry's amount, date, description or memo, done in place by the ledger edit only and recorded in the audit log with the old and new values (D94, Abulkalam 2026-11-12: the client wants entries editable). Everything else is a reversal entry.
 3. **Every write that can be retried is idempotent**, enforced by a unique key in the database, not just by application logic.
 4. **Store UTC; bill in `America/Chicago`.**
 5. **No silent failure.** Every parse failure, rejected email, failed SMS or sync error is recorded with a reason and visible in the admin UI. Never `catch` and discard.
@@ -134,7 +134,7 @@ dialogs; the reminder kinds and their placeholders come with M6.
 
 **Setting** — key/value for switches, thresholds, tier timings, SMS mode.
 
-**AuditLog** — who did what for every manual action (assignment, adjustment, reversal, setting change).
+**AuditLog** — who did what for every manual action (assignment, adjustment, reversal, setting change). *As built (D95):* `audit_logs`, append-only, written inside the acting transaction; today logs application deletes and ledger entry edits; no screen. **DriverNote** (D97) — an internal note about a driver's account, with author and time. **ReminderLog** (D98) — every payment reminder composed, sent or failed. **AppSetting** (D98) — key/value switches (`reminders_enabled`, `payment_link`).
 
 ---
 
@@ -248,12 +248,13 @@ An admin assigns an unmatched payment to a driver. This posts the payment and **
 - **Approved applications** — approved applicants whose onboarding is not finished, with Start onboarding (D80).
 - **Add driver** (D85) — a form for a driver with no application: name, email and phone required; profile, licence and earnings files and payment aliases optional. Starts in onboarding, no login, no text.
 - **Drivers** — only active and inactive drivers (plus the "Onboarding (added directly)" view, D85), archived ones hidden (D80), archived and unarchived together with their application (D84); list with balance and late status; detail page with profile, billing settings, aliases (add/remove), ledger history, SMS history.
+- **Ledgers** (D97; menu entry directly under Payments) — every driver who has been through onboarding with balance and status, searchable, Status and Archived filters, 8 rows per page; opens the driver's ledger. "View ledger" links also on Payments rows and on the dashboard's Late payments, Early warning and Should be deactivated lists. The dashboard has an "Add driver" quick action and clickable headline tiles.
 - **Collections** — drivers sent to collections (D81): how they left, when sent, balance; the admin messages them from the
   driver page and can remove them. Passing the account to an outside agency is not built.
 - **Payments** — filterable by status and source. Unrecognised bucket with assign-to-driver. Discrepancy list.
 - **Email log** — every processed email with its outcome and reason (verified? extracted? matched to whom?).
-- **Ledger actions** — manual debit/credit with required reason; reverse an entry. Admin only.
-- **Settings** — Plaid connect, Gmail connection status, SMS mode, automation switches, reminder tiers and timings, templates, LLM confidence threshold.
+- **Ledger actions** — manual debit/credit with required reason; reverse an entry; **edit** an entry (amount, date, description, memo) in place, logged with old and new values (D94); memo on any entry (staff only, never on the statement); account notes on the driver's ledger page (D97). Admin only.
+- **Settings** — Plaid connect, Gmail connection status, SMS mode, automation switches, reminder tiers and timings, templates, LLM confidence threshold. *As built (D98):* the payment-reminder switch (off by default), the optional payment link and the five editable reminder texts; each driver's page lists the reminders sent to them and holds the per-driver reminder switches.
 - All lists paginated server-side.
 
 ---

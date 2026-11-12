@@ -39,7 +39,7 @@ import {
 const WEEKS_SHOWN = 26;
 
 /** A driver the lists are about: active or onboarding, not archived, not in collections. */
-interface ListedDriver {
+export interface ListedDriver {
   id: string;
   status: DriverStatus;
   /** The "Deposit paid" onboarding step is ticked (B106: ticking does not touch the ledger). */
@@ -48,17 +48,25 @@ interface ListedDriver {
   lastName: string;
   rentDueTime: string | null;
   onPaymentPlan: boolean;
+  /** What the payment reminders need (Fleet revisions section 6). */
+  phone: string;
+  smsOptedOut: boolean;
+  upcomingRemindersEnabled: boolean;
+  balanceRemindersEnabled: boolean;
+  /** The day billing starts (`YYYY-MM-DD`): rent is never billed or chased before it; null = not billed. */
+  rentFrom: string | null;
+  lateEpisodeStartedAt: Date | null;
 }
 
 /** A signed contract with the vehicle it names (the rent schedule needs the first columns). */
-interface ContractRow extends BillableContract {
+export interface ContractRow extends BillableContract {
   vehicleModel: string | null;
   vehiclePlate: string | null;
   securityDepositCents: number;
 }
 
 /** Everything the lists need to know about one driver, worked out once. */
-interface DriverFigures {
+export interface DriverFigures {
   driver: ListedDriver;
   name: string;
   /** The signed contract in force today, if any. */
@@ -123,12 +131,17 @@ export class DailyOperationsService {
    * The listed drivers (active or onboarding, not archived, not in collections) with their signed contracts and their
    * ledger, in three queries for all of them (not one per driver), then worked out in memory.
    */
-  private async driverFigures(now: Date): Promise<DriverFigures[]> {
+  async driverFigures(now: Date, onlyIds?: string[]): Promise<DriverFigures[]> {
     const drivers = (await this.db.query(
       `SELECT id, status, first_name AS "firstName", last_name AS "lastName", rent_due_time::text AS "rentDueTime",
-              on_payment_plan AS "onPaymentPlan", (deposit_paid_at IS NOT NULL) AS "depositTicked"
+              on_payment_plan AS "onPaymentPlan", (deposit_paid_at IS NOT NULL) AS "depositTicked",
+              phone, sms_opted_out AS "smsOptedOut", upcoming_reminders_enabled AS "upcomingRemindersEnabled",
+              balance_reminders_enabled AS "balanceRemindersEnabled", rent_from::text AS "rentFrom",
+              late_episode_started_at AS "lateEpisodeStartedAt"
        FROM drivers
-       WHERE status IN ('active', 'onboarding') AND archived_at IS NULL AND sent_to_collections_at IS NULL`,
+       WHERE status IN ('active', 'onboarding') AND archived_at IS NULL AND sent_to_collections_at IS NULL
+         AND ($1::uuid[] IS NULL OR id = ANY($1::uuid[]))`,
+      [onlyIds ?? null],
     )) as ListedDriver[];
     if (drivers.length === 0) return [];
     const ids = drivers.map((driver) => driver.id);

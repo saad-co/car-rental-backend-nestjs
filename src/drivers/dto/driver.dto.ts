@@ -60,6 +60,12 @@ export class DriverDto {
   rentDueTime: string | null;
   /** Marked "On Payment Plan" by staff (D92): left out of the Should Be Deactivated list while true. */
   onPaymentPlan: boolean;
+  /** The driver texted STOP: no text of any kind is sent to them until they text START (spec section 8). */
+  smsOptedOut: boolean;
+  /** Staff switch: the weekly driver gets the "payment due in 48 hours" text (Fleet revisions section 6). */
+  upcomingRemindersEnabled: boolean;
+  /** Staff switch: the driver gets balance reminders (Fleet revisions section 6). */
+  balanceRemindersEnabled: boolean;
 }
 
 /**

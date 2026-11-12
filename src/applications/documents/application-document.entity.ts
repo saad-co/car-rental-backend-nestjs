@@ -34,7 +34,14 @@ export enum ApplicationDocumentKind {
   rating = "rating",
   earnings = "earnings",
   contract = "contract",
+  /** The back of the driver's licence (the `license` slot is the front). Always the driver's own (fleet revisions section 3). */
+  license_back = "license_back",
+  /** Up to 5 files per driver that staff name themselves (`label`, `slot` 1-5). Always the driver's own. */
+  other = "other",
 }
+
+/** How many "Other" slots a driver has (client, Fleet revisions section 3: "4-5 extra Other upload slots"). */
+export const OTHER_SLOT_COUNT = 5;
 
 /** Where a document is in being copied from the website's storage into ours. */
 export enum ApplicationDocumentStatus {
@@ -60,14 +67,14 @@ export enum ApplicationDocumentStatus {
  */
 @Entity("application_documents")
 @Unique("application_documents_application_kind_key", ["applicationId", "kind"])
-@Unique("application_documents_driver_kind_key", ["driverId", "kind"])
+@Unique("application_documents_driver_kind_key", ["driverId", "kind", "slot"])
 // A contract is filed at most once: one firma contract, one copy (D90).
 @Unique("application_documents_contract_key", ["contractId"])
-// One owner: an application, or a driver (and then an admin upload or a firma copy; the website never sends files for a
-// driver). Written as "not the website" so the check never names a value added in the same migration (D90).
+// One owner: an application, or a driver (an admin upload, a firma copy, or a website file handed to the driver when its
+// approved application was deleted).
 @Check(
   "application_documents_one_owner",
-  `("application_id" IS NULL) <> ("driver_id" IS NULL) AND ("driver_id" IS NULL OR "origin" <> 'website')`,
+  `("application_id" IS NULL) <> ("driver_id" IS NULL)`,
 )
 @Check(
   "application_documents_stored_has_file",
@@ -82,6 +89,16 @@ export enum ApplicationDocumentStatus {
 @Check(
   "application_documents_contract_link",
   `"contract_id" IS NULL OR "driver_id" IS NOT NULL`,
+)
+// `other` files have a slot 1-5 and a label; every fixed kind has slot 0 and no label.
+@Check(
+  "application_documents_slot_label",
+  `("kind"::text = 'other' AND "slot" BETWEEN 1 AND 5 AND "label" IS NOT NULL AND length(btrim("label")) BETWEEN 1 AND 60) OR ("kind"::text <> 'other' AND "slot" = 0 AND "label" IS NULL)`,
+)
+// The back of the licence and the other files belong to the driver, never to an application (they must outlive it).
+@Check(
+  "application_documents_driver_only_kinds",
+  `"kind"::text NOT IN ('license_back', 'other') OR "driver_id" IS NOT NULL`,
 )
 @Check(
   "application_documents_failed_has_error",
@@ -114,6 +131,14 @@ export class ApplicationDocument {
     enumName: "application_document_kind",
   })
   kind: ApplicationDocumentKind;
+
+  /** 0 for every fixed kind; 1 to 5 for the "Other" files of a driver. */
+  @Column({ type: "smallint", default: 0 })
+  slot: number;
+
+  /** What staff call an "Other" file, for example "Insurance card"; null for every fixed kind. */
+  @Column({ type: "varchar", length: 60, nullable: true })
+  label: string | null;
 
   /** Website copy or admin upload (D68). Never changes by itself, unlike `uploadedById`, which `SET NULL` can clear. */
   @Column({

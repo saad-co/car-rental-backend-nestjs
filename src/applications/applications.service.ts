@@ -23,6 +23,7 @@ import {
   SelectQueryBuilder,
 } from "typeorm";
 import { likePattern, phoneDigits } from "../common/search.js";
+import { recordAudit } from "../audit/record-audit.js";
 import { isUniqueViolation } from "../database/postgres-errors.js";
 import { Driver, DriverStatus } from "../drivers/driver.entity.js";
 import { profileFromApplication } from "../drivers/driver-profile.js";
@@ -927,19 +928,21 @@ export class ApplicationsService {
   }
 
   /**
-   * Deletes applications for good (B66: hard delete, no undo). All or nothing, in one transaction:
+   * Deletes applications for good (B66: hard delete, no undo), whatever their status (Fleet revisions section 4). All or
+   * nothing, in one transaction:
    * 1. loads and locks the rows (`FOR UPDATE`), so nobody can approve one of them meanwhile. Sorted by id, so two
    *    deletes of overlapping sets lock in the same order and cannot deadlock;
-   * 2. refuses the whole request if any is approved: an approved application is where its driver came from;
-   * 3. deletes the text history of each phone that no other application and no driver uses. A shared phone keeps
+   * 2. an approved application's driver stays (the driver row never references the application), and the files that
+   *    were the application's (licence, rating, earnings) are handed to the driver instead of being deleted with it;
+   * 3. writes one audit line per application (who, when, what it looked like), in the same transaction;
+   * 4. deletes the text history of each phone that no other application and no driver uses. A shared phone keeps
    *    its chat, because that chat also belongs to the other record;
-   * 4. deletes the applications; their `application_documents` rows go with them (`ON DELETE CASCADE`).
+   * 5. deletes the applications; their remaining `application_documents` rows go with them (`ON DELETE CASCADE`).
    * After the commit, the copied files are removed from the bucket. Files go last on purpose: if the database
    * step fails nothing is touched, and a file that cannot be removed does not undo the delete; it is logged with
    * its reason and counted in `filesNotRemoved`.
    *
    * Ids that do not exist (already deleted) are ignored, so deleting twice is not an error.
-   * @throws ConflictException naming the approved applications; nothing is deleted.
    */
   async deleteMany(
     ids: string[],
@@ -953,19 +956,40 @@ export class ApplicationsService {
           lock: { mode: "pessimistic_write" },
         });
 
-        const approved = rows.filter(
-          (a) => a.status === ApplicationStatus.approved,
-        );
-        if (approved.length > 0) {
-          const names = approved
-            .map((a) => `${a.firstName} ${a.lastName}`)
-            .join(", ");
-          throw new ConflictException(
-            `Approved applications cannot be deleted: ${names}. Nothing was deleted.`,
-          );
-        }
         if (rows.length === 0) return { deletedIds: [], fileKeys: [] };
         const rowIds = rows.map((a) => a.id);
+
+        // The driver of an approved application keeps the files that came with it. Only copied files move (a pending or
+        // failed copy has nothing to keep); the driver's own slot of the same kind wins if there is one.
+        for (const row of rows) {
+          if (row.driverId === null) continue;
+          await manager.query(
+            `UPDATE application_documents d SET driver_id = $2, application_id = NULL
+             WHERE d.application_id = $1 AND d.status = 'stored'
+               AND NOT EXISTS (SELECT 1 FROM application_documents o
+                               WHERE o.driver_id = $2 AND o.kind = d.kind AND o.slot = d.slot)`,
+            [row.id, row.driverId],
+          );
+        }
+        await recordAudit(
+          manager,
+          rows.map((row) => ({
+            actorId: adminId,
+            action: "application.delete",
+            entityType: "application",
+            entityId: row.id,
+            before: {
+              firstName: row.firstName,
+              lastName: row.lastName,
+              email: row.email,
+              phone: row.phone,
+              status: row.status,
+              driverId: row.driverId,
+              submittedAt: row.submittedAt,
+              createdAt: row.createdAt,
+            },
+          })),
+        );
 
         const documents = await manager.find(ApplicationDocument, {
           where: { applicationId: In(rowIds), storageKey: Not(IsNull()) },
