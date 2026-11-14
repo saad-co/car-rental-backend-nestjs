@@ -193,7 +193,7 @@ An admin assigns an unmatched payment to a driver. This posts the payment and **
 - **Contract billing (D83, Module 2 step 5) replaces the daily job below:** rent is billed by an hourly job from the driver's signed
   contract (rate, schedule and start date come from it), for `active` drivers who are not archived, from `drivers.rent_from`; the contract's
   pickup charges (deposit, fees, first rent) are posted when the driver signs, whatever the driver's status. `billingActive` and
-  `billingDueWeekday` are not used. The rest of this section (days late, effective balance) still applies.
+  `billingDueWeekday` are not used. A driver with no signed contract can have the rent set by hand (D100): the same job bills it from the view `billable_contracts`, from the day it is saved, never before. The rent of any driver can be changed from a date (D101): the new rent starts on the first due day on or after the date, never before today and never on a day whose rent is already posted; a signed contract is never edited. The rest of this section (days late, effective balance) still applies.
 - Daily job in `America/Chicago`: rent debit for every `active` driver (D56) with `billingActive` who is not archived
   (`archivedAt IS NULL`, D80). Onboarding, inactive and archived drivers are never billed or reminded.
   - `daily`: one debit per day.

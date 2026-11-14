@@ -3412,6 +3412,108 @@
         ]
       }
     },
+    "/drivers/{id}/recurring-charge": {
+      "get": {
+        "operationId": "RecurringChargesController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverRecurringChargeDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`GET /drivers/:id/recurring-charge`: the rent in force (or the next one waiting) and every rent set by hand, newest first.\n`404` unknown driver.",
+        "tags": [
+          "RecurringCharges"
+        ]
+      },
+      "post": {
+        "operationId": "RecurringChargesController_setRent",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRecurringChargeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecurringChargeDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`POST /drivers/:id/recurring-charge`: \"rent from a date\". Sets the first rent of a driver with no contract or changes the\nrent of any driver (a charge set by hand or a signed contract). It starts on the first due day on or after the latest of the\ndate given, today and the day after the last rent already posted; a rent that has not started yet is replaced; rent entries\nalready on the ledger stay as they are. `400` bad body; `404` unknown driver; `409` archived.",
+        "tags": [
+          "RecurringCharges"
+        ]
+      }
+    },
+    "/drivers/{id}/recurring-charge/{chargeId}": {
+      "delete": {
+        "operationId": "RecurringChargesController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "chargeId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "summary": "`DELETE /drivers/:id/recurring-charge/:chargeId`: removes a rent that has not started yet. `204` with no body; `404` unknown\ndriver or rent; `409` the rent has already started.",
+        "tags": [
+          "RecurringCharges"
+        ]
+      }
+    },
     "/inbound-emails": {
       "get": {
         "operationId": "InboundEmailsController_list",
@@ -8699,6 +8801,109 @@
         },
         "required": [
           "reason"
+        ]
+      },
+      "RecurringChargeDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "`pending`: not started yet (can still be replaced or removed). `current`: in force today. `past`: taken over by a later one.",
+            "enum": [
+              "pending",
+              "current",
+              "past"
+            ],
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "schedule": {
+            "enum": [
+              "weekly",
+              "daily"
+            ],
+            "type": "string"
+          },
+          "amountCents": {
+            "type": "number"
+          },
+          "firstDueDate": {
+            "type": "string",
+            "description": "The first rent due date, `YYYY-MM-DD`: the day this rent starts billing."
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "createdByEmail": {
+            "type": "string",
+            "nullable": true,
+            "description": "The admin who set it; null if that account was removed since."
+          }
+        },
+        "required": [
+          "status",
+          "id",
+          "schedule",
+          "amountCents",
+          "firstDueDate",
+          "createdAt",
+          "createdByEmail"
+        ]
+      },
+      "DriverRecurringChargeDto": {
+        "type": "object",
+        "properties": {
+          "charge": {
+            "nullable": true,
+            "description": "The rent set by hand in force today, or the next one waiting to start; `null` when none was ever set.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RecurringChargeDto"
+              }
+            ]
+          },
+          "changes": {
+            "description": "Every rent set by hand, newest first, with where each one is. Empty when none was ever set.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecurringChargeDto"
+            }
+          }
+        },
+        "required": [
+          "charge",
+          "changes"
+        ]
+      },
+      "CreateRecurringChargeDto": {
+        "type": "object",
+        "properties": {
+          "schedule": {
+            "type": "string",
+            "description": "`weekly` or `daily`: how often the driver pays the amount.",
+            "enum": [
+              "weekly",
+              "daily"
+            ]
+          },
+          "amountCents": {
+            "type": "number",
+            "description": "The rent of one period in whole cents (`40900` = $409.00): a whole number above zero, never a decimal.",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "startDate": {
+            "type": "string",
+            "description": "`YYYY-MM-DD`, the day the new rent is \"from\". A weekly rent is due on this day's weekday. The first rent is the first due\nday on or after the latest of this date, today and the day after the last rent already posted, so nothing in the past is\never billed and a day that already has its rent is never billed twice."
+          }
+        },
+        "required": [
+          "schedule",
+          "amountCents",
+          "startDate"
         ]
       },
       "InboundEmailProvider": {

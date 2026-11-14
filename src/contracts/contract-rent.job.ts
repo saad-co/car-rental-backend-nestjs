@@ -20,14 +20,14 @@ export interface RentSummary {
 }
 
 /**
- * Bills rent from the signed contract (Module 2 step 5, D83). Every hour, for each `active`, not archived driver with a signed
- * contract: the rent of every due date from the contract's start date + one period up to today in Chicago, never before the
+ * Bills rent from the signed contract (Module 2 step 5, D83) or from the charge an admin set by hand (D100). Every hour, for
+ * each `active`, not archived driver with a signed contract or a charge set by hand: the rent of every due date from the contract's start date + one period up to today in Chicago, never before the
  * driver's `rent_from` day (the day they last became active, so a gap while they were inactive or archived is never billed). Each due date is one debit with the unique key `rent:<driverId>:<date>`, so running twice, two runs at once, a
  * restart or catching up after downtime writes each date exactly once, and the first rent posted at signing is never repeated.
  *
  * The contract is the source of the rate, schedule and start date (they cannot change after sending, D74): each due date is
  * billed by the signed contract in force that day, so a newer contract takes over on its own start date. Drivers who are
- * onboarding, inactive or archived, or have no signed contract (the imported ones), are never billed here. The contract auto-extends weekly, so there is no end date: billing stops when the driver is deactivated.
+ * onboarding, inactive or archived, or have neither a signed contract nor a charge set by hand, are never billed here. The contract auto-extends weekly, so there is no end date: billing stops when the driver is deactivated.
  */
 @Injectable()
 export class ContractRentJob {
@@ -81,8 +81,8 @@ export class ContractRentJob {
     const summary: RentSummary = { checked: 0, posted: 0, failed: 0 };
     const drivers = (await this.dataSource.query(
       `SELECT DISTINCT d.id
-       FROM drivers d JOIN contracts c ON c.driver_id = d.id
-       WHERE d.status = 'active' AND d.archived_at IS NULL AND d.rent_from IS NOT NULL AND c.status = 'signed'
+       FROM drivers d JOIN billable_contracts c ON c.driver_id = d.id
+       WHERE d.status = 'active' AND d.archived_at IS NULL AND d.rent_from IS NOT NULL
        ORDER BY d.id`,
     )) as { id: string }[];
 
@@ -104,10 +104,11 @@ export class ContractRentJob {
   /**
    * Posts the missing rent of one driver in one transaction. The driver row is locked first (deactivating a driver and
    * signing a new contract lock it too), and the driver's status and signed contracts are read again under that lock,
-   * so a driver deactivated or re-contracted a moment ago is billed by what is true now.
+   * so a driver deactivated or re-contracted a moment ago is billed by what is true now. Public so that saving a charge by
+   * hand (D100) can post the first rent at once instead of waiting for the next hourly run; it is idempotent.
    * @returns how many entries were written.
    */
-  private async billDriver(driverId: string, today: string): Promise<number> {
+  async billDriver(driverId: string, today: string): Promise<number> {
     return this.dataSource.transaction(async (manager) => {
       const driver = await manager.findOne(Driver, {
         where: { id: driverId },
@@ -122,12 +123,13 @@ export class ContractRentJob {
         return 0;
       }
 
-      // Every signed contract of the driver: each due date is billed by the contract in force that day (`rentSchedule`).
+      // Every signed contract of the driver and the charge set by hand, if any (the view `billable_contracts`, D100): each
+      // due date is billed by the one in force that day (`rentSchedule`).
       const contracts = (await manager.query(
         `SELECT driver_id AS "driverId", schedule, total_rate_cents AS "totalRateCents", start_date::text AS "startDate",
-                signed_at AS "signedAt"
-         FROM contracts
-         WHERE driver_id = $1 AND status = 'signed'`,
+                signed_at AS "signedAt", bills_start_date AS "billsStartDate"
+         FROM billable_contracts
+         WHERE driver_id = $1`,
         [driverId],
       )) as BillableContract[];
       const debits = rentSchedule(contracts, driver.rentFrom, today);

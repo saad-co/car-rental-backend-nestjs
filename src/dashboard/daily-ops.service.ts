@@ -148,10 +148,10 @@ export class DailyOperationsService {
 
     const contracts = (await this.db.query(
       `SELECT driver_id AS "driverId", schedule, total_rate_cents AS "totalRateCents", start_date::text AS "startDate",
-              signed_at AS "signedAt", vehicle_model AS "vehicleModel", vehicle_plate AS "vehiclePlate",
-              security_deposit_cents AS "securityDepositCents"
-       FROM contracts
-       WHERE status = 'signed' AND driver_id = ANY($1::uuid[])`,
+              signed_at AS "signedAt", bills_start_date AS "billsStartDate", vehicle_model AS "vehicleModel",
+              vehicle_plate AS "vehiclePlate", security_deposit_cents AS "securityDepositCents"
+       FROM billable_contracts
+       WHERE driver_id = ANY($1::uuid[])`,
       [ids],
     )) as ContractRow[];
     const contractsByDriver = groupBy(contracts, (row) => row.driverId);
