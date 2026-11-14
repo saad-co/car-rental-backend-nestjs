@@ -4,6 +4,12 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-11-15 — Rent charges set on staging for the client's drivers, from their contracts (D100, B137)
+- **Data on staging, through the deployed screens** (Contract card, "Set charge"; Abulkalam asked, signed in; no code, nothing deployed). Rent read from each contract PDF in `client-contracts/` (the disclosure table's recurring total); From = the contract's effective date, so a weekly rent is due on that weekday; the first rent is the next such day, nothing earlier is billed.
+- **Set:** Corey Wheeler $60.00/day (set by Abulkalam himself, checked: matches the contract; in force from 2026-11-14); Jesus Galindo $409.00/week (Tue), first rent 2026-11-17; Clarice Major $389.00/week (Tue), 2026-11-17; Cesar Tavarez $380.00/week (Tue), 2026-11-17; Elizabeth Zimmerman $399.00/week (Mon), 2026-11-16; Jhonny Duque $399.00/week (Thu), 2026-11-19. All read back on the card as "Not started" (Corey "In force"), set by admin@admin.com.
+- **Graham Baker: not set, on purpose.** He is inactive (left 2026-11-09, "Contract ended", balance settled); an inactive driver is never billed. His contract says $399.00/week (Fri); set it from the same card if he is reactivated.
+- **Not done / to know:** rents before 2026-11-14 are not on the ledgers (no back-charge, D100), so balances show only payments received so far; the deposit of these drivers (B109 step 3). The local test worktrees and databases of this feature are removed.
+
 ### 2026-11-15 — Manual rent charge and changing the rent merged and deployed to staging (D100, D101, B137)
 - **Merged** into `dev` (backend PR #57 `579efe1`, frontend PR #37 `ab49225`) and **deployed to staging** (backend first, then frontend). Checks before: backend `npm run build` and `migration:run:prod` clean on the local database; after: the pre-deploy ran `CreateDriverRecurringCharges1794700000000` (48 migrations now), Nest started, no errors in the backend log, the frontend serves.
 - Deploy folders `deploy-backend` / `deploy-frontend` are on those two commits. The branches `feature/manual-charge` and the worktrees `wt-manual-charge-*` (slot 1, database `car_rental_manual_charge`) still exist; clean up only when asked.
