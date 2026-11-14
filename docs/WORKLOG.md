@@ -4,6 +4,11 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-11-15 — Manual rent charge and changing the rent merged and deployed to staging (D100, D101, B137)
+- **Merged** into `dev` (backend PR #57 `579efe1`, frontend PR #37 `ab49225`) and **deployed to staging** (backend first, then frontend). Checks before: backend `npm run build` and `migration:run:prod` clean on the local database; after: the pre-deploy ran `CreateDriverRecurringCharges1794700000000` (48 migrations now), Nest started, no errors in the backend log, the frontend serves.
+- Deploy folders `deploy-backend` / `deploy-frontend` are on those two commits. The branches `feature/manual-charge` and the worktrees `wt-manual-charge-*` (slot 1, database `car_rental_manual_charge`) still exist; clean up only when asked.
+- **Not done:** no UI check on staging yet (Abulkalam sets the real charges for the 7 hand-added drivers there; staging SMS is live, payment reminders are off); the deposit of a driver added by hand (B109 step 3). B137: mark done after Abulkalam has set the charges.
+
 ### 2026-11-15 — Change the rent from a date, for a charge set by hand and a signed contract (D101, B137)
 - **Same branch** `feature/manual-charge` in both repos (still uncommitted, no PR), built on the D100 entry below. Asked by Abulkalam: "shouldn't there be an option to edit the rent?"; rules in D101.
 - **Backend:** `POST /drivers/:id/recurring-charge` is now "rent from a date" (`setRent`; the 409s for a signed contract and an existing charge are gone), `DELETE /drivers/:id/recurring-charge/:chargeId` (only a rent that has not started), `GET` returns `{ charge, changes }` with each change's status (`pending`, `current`, `past`) and who set it; pure `billableFromDay`; audit `recurring_charge.set` / `.remove` with the replaced rows in `before`. No migration. `openapi.json` re-exported.
