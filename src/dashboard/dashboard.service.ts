@@ -232,9 +232,9 @@ export class DashboardService {
     const rows = (await this.db.query(
       `SELECT d.id AS "driverId", d.rent_from::text AS "rentFrom",
               c.schedule, c.total_rate_cents AS "totalRateCents",
-              c.start_date::text AS "startDate", c.signed_at AS "signedAt"
+              c.start_date::text AS "startDate", c.signed_at AS "signedAt", c.bills_start_date AS "billsStartDate"
        FROM drivers d
-       LEFT JOIN contracts c ON c.driver_id = d.id AND c.status = 'signed'
+       LEFT JOIN billable_contracts c ON c.driver_id = d.id
        WHERE d.status = 'active' AND d.archived_at IS NULL`,
     )) as {
       driverId: string;
@@ -243,6 +243,7 @@ export class DashboardService {
       totalRateCents: number | null;
       startDate: string | null;
       signedAt: Date | null;
+      billsStartDate: boolean | null;
     }[];
 
     // Group the rows by driver: a driver has one row per signed contract (or one row with null columns: none).
@@ -262,6 +263,7 @@ export class DashboardService {
           totalRateCents: row.totalRateCents,
           startDate: row.startDate,
           signedAt: row.signedAt,
+          billsStartDate: row.billsStartDate ?? false,
         });
       }
       byDriver.set(row.driverId, entry);

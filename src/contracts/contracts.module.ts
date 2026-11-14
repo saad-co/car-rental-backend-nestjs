@@ -45,6 +45,8 @@ import { LICENCE_LLM, LicenceReaderService } from "./licence-reader.service.js";
     LedgerModule,
   ],
   controllers: [ContractsController, FirmaWebhookController],
+  // The charge set by hand (D100) posts its first rent through the rent job's per-driver method.
+  exports: [ContractRentJob],
   providers: [
     ContractsService,
     ContractTrackingService,

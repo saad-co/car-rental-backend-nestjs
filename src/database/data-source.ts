@@ -13,6 +13,7 @@ import { LedgerPreset } from "../ledger-presets/ledger-preset.entity.js";
 import { MessageTemplate } from "../message-templates/message-template.entity.js";
 import { Driver } from "../drivers/driver.entity.js";
 import { DriverNote } from "../drivers/notes/driver-note.entity.js";
+import { RecurringCharge } from "../recurring-charges/recurring-charge.entity.js";
 import { LedgerEntry } from "../ledger/ledger-entry.entity.js";
 import { EmailIntakeStatus } from "../email-intake/email-intake-status.entity.js";
 import { InboundEmail } from "../email-intake/inbound-email.entity.js";
@@ -53,6 +54,7 @@ export default new DataSource({
     AppSetting,
     ReminderLog,
     DriverNote,
+    RecurringCharge,
   ],
   // `.ts` when run from the sources (tsx, local), `.js` when run compiled (production). Never
   // both: the build also writes `.d.ts` type files next to each migration, which are not migrations.

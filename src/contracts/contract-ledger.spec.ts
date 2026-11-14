@@ -4,6 +4,8 @@ import {
   pickupEntries,
   rentDebit,
   rentDueDates,
+  billableFromDay,
+  firstRentDate,
   rentKey,
   rentSchedule,
   type BillableContract,
@@ -328,5 +330,148 @@ describe("rentSchedule (which contract bills each due date)", () => {
       "2026-10-27",
       "2026-11-03",
     ]);
+  });
+});
+
+// 2026-11-15 is a Sunday; 2026-11-02, 11-09 and 11-16 are Mondays.
+describe("firstRentDate (the first rent of a charge set by hand, D100)", () => {
+  const weekly = ContractSchedule.weekly;
+  const daily = ContractSchedule.daily;
+
+  it("weekly, Monday start saved on a Sunday: the next Monday, nothing back-charged", () => {
+    expect(firstRentDate(weekly, "2026-11-02", "2026-11-15")).toBe(
+      "2026-11-16",
+    );
+  });
+
+  it("weekly: today when today already has the start date's weekday", () => {
+    expect(firstRentDate(weekly, "2026-11-02", "2026-11-16")).toBe(
+      "2026-11-16",
+    );
+    expect(firstRentDate(weekly, "2026-11-01", "2026-11-15")).toBe(
+      "2026-11-15",
+    );
+  });
+
+  it("weekly: Thursday start saved on a Sunday is the Thursday after (4 days on)", () => {
+    expect(firstRentDate(weekly, "2026-11-05", "2026-11-15")).toBe(
+      "2026-11-19",
+    );
+  });
+
+  it("weekly: a start date in the future is the first rent", () => {
+    expect(firstRentDate(weekly, "2026-11-25", "2026-11-15")).toBe(
+      "2026-11-25",
+    );
+  });
+
+  it("weekly: keeps the weekday across months and years", () => {
+    // Tuesday start 2026-10-13, saved Wednesday 2026-12-30: the next Tuesday is 2027-01-05.
+    expect(firstRentDate(weekly, "2026-10-13", "2026-12-30")).toBe(
+      "2027-01-05",
+    );
+  });
+
+  it("daily: today for a past start date, the start date for a future one", () => {
+    expect(firstRentDate(daily, "2026-10-01", "2026-11-15")).toBe("2026-11-15");
+    expect(firstRentDate(daily, "2026-11-20", "2026-11-15")).toBe("2026-11-20");
+  });
+});
+
+describe("a charge set by hand bills its start date too (D100)", () => {
+  it("weekly from Monday 2026-11-16: the first rent is a due date, then every 7 days", () => {
+    expect(
+      rentDueDates(
+        "2026-11-16",
+        ContractSchedule.weekly,
+        "2026-11-15",
+        "2026-11-30",
+        true,
+      ),
+    ).toEqual(["2026-11-16", "2026-11-23", "2026-11-30"]);
+  });
+
+  it("without the flag a signed contract's start date is still left out (its first rent is posted at signing)", () => {
+    expect(
+      rentDueDates(
+        "2026-11-16",
+        ContractSchedule.weekly,
+        "2026-11-15",
+        "2026-11-30",
+      ),
+    ).toEqual(["2026-11-23", "2026-11-30"]);
+  });
+
+  it("never goes before `from`, even with the flag", () => {
+    expect(
+      rentDueDates(
+        "2026-11-16",
+        ContractSchedule.weekly,
+        "2026-11-20",
+        "2026-11-30",
+        true,
+      ),
+    ).toEqual(["2026-11-23", "2026-11-30"]);
+  });
+
+  it("daily: today and the days after", () => {
+    expect(
+      rentDueDates(
+        "2026-11-15",
+        ContractSchedule.daily,
+        "2026-11-15",
+        "2026-11-17",
+        true,
+      ),
+    ).toEqual(["2026-11-15", "2026-11-16", "2026-11-17"]);
+  });
+
+  it("a signed contract takes over on its own start date: no gap, no double day, its first rent is not repeated", () => {
+    const manual: BillableContract = {
+      driverId: "d-1",
+      schedule: ContractSchedule.weekly,
+      totalRateCents: 30_000,
+      startDate: "2026-11-16",
+      signedAt: new Date("2026-11-15T12:00:00Z"),
+      billsStartDate: true,
+    };
+    const firma: BillableContract = {
+      driverId: "d-1",
+      schedule: ContractSchedule.weekly,
+      totalRateCents: 40_000,
+      startDate: "2026-12-07",
+      signedAt: new Date("2026-12-05T12:00:00Z"),
+    };
+    const debits = rentSchedule([firma, manual], "2026-11-15", "2026-12-14");
+    // The manual charge bills 11-16, 11-23 and 11-30 (12-07 belongs to the contract, posted at signing); the contract
+    // bills 12-14.
+    expect(debits.map((d) => [d.effectiveDate, d.amountCents])).toEqual([
+      ["2026-11-16", 30_000],
+      ["2026-11-23", 30_000],
+      ["2026-11-30", 30_000],
+      ["2026-12-14", 40_000],
+    ]);
+  });
+});
+
+describe("billableFromDay (the earliest day a changed rent can start, D101)", () => {
+  it("is today when no rent was ever posted", () => {
+    expect(billableFromDay("2026-11-15", null)).toBe("2026-11-15");
+  });
+
+  it("is today when the last posted rent is before today (a weekly driver between due days)", () => {
+    expect(billableFromDay("2026-11-15", "2026-11-09")).toBe("2026-11-15");
+  });
+
+  it("is the day after the last posted rent when that rent is dated today: today's rent exists, so a change starts tomorrow", () => {
+    expect(billableFromDay("2026-11-15", "2026-11-15")).toBe("2026-11-16");
+  });
+
+  it("is the day after a rent posted for a future day (a contract signed ahead of its start date)", () => {
+    expect(billableFromDay("2026-11-15", "2026-11-20")).toBe("2026-11-21");
+  });
+
+  it("crosses month and year ends", () => {
+    expect(billableFromDay("2026-12-31", "2026-12-31")).toBe("2027-01-01");
   });
 });

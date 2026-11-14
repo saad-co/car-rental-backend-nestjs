@@ -160,11 +160,17 @@ export function rentDueDates(
   schedule: ContractSchedule,
   from: string,
   today: string,
+  billsStartDate = false,
 ): string[] {
   const period = rentPeriodDays(schedule);
   const sinceStart = daysBetween(startDate, from);
-  // The first multiple of the period that is at or after `from`, and at least one period after the start.
-  const first = Math.max(1, Math.ceil(sinceStart / period));
+  // The first multiple of the period that is at or after `from`. A signed contract's start date is its first rent, posted
+  // at signing, so the job starts one period later; a manual charge (D100) has nobody posting its first rent, so the job
+  // does, and the start date itself is a due date.
+  const first = Math.max(
+    billsStartDate ? 0 : 1,
+    Math.ceil(sinceStart / period),
+  );
   const dates: string[] = [];
   for (let n = first; ; n++) {
     const due = addDays(startDate, n * period);
@@ -174,6 +180,38 @@ export function rentDueDates(
   return dates;
 }
 
+/**
+ * The first rent of a charge set by hand (D100), never before today: a start date in the past is never back-charged, and
+ * the start date only fixes the weekday of a weekly charge. Daily: the later of the start date and `today`. Weekly: the
+ * first day on or after that with the weekday of the start date (a Monday start saved on a Thursday bills the next Monday).
+ * `startDate` and `today` are Chicago days (`YYYY-MM-DD`).
+ */
+export function firstRentDate(
+  schedule: ContractSchedule,
+  startDate: string,
+  today: string,
+): string {
+  const base = startDate > today ? startDate : today;
+  if (schedule === ContractSchedule.daily) return base;
+  const daysIntoWeek = daysBetween(startDate, base) % 7;
+  return addDays(base, (7 - daysIntoWeek) % 7);
+}
+
+/**
+ * The earliest day a changed rent can start (D101): today, or the day after the last rent already posted to the driver's
+ * ledger when that is later. A rent date that already has an entry could never be billed again (its ledger key exists), so a
+ * change never starts on one: it starts on the next day, never silently skipped. `lastPostedRent` is the latest rent entry's
+ * Chicago day (`YYYY-MM-DD`), or null when no rent was ever posted.
+ */
+export function billableFromDay(
+  today: string,
+  lastPostedRent: string | null,
+): string {
+  if (lastPostedRent === null) return today;
+  const dayAfter = addDays(lastPostedRent, 1);
+  return dayAfter > today ? dayAfter : today;
+}
+
 /** A signed contract as the rent schedule needs it. */
 export type BillableContract = Pick<
   ContractForLedger,
@@ -181,6 +219,11 @@ export type BillableContract = Pick<
 > & {
   /** When firma says it was signed; breaks a tie between two contracts with the same start date. */
   signedAt: Date | null;
+  /**
+   * True for a charge set by hand (D100): its start date is its first rent and the job posts it. A signed contract leaves
+   * it out (false): its first rent is posted at signing. Optional, so everything built before D100 still works unchanged.
+   */
+  billsStartDate?: boolean;
 };
 
 /**
@@ -206,7 +249,13 @@ export function rentSchedule(
   );
   return inForce.flatMap((contract, i) => {
     const endsBefore = inForce[i + 1]?.startDate ?? null;
-    return rentDueDates(contract.startDate, contract.schedule, from, today)
+    return rentDueDates(
+      contract.startDate,
+      contract.schedule,
+      from,
+      today,
+      contract.billsStartDate ?? false,
+    )
       .filter((day) => endsBefore === null || day < endsBefore)
       .map((day) => rentDebit(contract, day));
   });
