@@ -6,6 +6,7 @@ import { AppSetting } from "./app-setting.entity.js";
 const REMINDERS_ENABLED = "reminders_enabled";
 const REMINDERS_ENABLED_AT = "reminders_enabled_at";
 const PAYMENT_LINK = "payment_link";
+const INSPECTION_LINK_HOURS = "inspection_link_hours";
 
 /** The payment-reminder settings (Fleet revisions section 6). */
 export interface ReminderSettings {
@@ -53,6 +54,16 @@ export class SettingsService {
     }
     await this.put(PAYMENT_LINK, input.paymentLink ?? "", adminId);
     return this.reminders();
+  }
+
+  /**
+   * How many hours a vehicle-photo link works after it is sent or issued (Module 3, D102; the client's spec says 24 and
+   * "configurable"). A whole number of hours, 24 unless the `inspection_link_hours` row says otherwise; there is no screen for it.
+   */
+  async inspectionLinkHours(): Promise<number> {
+    const row = await this.settings.findOneBy({ key: INSPECTION_LINK_HOURS });
+    const hours = Number(row?.value);
+    return Number.isInteger(hours) && hours >= 1 ? hours : 24;
   }
 
   private async put(key: string, value: string, adminId: string) {

@@ -217,6 +217,21 @@ class EnvironmentVariables {
   APPLICATION_ALERT_PHONE?: string;
 
   /**
+   * The phone number behind the "Call GonzoCar" button on the vehicle-photo page (Module 3): US, E.164, e.g. `+13125550123`.
+   * Empty = the button is hidden (the client has not given a number yet).
+   */
+  @ValidateIf(
+    (env: EnvironmentVariables) =>
+      env.INSPECTION_SUPPORT_PHONE !== undefined &&
+      env.INSPECTION_SUPPORT_PHONE !== "",
+  )
+  @Matches(/^\+1[2-9]\d{2}[2-9]\d{6}$/, {
+    message:
+      "INSPECTION_SUPPORT_PHONE must be a US number like +13125550123 (or empty)",
+  })
+  INSPECTION_SUPPORT_PHONE?: string;
+
+  /**
    * Full address of the website's read-only function that hands out the applicants' uploaded documents (D54), e.g.
    * `https://<project>.supabase.co/functions/v1/get-driver-document`. Empty or unset: documents are not copied.
    */

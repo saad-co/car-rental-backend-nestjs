@@ -1009,6 +1009,7 @@ describe("an admin adds a driver directly (D85, test database)", () => {
         dateOfBirth: null,
         age: null,
         hasInsurance: false,
+        preferredLanguage: "en", // every driver has one (D102), English until chosen
       });
     });
 
@@ -1016,7 +1017,10 @@ describe("an admin adds a driver directly (D85, test database)", () => {
       const id = await approved({}, null, null);
       const started = await applications().startOnboarding(id, adminId);
       const driver = await drivers.findOne(started.driverId!);
-      expect(Object.values(driver.profile).every((v) => v === null)).toBe(true);
+      // Nothing is known, except the language every driver has (D102): English until chosen.
+      const { preferredLanguage, ...known } = driver.profile;
+      expect(preferredLanguage).toBe("en");
+      expect(Object.values(known).every((v) => v === null)).toBe(true);
 
       const edited = await drivers.updateProfile(
         driver.id,
