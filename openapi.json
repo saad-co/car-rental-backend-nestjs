@@ -4102,7 +4102,11 @@
                   },
                   "position": {
                     "type": "integer",
-                    "description": "Damage photos only, 1 to 15"
+                    "description": "Damage close-ups only, 1 to 5"
+                  },
+                  "parentShotId": {
+                    "type": "string",
+                    "description": "Damage close-ups only: the required shot they belong to"
                   },
                   "note": {
                     "type": "string"
@@ -4147,7 +4151,56 @@
             }
           }
         },
-        "summary": "`PUT /i/:token/photos/:shotId`: stores one photo, as multipart form data: the file `photo` (a JPEG, at most 10 MB) and the\noptional text fields `position` (damage only, 1 to 15), `note`, `capturedAt`, `odometerMiles` (shot `INT_ODOMETER`) and\n`fuelLevel` (shot `INT_FUEL`). `shotId` is a required shot or `DAMAGE`. Safe to repeat: the same file changes nothing, a\ndifferent one is a retake. Without a file it only updates the note or reading of a photo already stored.\n`410` expired, unknown or revoked link; `409` already submitted; `400` bad input.",
+        "summary": "`PUT /i/:token/photos/:shotId`: stores one photo, as multipart form data: the file `photo` (a JPEG, at most 10 MB) and the\noptional text fields `position` (close-ups only, 1 to 5), `parentShotId` (close-ups only: the shot the damage is on), `note`,\n`capturedAt`, `odometerMiles` (shot `INT_ODOMETER`) and `fuelLevel` (shot `INT_FUEL`). `shotId` is a required shot or `DAMAGE`\n(a close-up, D112; it also records \"yes, damage\" for its shot). Safe to repeat: the same file changes nothing, a different one\nis a retake. Without a file it only updates the note or reading of a photo already stored.\n`410` expired, unknown or revoked link; `409` already submitted; `400` bad input.",
+        "tags": [
+          "InspectionCapture"
+        ]
+      }
+    },
+    "/i/{token}/shots/{shotId}/damage-answer": {
+      "put": {
+        "operationId": "InspectionCaptureController_answerDamage",
+        "parameters": [
+          {
+            "name": "token",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "shotId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DamageAnswerDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShotAnswerDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`PUT /i/:token/shots/:shotId/damage-answer`: the driver's answer to \"Is there any damage on the <shot>?\" (`hasDamage`,\nD112). Safe to repeat. `404` not a required shot; `409` already submitted, or \"no\" while the shot has close-ups; `410` expired.",
         "tags": [
           "InspectionCapture"
         ]
@@ -4188,7 +4241,7 @@
             }
           }
         },
-        "summary": "`POST /i/:token/submit`: closes the inspection. Needs every required photo, the mileage, the fuel level and\n`attested: true`; `gpsLat` and `gpsLng` (both or neither) and `deviceInfo` are optional. Repeating it after success returns the\nsame answer. `410` expired link; `400` something missing.",
+        "summary": "`POST /i/:token/submit`: closes the inspection. Needs every required photo with its damage answer, at least one close-up for\neach \"yes\", and `attested: true`; `gpsLat` and `gpsLng` (both or neither) and `deviceInfo` are optional. Repeating it after success returns the\nsame answer. `410` expired link; `400` something missing.",
         "tags": [
           "InspectionCapture"
         ]
@@ -9761,6 +9814,10 @@
             "type": "number",
             "description": "Photos of the required shots received so far."
           },
+          "requiredPhotoCount": {
+            "type": "number",
+            "description": "How many shots are required (21 since D112), for \"x of 21 photos\"."
+          },
           "damagePhotoCount": {
             "type": "number",
             "description": "Damage close-ups received so far."
@@ -9797,6 +9854,7 @@
           "odometerMiles",
           "fuelLevel",
           "photoCount",
+          "requiredPhotoCount",
           "damagePhotoCount",
           "reviewedAt",
           "needsAttention",
@@ -9953,11 +10011,16 @@
           },
           "shotId": {
             "type": "string",
-            "description": "A shot id from the 19-shot list, or `DAMAGE` for a close-up added by the driver."
+            "description": "A shot id from the shot list, or `DAMAGE` for a damage close-up added by the driver."
+          },
+          "parentShotId": {
+            "type": "string",
+            "nullable": true,
+            "description": "For a close-up: the shot it shows damage on (D112). Null for a shot, and for an old free-standing damage photo."
           },
           "position": {
             "type": "number",
-            "description": "1 for a shot; 1 to 15 for damage."
+            "description": "1 for a shot; 1 to 5 for a close-up (1 to 15 for an old free-standing damage photo)."
           },
           "driverNote": {
             "type": "string",
@@ -9996,12 +10059,13 @@
           "downloadUrl": {
             "type": "string",
             "nullable": true,
-            "description": "The full photo as a download (the browser saves it as `<reference>_<NN>_<SHOT>.jpg`)."
+            "description": "The full photo as a download, saved as `<reference>_05_EXT_FRONT.jpg`, or `..._damage_2.jpg` for a close-up."
           }
         },
         "required": [
           "id",
           "shotId",
+          "parentShotId",
           "position",
           "driverNote",
           "capturedAt",
@@ -10011,6 +10075,21 @@
           "thumbUrl",
           "fullUrl",
           "downloadUrl"
+        ]
+      },
+      "ShotAnswerDto": {
+        "type": "object",
+        "properties": {
+          "shotId": {
+            "type": "string"
+          },
+          "hasDamage": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "shotId",
+          "hasDamage"
         ]
       },
       "InspectionDetailDto": {
@@ -10109,6 +10188,10 @@
             "type": "number",
             "description": "Photos of the required shots received so far."
           },
+          "requiredPhotoCount": {
+            "type": "number",
+            "description": "How many shots are required (21 since D112), for \"x of 21 photos\"."
+          },
           "damagePhotoCount": {
             "type": "number",
             "description": "Damage close-ups received so far."
@@ -10164,10 +10247,17 @@
             "description": "When the driver ticked the box that the photos show the car's condition right now."
           },
           "photos": {
-            "description": "The 19 shots in order, then the damage close-ups in the order taken.",
+            "description": "The shots in order, each followed by its damage close-ups; then any old free-standing damage photos.",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/InspectionPhotoDto"
+            }
+          },
+          "answers": {
+            "description": "The driver's answer to \"Is there any damage in this photo?\", per shot answered (D112). Empty for older inspections.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ShotAnswerDto"
             }
           }
         },
@@ -10188,6 +10278,7 @@
           "odometerMiles",
           "fuelLevel",
           "photoCount",
+          "requiredPhotoCount",
           "damagePhotoCount",
           "reviewedAt",
           "needsAttention",
@@ -10199,7 +10290,8 @@
           "gpsLng",
           "deviceInfo",
           "attestedAt",
-          "photos"
+          "photos",
+          "answers"
         ]
       },
       "SendInspectionLinkDto": {
@@ -10298,8 +10390,13 @@
             "type": "string",
             "description": "Where on the car: a shot id, or `DAMAGE` for a close-up the driver added."
           },
+          "parentShotId": {
+            "type": "string",
+            "nullable": true,
+            "description": "For a close-up: the shot it belongs to (D112)."
+          },
           "source": {
-            "description": "`driver_reported` = the driver added the close-up; `staff_flagged` = staff found it on one of the 19 shots.",
+            "description": "`driver_reported` = the driver added the close-up; `staff_flagged` = staff found it on one of the shots.",
             "enum": [
               "driver_reported",
               "staff_flagged"
@@ -10343,6 +10440,7 @@
           "inspectionId",
           "photoId",
           "shotId",
+          "parentShotId",
           "source",
           "description",
           "status",
@@ -10351,6 +10449,27 @@
           "amountCents",
           "createdByEmail",
           "createdAt"
+        ]
+      },
+      "CompareDamagePhotoDto": {
+        "type": "object",
+        "properties": {
+          "photo": {
+            "$ref": "#/components/schemas/InspectionPhotoDto"
+          },
+          "damageItem": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DamageItemDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "photo",
+          "damageItem"
         ]
       },
       "ComparePairDto": {
@@ -10386,34 +10505,38 @@
                 "$ref": "#/components/schemas/DamageItemDto"
               }
             ]
+          },
+          "checkInAnswer": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "The driver's damage answer at pickup and at return; null when not answered (older inspections)."
+          },
+          "checkOutAnswer": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "checkInCloseUps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InspectionPhotoDto"
+            }
+          },
+          "checkOutCloseUps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CompareDamagePhotoDto"
+            }
           }
         },
         "required": [
           "shotId",
           "checkIn",
           "checkOut",
-          "damageItem"
-        ]
-      },
-      "CompareDamagePhotoDto": {
-        "type": "object",
-        "properties": {
-          "photo": {
-            "$ref": "#/components/schemas/InspectionPhotoDto"
-          },
-          "damageItem": {
-            "nullable": true,
-            "type": "object",
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/DamageItemDto"
-              }
-            ]
-          }
-        },
-        "required": [
-          "photo",
-          "damageItem"
+          "damageItem",
+          "checkInAnswer",
+          "checkOutAnswer",
+          "checkInCloseUps",
+          "checkOutCloseUps"
         ]
       },
       "InspectionCompareDto": {
@@ -10441,12 +10564,12 @@
           "milesDriven": {
             "type": "number",
             "nullable": true,
-            "description": "Check-out odometer minus check-in odometer."
+            "description": "Check-out odometer minus check-in odometer; null unless both were typed (inspections made before D112)."
           },
           "fuelChangeEighths": {
             "type": "number",
             "nullable": true,
-            "description": "Check-out fuel minus check-in fuel, in eighths of a tank."
+            "description": "Check-out fuel minus check-in fuel, in eighths of a tank; null unless both were chosen (before D112)."
           },
           "pairs": {
             "type": "array",
@@ -10455,14 +10578,14 @@
             }
           },
           "checkInDamage": {
-            "description": "Damage the driver photographed at pickup: already there, read-only and never chargeable.",
+            "description": "Old free-standing damage photos of the check-in (before D112): already there, read-only and never chargeable.",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/InspectionPhotoDto"
             }
           },
           "checkOutDamage": {
-            "description": "Damage close-ups the driver added at return, each markable as new damage.",
+            "description": "Old free-standing damage photos of the check-out (before D112), each markable as new damage.",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/CompareDamagePhotoDto"
@@ -10486,7 +10609,7 @@
         "properties": {
           "photoId": {
             "type": "string",
-            "description": "The check-out photo that shows the damage (one of its 19 shots or one of its damage close-ups).",
+            "description": "The check-out photo that shows the damage (one of its shots or one of its damage close-ups).",
             "format": "uuid"
           },
           "description": {
@@ -10564,7 +10687,12 @@
           },
           "position": {
             "type": "number",
-            "description": "1 for a required shot; 1 to 15 for damage."
+            "description": "1 for a required shot; 1 to 5 for a close-up (1 to 15 for an old free-standing damage photo)."
+          },
+          "parentShotId": {
+            "type": "string",
+            "nullable": true,
+            "description": "For a close-up: the required shot it belongs to."
           },
           "note": {
             "type": "string",
@@ -10579,6 +10707,7 @@
         "required": [
           "shotId",
           "position",
+          "parentShotId",
           "note",
           "thumbUrl"
         ]
@@ -10586,6 +10715,10 @@
       "PriorDamageDto": {
         "type": "object",
         "properties": {
+          "parentShotId": {
+            "type": "string",
+            "nullable": true
+          },
           "note": {
             "type": "string",
             "nullable": true
@@ -10596,6 +10729,7 @@
           }
         },
         "required": [
+          "parentShotId",
           "note",
           "thumbUrl"
         ]
@@ -10650,10 +10784,17 @@
             }
           },
           "photos": {
-            "description": "The photos received so far, damage included.",
+            "description": "The photos received so far, close-ups included.",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/CapturePhotoDto"
+            }
+          },
+          "answers": {
+            "description": "The damage answers given so far, one per shot answered.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ShotAnswerDto"
             }
           },
           "odometerMiles": {
@@ -10682,9 +10823,9 @@
               "$ref": "#/components/schemas/PriorDamageDto"
             }
           },
-          "maxDamagePhotos": {
+          "maxCloseUpsPerShot": {
             "type": "number",
-            "description": "The most damage photos allowed."
+            "description": "The most close-ups one shot can hold (5)."
           },
           "expiresAt": {
             "format": "date-time",
@@ -10712,10 +10853,11 @@
           "vehicle",
           "shots",
           "photos",
+          "answers",
           "odometerMiles",
           "fuelLevel",
           "priorDamage",
-          "maxDamagePhotos",
+          "maxCloseUpsPerShot",
           "expiresAt",
           "submittedAt",
           "supportPhone"
@@ -10729,6 +10871,10 @@
           },
           "position": {
             "type": "number"
+          },
+          "parentShotId": {
+            "type": "string",
+            "nullable": true
           },
           "stored": {
             "type": "boolean",
@@ -10750,10 +10896,22 @@
         "required": [
           "shotId",
           "position",
+          "parentShotId",
           "stored",
           "retakeCount",
           "sha256",
           "thumbUrl"
+        ]
+      },
+      "DamageAnswerDto": {
+        "type": "object",
+        "properties": {
+          "hasDamage": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "hasDamage"
         ]
       },
       "SubmitInspectionDto": {

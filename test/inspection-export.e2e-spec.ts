@@ -81,15 +81,17 @@ describe("vehicle inspections, ZIP and PDF export (Module 3 chat 2 step 4, test 
     shotId: string,
     position = 1,
     note: string | null = null,
+    parentShotId: string | null = null,
   ) => {
-    const original = Buffer.from(`original-${shotId}-${position}`);
-    const storageKey = `inspections/${inspectionId}/${shotId}-${position}.jpg`;
-    const thumbKey = `inspections/${inspectionId}/${shotId}-${position}.thumb.jpg`;
+    const slot = `${parentShotId ?? ""}${shotId}-${position}`;
+    const original = Buffer.from(`original-${slot}`);
+    const storageKey = `inspections/${inspectionId}/${slot}.jpg`;
+    const thumbKey = `inspections/${inspectionId}/${slot}.thumb.jpg`;
     storage.files.set(storageKey, original);
     storage.files.set(thumbKey, thumb);
     await db.query(
-      `INSERT INTO inspection_photos (inspection_id, shot_id, position, storage_key, thumb_key, driver_note, sha256)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      `INSERT INTO inspection_photos (inspection_id, shot_id, position, storage_key, thumb_key, driver_note, sha256, parent_shot_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [
         inspectionId,
         shotId,
@@ -98,6 +100,7 @@ describe("vehicle inspections, ZIP and PDF export (Module 3 chat 2 step 4, test 
         thumbKey,
         note,
         "b".repeat(64),
+        parentShotId,
       ],
     );
     return { original, storageKey, thumbKey };
@@ -158,17 +161,41 @@ describe("vehicle inspections, ZIP and PDF export (Module 3 chat 2 step 4, test 
       const files = readZip(data);
       expect([...files.keys()]).toEqual([
         `${reference}/01_EXT_DRIVER_SIDE.jpg`,
-        `${reference}/04_EXT_FRONT.jpg`,
+        `${reference}/05_EXT_FRONT.jpg`,
         `${reference}/damage_2.jpg`,
       ]);
       expect(
         files.get(`${reference}/01_EXT_DRIVER_SIDE.jpg`)!.equals(side.original),
       ).toBe(true);
       expect(
-        files.get(`${reference}/04_EXT_FRONT.jpg`)!.equals(front.original),
+        files.get(`${reference}/05_EXT_FRONT.jpg`)!.equals(front.original),
       ).toBe(true);
       expect(
         files.get(`${reference}/damage_2.jpg`)!.equals(damage.original),
+      ).toBe(true);
+    });
+
+    it("files each close-up next to its shot as NN_SHOT_damage_K.jpg (D112)", async () => {
+      await addPhoto("EXT_REAR");
+      const closeUp = await addPhoto("DAMAGE", 2, "Dent", "EXT_FRONT");
+      await addPhoto("EXT_FRONT");
+      await addPhoto("DAMAGE", 1, null, "EXT_FRONT");
+      await addPhoto("DAMAGE", 1, null, "EXT_LEFT_MIRROR");
+      const { data } = await service.zip(inspectionId, adminId);
+      const files = readZip(data);
+      const names = [...files.keys()].map((n) => n.split("/")[1]);
+      // In walk-around order: the mirror (shot 3), the front (5) with its close-ups, the rear (13).
+      expect(names).toEqual([
+        "03_EXT_LEFT_MIRROR_damage_1.jpg",
+        "05_EXT_FRONT.jpg",
+        "05_EXT_FRONT_damage_1.jpg",
+        "05_EXT_FRONT_damage_2.jpg",
+        "13_EXT_REAR.jpg",
+      ]);
+      expect(
+        [...files.entries()]
+          .find(([n]) => n.endsWith("05_EXT_FRONT_damage_2.jpg"))![1]
+          .equals(closeUp.original),
       ).toBe(true);
     });
 
@@ -179,12 +206,12 @@ describe("vehicle inspections, ZIP and PDF export (Module 3 chat 2 step 4, test 
       const { data } = await service.zip(inspectionId, adminId);
       const files = readZip(data);
       const names = [...files.keys()];
-      expect(names.some((n) => n.endsWith("04_EXT_FRONT.jpg"))).toBe(true);
+      expect(names.some((n) => n.endsWith("05_EXT_FRONT.jpg"))).toBe(true);
       expect(names.some((n) => n.endsWith("EXT_REAR.jpg"))).toBe(false);
       const missing = [...files.entries()].find(([n]) =>
         n.endsWith("MISSING.txt"),
       );
-      expect(missing?.[1].toString()).toContain("11_EXT_REAR.jpg");
+      expect(missing?.[1].toString()).toContain("13_EXT_REAR.jpg");
       expect((await audits()).at(-1)).toMatchObject({
         action: "inspection.export_zip",
         after: { photos: 1, missing: 1 },
@@ -269,6 +296,22 @@ describe("vehicle inspections, ZIP and PDF export (Module 3 chat 2 step 4, test 
         (await service.report(inspectionId, adminId)).data,
       );
       expect(full.getPageCount()).toBeGreaterThan(1);
+    });
+
+    it("prints the shots with their answers and close-ups, and no typed readings (D112)", async () => {
+      await addPhoto("EXT_FRONT");
+      await addPhoto("DAMAGE", 1, "Chip", "EXT_FRONT");
+      await addPhoto("EXT_REAR");
+      await db.query(
+        `INSERT INTO inspection_shot_answers (inspection_id, shot_id, has_damage) VALUES ($1, 'EXT_FRONT', true), ($1, 'EXT_REAR', false)`,
+        [inspectionId],
+      );
+      const { data } = await service.report(inspectionId, adminId);
+      expect((await PDFDocument.load(data)).getPageCount()).toBe(1);
+      expect((await audits()).at(-1)).toMatchObject({
+        action: "inspection.export_pdf",
+        after: { photos: 3, unreadable: 0 },
+      });
     });
 
     it("includes the damage staff marked and its charge without failing", async () => {

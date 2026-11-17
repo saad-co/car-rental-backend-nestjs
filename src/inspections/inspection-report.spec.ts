@@ -19,6 +19,8 @@ const base: Omit<ReportData, "shots" | "damagePhotos"> = {
   device: null,
   attestedAt: null,
   review: "Not reviewed",
+  photosHeading: "Photos: 1 of 21 shots, 0 damage close-ups",
+  damageSummary: null,
   damageItems: [],
   generatedAt: new Date("2026-11-17T12:00:00Z"),
   generatedBy: "admin@test",

@@ -53,10 +53,12 @@ class FakeStorage implements FileStorage {
 const SHOTS = [
   "EXT_DRIVER_SIDE",
   "EXT_LEFT_FRONT_CORNER",
+  "EXT_LEFT_MIRROR",
   "TIRE_FRONT_LEFT",
   "EXT_FRONT",
   "EXT_WINDSHIELD",
   "EXT_RIGHT_FRONT_CORNER",
+  "EXT_RIGHT_MIRROR",
   "TIRE_FRONT_RIGHT",
   "EXT_PASSENGER_SIDE",
   "EXT_RIGHT_REAR_CORNER",
@@ -131,22 +133,38 @@ describe("the driver's capture routes (Module 3 step 3, test database)", () => {
     return { id: made.id, token: link.split("/i/")[1] };
   }
 
-  /** Uploads every required shot, with the two readings. */
+  /** Uploads every required shot and answers "no damage" for each, as the page does (no typed readings since D112). */
   async function uploadAll(token: string, skip: string[] = []) {
     const photo = await jpeg(150);
     for (const shotId of SHOTS) {
       if (skip.includes(shotId)) continue;
-      await capture.uploadPhoto(
-        token,
-        shotId,
-        body({
-          ...(shotId === "INT_ODOMETER" ? { odometerMiles: "84213" } : {}),
-          ...(shotId === "INT_FUEL" ? { fuelLevel: "3_4" } : {}),
-        }),
-        upload(photo),
-      );
+      await capture.uploadPhoto(token, shotId, body(), upload(photo));
+      await capture.answerDamage(token, shotId, false);
     }
   }
+
+  /** One close-up of damage on `parent`, number `position`. */
+  const closeUp = async (
+    token: string,
+    parent: string,
+    position: number,
+    note?: string,
+  ) =>
+    capture.uploadPhoto(
+      token,
+      "DAMAGE",
+      body({
+        parentShotId: parent,
+        position: String(position),
+        ...(note ? { note } : {}),
+      }),
+      upload(await jpeg(10 + position)),
+    );
+  const answers = (id: string) =>
+    db.query(
+      `SELECT shot_id, has_damage FROM inspection_shot_answers WHERE inspection_id = $1 ORDER BY shot_id`,
+      [id],
+    ) as Promise<{ shot_id: string; has_damage: boolean }[]>;
 
   const row = async (id: string) =>
     (
@@ -174,7 +192,7 @@ describe("the driver's capture routes (Module 3 step 3, test database)", () => {
 
   beforeEach(async () => {
     await db.query(
-      "TRUNCATE inspection_events, inspection_photos, inspections, sms_messages, drivers, users CASCADE",
+      "TRUNCATE inspection_events, inspection_shot_answers, inspection_photos, inspections, sms_messages, drivers, users CASCADE",
     );
     [{ id: adminId }] = (await db.query(
       `INSERT INTO users (email, password_hash, role) VALUES ('admin@capture.test', 'x', 'admin') RETURNING id`,
@@ -241,16 +259,19 @@ describe("the driver's capture routes (Module 3 step 3, test database)", () => {
           vinLast4: "3456",
         },
         photos: [],
+        answers: [],
         odometerMiles: null,
         fuelLevel: null,
         priorDamage: [],
-        maxDamagePhotos: 15,
+        maxCloseUpsPerShot: 5,
         supportPhone: null,
       });
       expect(state.reference).toMatch(/^INS-2026-\d{6}$/);
       expect(state.shots.map((s) => s.shotId)).toEqual(SHOTS);
+      expect(state.shots).toHaveLength(21);
       expect(state.shots.every((s) => s.required)).toBe(true);
-      expect(state.expiresAt).toEqual(new Date(T0.getTime() + 24 * 3_600_000));
+      // At least 72 hours (Abulkalam, 2026-11-17, D112).
+      expect(state.expiresAt).toEqual(new Date(T0.getTime() + 72 * 3_600_000));
     });
 
     it("never gives out the full VIN", async () => {
@@ -283,7 +304,7 @@ describe("the driver's capture routes (Module 3 step 3, test database)", () => {
     it("reads 'expired' once the link time has passed, and 'revoked' after a revoke", async () => {
       const a = await openInspection(InspectionType.checkIn);
       const b = await openInspection(InspectionType.checkOut);
-      clock = new Date(T0.getTime() + 25 * 3_600_000);
+      clock = new Date(T0.getTime() + 73 * 3_600_000);
       expect((await capture.state(a.token)).state).toBe("expired");
       clock = T0;
       await revoke(b.id);
@@ -302,7 +323,7 @@ describe("the driver's capture routes (Module 3 step 3, test database)", () => {
       expect((await row(id)).status).toBe("submitted");
     });
 
-    it("resumes: shows the photos already received, with their thumbnails and notes", async () => {
+    it("resumes: shows the photos, close-ups and answers already received", async () => {
       const { token } = await openInspection();
       const photo = await jpeg(10);
       await capture.uploadPhoto(
@@ -311,46 +332,52 @@ describe("the driver's capture routes (Module 3 step 3, test database)", () => {
         body({ note: "chip" }),
         upload(photo),
       );
-      await capture.uploadPhoto(
-        token,
-        "DAMAGE",
-        body({ position: "1", note: "dent" }),
-        upload(photo),
-      );
+      await closeUp(token, "EXT_FRONT", 1, "dent");
+      await capture.uploadPhoto(token, "EXT_REAR", body(), upload(photo));
+      await capture.answerDamage(token, "EXT_REAR", false);
       const state = await capture.state(token);
-      expect(state.photos).toHaveLength(2);
+      expect(state.photos).toHaveLength(3);
       const front = state.photos.find((p) => p.shotId === "EXT_FRONT")!;
-      expect(front).toMatchObject({ position: 1, note: "chip" });
-      expect(front.thumbUrl).toContain("/thumbs/04_EXT_FRONT.jpg");
-      expect(state.photos.find((p) => p.shotId === "DAMAGE")).toMatchObject({
+      expect(front).toMatchObject({
         position: 1,
+        note: "chip",
+        parentShotId: null,
+      });
+      expect(front.thumbUrl).toContain("/thumbs/05_EXT_FRONT.jpg");
+      const damage = state.photos.find((p) => p.shotId === "DAMAGE")!;
+      expect(damage).toMatchObject({
+        position: 1,
+        parentShotId: "EXT_FRONT",
         note: "dent",
       });
+      expect(damage.thumbUrl).toContain("/thumbs/05_EXT_FRONT_damage_1.jpg");
+      expect(state.answers).toEqual(
+        expect.arrayContaining([
+          { shotId: "EXT_FRONT", hasDamage: true },
+          { shotId: "EXT_REAR", hasDamage: false },
+        ]),
+      );
+      expect(state.answers).toHaveLength(2);
     });
 
-    it("shows the damage recorded at check-in at the top of a check-out", async () => {
+    it("shows a check-out the damage recorded at check-in, by shot", async () => {
       const checkIn = await openInspection(InspectionType.checkIn);
-      const photo = await jpeg(10);
-      await capture.uploadPhoto(
-        checkIn.token,
-        "DAMAGE",
-        body({ position: "1", note: "scratch on the left door" }),
-        upload(photo),
-      );
-      await capture.uploadPhoto(
-        checkIn.token,
-        "DAMAGE",
-        body({ position: "2" }),
-        upload(photo),
-      );
       await uploadAll(checkIn.token);
+      // A close-up turns the shot's earlier "no" into "yes".
+      await closeUp(checkIn.token, "EXT_REAR", 1, "scratch on the bumper");
+      await closeUp(checkIn.token, "EXT_REAR", 2);
       await capture.submit(checkIn.token, { attested: true });
 
       const checkOut = await openInspection(InspectionType.checkOut);
       const state = await capture.state(checkOut.token);
       expect(state.priorDamage).toHaveLength(2);
-      expect(state.priorDamage[0].note).toBe("scratch on the left door");
-      expect(state.priorDamage[0].thumbUrl).toContain("/thumbs/D01_DAMAGE.jpg");
+      expect(state.priorDamage[0]).toMatchObject({
+        parentShotId: "EXT_REAR",
+        note: "scratch on the bumper",
+      });
+      expect(state.priorDamage[0].thumbUrl).toContain(
+        "/thumbs/13_EXT_REAR_damage_1.jpg",
+      );
       expect(state.priorDamage[1].note).toBeNull();
       // A check-in has nothing to compare with.
       expect((await capture.state(checkIn.token)).priorDamage).toEqual([]);
@@ -475,7 +502,7 @@ describe("the driver's capture routes (Module 3 step 3, test database)", () => {
       expect(rows[0].uploaded_at).toEqual(clock);
       expect(
         storage.files
-          .get(`inspections/${id}/04_EXT_FRONT.jpg`)!
+          .get(`inspections/${id}/05_EXT_FRONT.jpg`)!
           .body.equals(second),
       ).toBe(true);
     });
@@ -508,32 +535,90 @@ describe("the driver's capture routes (Module 3 step 3, test database)", () => {
       ).rejects.toThrow("Send the photo first.");
     });
 
-    it("numbers damage photos and keeps them apart", async () => {
+    it("numbers the close-ups of each shot apart, files them next to their shot, and records the yes", async () => {
+      const { id, token } = await openInspection();
+      await capture.uploadPhoto(
+        token,
+        "DAMAGE",
+        body({ parentShotId: "EXT_FRONT", note: "one" }),
+        upload(await jpeg(10)),
+      ); // no number = 1
+      await closeUp(token, "EXT_FRONT", 2, "two");
+      await closeUp(token, "EXT_FRONT", 5);
+      await closeUp(token, "EXT_LEFT_MIRROR", 1); // the same number on another shot is another slot
+      const rows = await photos(id);
+      expect(
+        rows
+          .map((r) => `${String(r.parent_shot_id)}:${String(r.position)}`)
+          .sort(),
+      ).toEqual([
+        "EXT_FRONT:1",
+        "EXT_FRONT:2",
+        "EXT_FRONT:5",
+        "EXT_LEFT_MIRROR:1",
+      ]);
+      for (const name of [
+        "05_EXT_FRONT_damage_1",
+        "05_EXT_FRONT_damage_5",
+        "03_EXT_LEFT_MIRROR_damage_1",
+      ]) {
+        expect(storage.files.has(`inspections/${id}/${name}.jpg`)).toBe(true);
+        expect(storage.files.has(`inspections/${id}/thumbs/${name}.jpg`)).toBe(
+          true,
+        );
+      }
+      expect(await answers(id)).toEqual([
+        { shot_id: "EXT_FRONT", has_damage: true },
+        { shot_id: "EXT_LEFT_MIRROR", has_damage: true },
+      ]);
+      expect((await row(id)).status).toBe("in_progress");
+    });
+
+    it("refuses a close-up without its shot, a parent on a normal shot, and an unknown parent", async () => {
       const { id, token } = await openInspection();
       const photo = await jpeg(10);
-      await capture.uploadPhoto(
-        token,
-        "DAMAGE",
-        body({ note: "one" }),
-        upload(photo),
-      ); // no number = 1
-      await capture.uploadPhoto(
-        token,
-        "DAMAGE",
-        body({ position: "2", note: "two" }),
-        upload(await jpeg(20)),
+      await expect(
+        capture.uploadPhoto(token, "DAMAGE", body(), upload(photo)),
+      ).rejects.toThrow(/parentShotId/);
+      await expect(
+        capture.uploadPhoto(
+          token,
+          "EXT_FRONT",
+          body({ parentShotId: "EXT_REAR" }),
+          upload(photo),
+        ),
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        capture.uploadPhoto(
+          token,
+          "DAMAGE",
+          body({ parentShotId: "NOT_A_SHOT" }),
+          upload(photo),
+        ),
+      ).rejects.toThrow(NotFoundException);
+      expect(await photos(id)).toHaveLength(0);
+    });
+
+    it("lets the database refuse a sixth close-up or one without a parent, even past the code", async () => {
+      const { id } = await openInspection();
+      const insert = (parent: string | null, position: number) =>
+        db.query(
+          `INSERT INTO inspection_photos (inspection_id, shot_id, parent_shot_id, position, storage_key, thumb_key, sha256)
+           VALUES ($1, 'DAMAGE', $2, $3, 'k', 't', $4)`,
+          [id, parent, position, "a".repeat(64)],
+        );
+      await expect(insert("EXT_FRONT", 6)).rejects.toThrow(
+        /inspection_photos_position_range/,
       );
-      await capture.uploadPhoto(
-        token,
-        "DAMAGE",
-        body({ position: "15" }),
-        upload(photo),
+      await expect(insert("NOT_A_SHOT", 1)).rejects.toThrow(
+        /FK_inspection_photos_parent_shot/,
       );
-      const rows = await photos(id);
-      expect(rows.map((r) => r.position)).toEqual([1, 2, 15]);
-      expect(storage.files.has(`inspections/${id}/D01_DAMAGE.jpg`)).toBe(true);
-      expect(storage.files.has(`inspections/${id}/D15_DAMAGE.jpg`)).toBe(true);
-      expect((await row(id)).status).toBe("in_progress");
+      await insert("EXT_FRONT", 1);
+      await expect(insert("EXT_FRONT", 1)).rejects.toThrow(
+        /inspection_photos_slot_unique/,
+      );
+      // An old free-standing damage photo (before D112) is still valid.
+      await insert(null, 12);
     });
 
     it("gives a required shot only one photo", async () => {
@@ -693,7 +778,7 @@ describe("the driver's capture routes (Module 3 step 3, test database)", () => {
         body(),
         upload(photo),
       );
-      clock = new Date(T0.getTime() + 25 * 3_600_000);
+      clock = new Date(T0.getTime() + 73 * 3_600_000);
       const expired = capture.uploadPhoto(
         a.token,
         "EXT_FRONT",
@@ -739,6 +824,7 @@ describe("the driver's capture routes (Module 3 step 3, test database)", () => {
       expect(
         problems({
           position: "3",
+          parentShotId: "EXT_FRONT",
           note: "x",
           capturedAt: "2026-11-16T14:59:00Z",
           odometerMiles: "84213",
@@ -756,7 +842,10 @@ describe("the driver's capture routes (Module 3 step 3, test database)", () => {
       expect(problems({ odometerMiles: "12.5" })).toEqual(["odometerMiles"]);
       expect(problems({ fuelLevel: "2_3" })).toEqual(["fuelLevel"]);
       expect(problems({ position: "0" })).toEqual(["position"]);
-      expect(problems({ position: "16" })).toEqual(["position"]);
+      expect(problems({ position: "6" })).toEqual(["position"]);
+      expect(problems({ parentShotId: "X".repeat(41) })).toEqual([
+        "parentShotId",
+      ]);
       expect(problems({ note: "x".repeat(201) })).toEqual(["note"]);
       expect(problems({ capturedAt: "yesterday" })).toEqual(["capturedAt"]);
       expect(problems({ surprise: "x" })).toEqual(["surprise"]);
@@ -766,6 +855,7 @@ describe("the driver's capture routes (Module 3 step 3, test database)", () => {
       expect(
         problems({
           position: "",
+          parentShotId: "",
           odometerMiles: "",
           fuelLevel: "",
           capturedAt: "",
@@ -789,42 +879,76 @@ describe("the driver's capture routes (Module 3 step 3, test database)", () => {
       expect((await row(id)).status).toBe("in_progress");
     });
 
-    it("refuses without the mileage or the fuel level", async () => {
+    it("refuses until every shot has its damage answer, and names the unanswered ones", async () => {
       const { token } = await openInspection();
       const photo = await jpeg(10);
       for (const shotId of SHOTS) {
         await capture.uploadPhoto(token, shotId, body(), upload(photo));
+        if (shotId !== "EXT_FRONT" && shotId !== "INT_FUEL") {
+          await capture.answerDamage(token, shotId, false);
+        }
       }
-      await expect(capture.submit(token, { attested: true })).rejects.toThrow(
-        /mileage/,
-      );
-      await capture.uploadPhoto(
-        token,
-        "INT_ODOMETER",
-        body({ odometerMiles: "100" }),
-        undefined,
-      );
-      await expect(capture.submit(token, { attested: true })).rejects.toThrow(
-        /fuel/,
-      );
-      await capture.uploadPhoto(
-        token,
-        "INT_FUEL",
-        body({ fuelLevel: "empty" }),
-        undefined,
-      );
+      const error = await capture
+        .submit(token, { attested: true })
+        .catch((e: BadRequestException) => e);
+      expect(error).toBeInstanceOf(BadRequestException);
+      expect((error as BadRequestException).getResponse()).toMatchObject({
+        message: "Some damage questions are not answered (2).",
+        missing: ["EXT_FRONT", "INT_FUEL"],
+      });
+    });
+
+    it("refuses a yes without a close-up", async () => {
+      const { token } = await openInspection();
+      await uploadAll(token);
+      await capture.answerDamage(token, "EXT_WINDSHIELD", true);
+      const error = await capture
+        .submit(token, { attested: true })
+        .catch((e: BadRequestException) => e);
+      expect((error as BadRequestException).getResponse()).toMatchObject({
+        missing: ["EXT_WINDSHIELD"],
+      });
+      await closeUp(token, "EXT_WINDSHIELD", 1, "chip");
       await expect(
         capture.submit(token, { attested: true }),
       ).resolves.toBeDefined();
     });
 
-    it("counts only required photos: damage photos do not stand in for a shot", async () => {
+    it("needs no typed mileage or fuel level: staff read both from the photos (D112)", async () => {
+      const { id, token } = await openInspection();
+      await uploadAll(token);
+      await capture.submit(token, { attested: true });
+      expect(await row(id)).toMatchObject({
+        status: "submitted",
+        odometer_miles: null,
+        fuel_level: null,
+      });
+    });
+
+    it("counts only required photos: a close-up does not stand in for its shot", async () => {
       const { token } = await openInspection();
       await uploadAll(token, ["EXT_FRONT"]);
-      await capture.uploadPhoto(token, "DAMAGE", body(), upload(await jpeg(5)));
-      await expect(capture.submit(token, { attested: true })).rejects.toThrow(
-        BadRequestException,
-      );
+      await closeUp(token, "EXT_FRONT", 1);
+      const error = await capture
+        .submit(token, { attested: true })
+        .catch((e: BadRequestException) => e);
+      expect((error as BadRequestException).getResponse()).toMatchObject({
+        missing: ["EXT_FRONT"],
+      });
+    });
+
+    it("logs how many photos came, close-ups included (B145)", async () => {
+      const { id, token } = await openInspection();
+      await uploadAll(token);
+      await closeUp(token, "EXT_FRONT", 1);
+      await closeUp(token, "EXT_FRONT", 2);
+      await closeUp(token, "EXT_REAR", 1);
+      await capture.submit(token, { attested: true });
+      const [submitted] = (await db.query(
+        `SELECT meta FROM inspection_events WHERE inspection_id = $1 AND type = 'submitted'`,
+        [id],
+      )) as { meta: { photos: number } }[];
+      expect(submitted.meta.photos).toBe(24); // 21 shots + 3 close-ups
     });
 
     it("submits: stamps the time and the attestation, keeps the location and the device, ends the link", async () => {
@@ -844,8 +968,6 @@ describe("the driver's capture routes (Module 3 step 3, test database)", () => {
         gps_lat: 41.8781,
         gps_lng: -87.6298,
         device_info: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0)",
-        odometer_miles: 84213,
-        fuel_level: "3_4",
       });
       expect(await events(id)).toContain("submitted");
     });
@@ -878,7 +1000,7 @@ describe("the driver's capture routes (Module 3 step 3, test database)", () => {
       await expect(
         capture.submit("A".repeat(43), { attested: true }),
       ).rejects.toThrow(GoneException);
-      clock = new Date(T0.getTime() + 25 * 3_600_000);
+      clock = new Date(T0.getTime() + 73 * 3_600_000);
       await expect(capture.submit(a.token, { attested: true })).rejects.toThrow(
         GoneException,
       );
@@ -899,6 +1021,64 @@ describe("the driver's capture routes (Module 3 step 3, test database)", () => {
       expect(check({ attested: true, deviceInfo: "x".repeat(501) })).toEqual([
         "deviceInfo",
       ]);
+    });
+  });
+
+  describe("the damage answer (D112)", () => {
+    it("records yes or no per shot, changes it on request, and logs only real changes", async () => {
+      const { id, token } = await openInspection();
+      expect(await capture.answerDamage(token, "EXT_FRONT", false)).toEqual({
+        shotId: "EXT_FRONT",
+        hasDamage: false,
+      });
+      await capture.answerDamage(token, "EXT_FRONT", false); // a retry
+      await capture.answerDamage(token, "EXT_FRONT", true);
+      expect(await answers(id)).toEqual([
+        { shot_id: "EXT_FRONT", has_damage: true },
+      ]);
+      expect(
+        (await events(id)).filter((e) => e === "damage_answered"),
+      ).toHaveLength(2);
+    });
+
+    it("keeps yes once the shot has a close-up", async () => {
+      const { id, token } = await openInspection();
+      await closeUp(token, "EXT_REAR", 1);
+      await expect(
+        capture.answerDamage(token, "EXT_REAR", false),
+      ).rejects.toThrow(ConflictException);
+      expect(await answers(id)).toEqual([
+        { shot_id: "EXT_REAR", has_damage: true },
+      ]);
+      await expect(
+        capture.answerDamage(token, "EXT_REAR", true),
+      ).resolves.toEqual({ shotId: "EXT_REAR", hasDamage: true });
+    });
+
+    it("refuses an unknown shot, and DAMAGE, which is not a shot", async () => {
+      const { token } = await openInspection();
+      for (const shotId of ["NOT_A_SHOT", "DAMAGE"]) {
+        await expect(
+          capture.answerDamage(token, shotId, false),
+        ).rejects.toThrow(NotFoundException);
+      }
+    });
+
+    it("is refused once submitted, for an expired or revoked link and for an unknown token", async () => {
+      const a = await openInspection(InspectionType.checkIn);
+      const b = await openInspection(InspectionType.checkOut);
+      await uploadAll(a.token);
+      await capture.submit(a.token, { attested: true });
+      await expect(
+        capture.answerDamage(a.token, "EXT_FRONT", true),
+      ).rejects.toThrow(ConflictException);
+      await revoke(b.id);
+      await expect(
+        capture.answerDamage(b.token, "EXT_FRONT", true),
+      ).rejects.toThrow(GoneException);
+      await expect(
+        capture.answerDamage("A".repeat(43), "EXT_FRONT", true),
+      ).rejects.toThrow(GoneException);
     });
   });
 

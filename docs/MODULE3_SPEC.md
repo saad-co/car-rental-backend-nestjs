@@ -34,7 +34,8 @@ or the client asks for it (BACKLOG B139).
    inspection of each type per driver + vehicle + contract: pressing again re-sends the same link; **Revoke and reissue** makes a
    new token.
 2. The link is texted through the Quo chat in the driver's language (SMS mode rules apply: `dry_run` composes only).
-3. The driver opens `/i/<token>` on a phone: Start, 19 photos, "Any other damage?", Submit. No login.
+3. The driver opens `/i/<token>` on a phone: Start, 21 photos, after each one "Any damage on this part?" (Yes: up to 5 close-ups),
+   Submit. No login. (Before D112: 19 photos, then one "Any other damage?" section.)
 4. The inspection becomes `submitted` and appears on the driver page under Check-In or Check-Out photos.
 5. Staff review it, compare check-out with check-in, flag new damage, and create a ledger charge by hand (chat 2).
 
@@ -43,21 +44,30 @@ or the client asks for it (BACKLOG B139).
   (`created` | `link_sent` | `opened` | `in_progress` | `submitted` | `reviewed` | `flagged` | `revoked`; **expired is worked out** from
   `token_expires_at`, not stored), `driver_id`, `contract_id` (nullable), vehicle copy (`vehicle_model`, `vehicle_vin`,
   `vehicle_plate`), `paired_inspection_id` (a check-out points to the latest submitted check-in of the same driver and contract),
-  `token_hash`, `token_expires_at` (24 hours after sending, setting), `link_sent_at`, `opened_at`, `started_at`, `submitted_at`,
-  `odometer_miles`, `fuel_level` (`empty`, 1/8 ... 7/8, `full`), `gps_lat`, `gps_lng`, `device_info`, `attested_at`,
+  `token_hash`, `token_expires_at` (at least 72 hours after sending, setting; D115), `link_sent_at`, `opened_at`, `started_at`, `submitted_at`,
+  `odometer_miles`, `fuel_level` (`empty`, 1/8 ... 7/8, `full`; typed only before D113, now empty: staff read both from the photos),
+  `gps_lat`, `gps_lng`, `device_info`, `attested_at`,
   `reviewed_by_id`, `reviewed_at`, `review_notes`, `created_by_id`. Times are `timestamptz`, shown in Chicago time.
-- **`inspection_shots`** (config table, seeded with the 19): `shot_id`, `position`, `title`, `instruction`, `overlay_image`
+- **`inspection_shots`** (config table, seeded with the 19, 21 since D114): `shot_id`, `position`, `title`, `instruction`, `overlay_image`
   (empty until the client supplies artwork, B138), `required`. The English and Spanish texts live in the translation file.
-- **`inspection_photos`:** `inspection_id`, `shot_id` (a shot id or `DAMAGE`), `position` (damage photos 1 to 15), storage key, thumbnail key,
+- **`inspection_photos`:** `inspection_id`, `shot_id` (a shot id or `DAMAGE`), `parent_shot_id` (D112: the shot a damage close-up
+  belongs to, positions 1 to 5; empty for the old free-standing damage photos, 1 to 15), `position`, storage key, thumbnail key,
   `captured_at` (device), `uploaded_at` (server), `driver_note`, `sha256`, `retake_count`, `ai_analysis` (empty, reserved).
-  Unique on `(inspection_id, shot_id, position)`, so a retried upload cannot double a photo.
+  Unique on `(inspection_id, shot_id, parent_shot_id, position)`, so a retried upload cannot double a photo.
+- **`inspection_shot_answers`** (D112): `inspection_id`, `shot_id`, `has_damage`, `answered_at`; one row per shot, the driver's Yes / No.
 - **`inspection_events`:** the activity log (link created, sent, opened, each upload, submitted, reviewed, revoked, flagged),
   who and when. Staff actions are also written to `audit_logs` (D95).
 - **`damage_items`** (chat 2): `inspection_id`, `photo_id`, `location`, `damage_type`, `description`, `source`
   (`driver_reported` | `staff_flagged`), `first_seen_inspection_id`, `status` (`pre_existing` | `new_during_rental` | `disputed` |
   `repaired` | `charged`), `ledger_entry_id`.
 
-## 5. The 19 required shots (same list for check-in and check-out)
+## 5. The required shots (same list for check-in and check-out)
+**Revised 2026-11-17 (Abulkalam, after a real-phone test; D112-D115):** 21 shots: the left side mirror after 2, the right side mirror after 6, and the
+odometer and fuel are photo only. Order now: 1 EXT_DRIVER_SIDE, 2 EXT_LEFT_FRONT_CORNER, 3 EXT_LEFT_MIRROR, 4 TIRE_FRONT_LEFT, 5 EXT_FRONT,
+6 EXT_WINDSHIELD, 7 EXT_RIGHT_FRONT_CORNER, 8 EXT_RIGHT_MIRROR, 9 TIRE_FRONT_RIGHT, 10 EXT_PASSENGER_SIDE, 11 EXT_RIGHT_REAR_CORNER,
+12 TIRE_REAR_RIGHT, 13 EXT_REAR, 14 TRUNK_INTERIOR, 15 TRUNK_SPARE_JACK, 16 EXT_LEFT_REAR_CORNER, 17 TIRE_REAR_LEFT, 18 INT_ODOMETER,
+19 INT_FUEL, 20 INT_FRONT_SEATS, 21 INT_REAR_SEATS. The original 19 (kept for history):
+
 1 EXT_DRIVER_SIDE, 2 EXT_LEFT_FRONT_CORNER, 3 TIRE_FRONT_LEFT, 4 EXT_FRONT, 5 EXT_WINDSHIELD, 6 EXT_RIGHT_FRONT_CORNER,
 7 TIRE_FRONT_RIGHT, 8 EXT_PASSENGER_SIDE, 9 EXT_RIGHT_REAR_CORNER, 10 TIRE_REAR_RIGHT, 11 EXT_REAR, 12 TRUNK_INTERIOR,
 13 TRUNK_SPARE_JACK, 14 EXT_LEFT_REAR_CORNER, 15 TIRE_REAR_LEFT, 16 INT_ODOMETER (photo + typed mileage), 17 INT_FUEL (photo +
@@ -68,7 +78,7 @@ fuel level), 18 INT_FRONT_SEATS, 19 INT_REAR_SEATS. Titles and instructions: spe
   pointed at the same frontend (DNS only, later).
 - Opens one inspection only. Shows year, make, model, plate and the last 4 of the VIN (from the copied vehicle) so the driver
   confirms the car. Our contract holds one typed model text, so it is shown as typed.
-- Expires 24 hours after sending, or when submitted. Revoked or expired: "This link has expired" screen with a Call GonzoCar button.
+- Expires at least 72 hours after sending (D115; it was 24), or when submitted. Revoked or expired: "This link has expired" screen with a Call GonzoCar button.
   Reopening a half-done link resumes at the next shot. A submitted link shows "Already submitted" with the reference.
 - Identity is the link itself, sent to the phone on file. Unknown tokens answer the same as expired ones. The token routes are rate limited.
 
@@ -81,6 +91,10 @@ fuel level), 18 INT_FRONT_SEATS, 19 INT_REAR_SEATS. Titles and instructions: spe
   with a short note; on check-out the damage recorded at check-in is shown at the top), Submit (thumbnail strip, one checkbox
   "These photos show the car's condition right now", Submit), confirmation with the reference number.
 - Submit is refused unless all 19 required shots are present, mileage and fuel are set, and the box is ticked.
+- **Revised 2026-11-17 (Abulkalam, after a real-phone test; D112-D115):** no corner thumbnail of the previous photo; no typed mileage and no fuel buttons (the fuel
+  shot shows a sample gauge drawing instead); after each required photo the question "Is there any damage on <shot>?" (Yes: up to 5
+  close-ups of that shot, note optional; on check-out the pickup close-ups of that shot are shown with the question); the end
+  "Any other damage?" section is gone. Submit needs all 21 shots, an answer for each, at least one close-up for every Yes, and the box.
 - Every string comes from the translation file (English and Spanish); the app keeps it as shipped.
 - Server stamps the upload time and the SHA-256 of every file; an original is never edited.
 
@@ -93,6 +107,9 @@ Send / re-send link, Copy link, Revoke and reissue.
 - Click a photo: full screen with zoom, captured time, GPS, note, download the original. Photos are served by short-lived signed URLs only.
 - Mark reviewed, Add staff note, the activity log. Summary card on the driver's ledger page (check-in and check-out: date, vehicle, status,
   photo and damage counts, View; "Not yet" with the send button) and a red badge when a photo is flagged as damage or an inspection is unreviewed for over 24 hours.
+- **Revised 2026-11-17 (Abulkalam, after a real-phone test; D112-D115):** every shot shows the driver's answer ("No damage" / "Damage: N close-ups") and its
+  close-ups; compare shows both answers per pair, the pickup close-ups read-only and each return close-up markable as new damage; mileage
+  and fuel say "see the photo" when not typed; ZIP names `NN_SHOT.jpg` and `NN_SHOT_damage_K.jpg`; the PDF lists each answer.
 - **Compare view:** check-in photo left, check-out photo right for each of the 19 shots; odometer and fuel for both with miles driven and
   fuel change; mark each pair No change or New damage (creates a damage item, `staff_flagged`, `new_during_rental`) and **Create charge** opens the
   existing ledger entry form pre-filled; damage already present at check-in is listed and never charged.
@@ -200,6 +217,18 @@ the `inspect.gonzocar.com` subdomain, the driver-name folder layout in storage.
 | "Report (PDF)": one file with the facts, review, damage staff marked, every photo as a thumbnail with received time, SHA-256 start and the driver's note, the damage photos, and who generated it and when | Spec pp. 10, 11 (one-file PDF report); the page layout and what each line shows are ours | from a document / our suggestion |
 | Every export writes a line to the audit trail (who took a copy of the evidence) | D95 (audit); ours | our suggestion |
 | Two chats, order of steps | Abulkalam, 2026-11-16; step order is ours | decided by Abulkalam / our suggestion |
+
+| **Revisions 2026-11-17** | | |
+| No corner thumbnail of the previous photo on the shot screens | Abulkalam revisions 2026-11-17 (real-phone test) | client-confirmed |
+| No typed mileage and no fuel buttons; staff read both from the photos | Abulkalam revisions 2026-11-17 | client-confirmed |
+| A sample fuel-gauge picture on the fuel shot (our own drawing, needle at 3/4, labelled as an example) | Abulkalam revisions 2026-11-17 asked for a sample image; the drawing is ours | from a client message / our suggestion |
+| After each required photo: "Is there any damage on <shot>?"; Yes = up to 5 close-ups of that shot, note optional; end damage section removed | Abulkalam revisions 2026-11-17 (count of 5 and optional note answered in chat) | client-confirmed |
+| The Yes / No answer is stored (`inspection_shot_answers`) and shown to staff on the photo page, compare, ZIP order and PDF | Abulkalam revisions 2026-11-17 (answered in chat) | client-confirmed |
+| No cannot be chosen while close-ups exist for that shot; at check-out the pickup close-ups of the shot are shown with the question | Ours (keeps answer and photos consistent; reuses the existing "damage at pickup" list) | our suggestion |
+| Left and right side mirror shots, placed after the front corner of their side (21 shots) | Abulkalam revisions 2026-11-17; the place in the order is ours | client-confirmed / our suggestion |
+| Links last at least 72 hours (setting below 72 is raised to 72); text says "72 hours" | Abulkalam revisions 2026-11-17 | client-confirmed |
+| Spanish for the new words (mirrors, the damage question, the sample label) | Ours, formal "usted" like the client's file (B146) | our suggestion |
+| Submit log counts every photo, close-ups included (B145) | Found on staging 2026-11-17 | our fix |
 
 ## 13. Open questions
 - Overlay artwork for the framing outlines on the 19 shots (B138); until supplied the live viewfinder shows no outline.

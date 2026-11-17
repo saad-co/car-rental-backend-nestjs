@@ -71,7 +71,7 @@ describe("the public link routes over HTTP (test database)", () => {
 
   beforeEach(async () => {
     await db.query(
-      "TRUNCATE inspection_events, inspection_photos, inspections, sms_messages, drivers, users CASCADE",
+      "TRUNCATE inspection_events, inspection_shot_answers, inspection_photos, inspections, sms_messages, drivers, users CASCADE",
     );
     const [{ id: adminId }] = (await db.query(
       `INSERT INTO users (email, password_hash, role) VALUES ('admin@http.test', 'x', 'admin') RETURNING id`,
@@ -103,7 +103,8 @@ describe("the public link routes over HTTP (test database)", () => {
       type: "check_in",
       vehicle: { model: "Camry", plate: "AB1", vinLast4: null },
     });
-    expect(res.body.shots).toHaveLength(19);
+    expect(res.body.shots).toHaveLength(21);
+    expect(res.body.answers).toEqual([]);
   });
 
   it("answers an unknown token with 200 and 'expired', like a real one that ran out", async () => {
@@ -204,6 +205,57 @@ describe("the public link routes over HTTP (test database)", () => {
     expect(storage.files.size).toBe(0);
   });
 
+  it("takes a damage close-up for a shot as form data, and the damage answer as JSON (D112)", async () => {
+    const closeUp = await request(server())
+      .put(`/i/${token}/photos/DAMAGE`)
+      .attach("photo", await jpeg(), {
+        filename: "c.jpg",
+        contentType: "image/jpeg",
+      })
+      .field("parentShotId", "EXT_RIGHT_MIRROR")
+      .field("position", "2")
+      .field("note", "cracked glass")
+      .expect(200);
+    expect(closeUp.body).toMatchObject({
+      shotId: "DAMAGE",
+      parentShotId: "EXT_RIGHT_MIRROR",
+      position: 2,
+      stored: true,
+    });
+    await request(server())
+      .put(`/i/${token}/shots/EXT_FRONT/damage-answer`)
+      .send({ hasDamage: false })
+      .expect(200, { shotId: "EXT_FRONT", hasDamage: false });
+    await request(server())
+      .put(`/i/${token}/shots/EXT_FRONT/damage-answer`)
+      .send({ hasDamage: "no" })
+      .expect(400);
+    await request(server())
+      .put(`/i/${token}/shots/EXT_FRONT/damage-answer`)
+      .send({})
+      .expect(400);
+    await request(server())
+      .put(`/i/${token}/shots/NOPE/damage-answer`)
+      .send({ hasDamage: true })
+      .expect(404);
+    // "No" for a shot that has a close-up: 409.
+    await request(server())
+      .put(`/i/${token}/shots/EXT_RIGHT_MIRROR/damage-answer`)
+      .send({ hasDamage: false })
+      .expect(409);
+    await request(server())
+      .put(`/i/${"A".repeat(43)}/shots/EXT_FRONT/damage-answer`)
+      .send({ hasDamage: true })
+      .expect(410);
+    const state = await request(server()).get(`/i/${token}`).expect(200);
+    expect(state.body.answers).toEqual(
+      expect.arrayContaining([
+        { shotId: "EXT_FRONT", hasDamage: false },
+        { shotId: "EXT_RIGHT_MIRROR", hasDamage: true },
+      ]),
+    );
+  });
+
   it("answers 410 for a photo sent to an unknown token", async () => {
     await request(server())
       .put(`/i/${"A".repeat(43)}/photos/EXT_FRONT`)
@@ -219,7 +271,7 @@ describe("the public link routes over HTTP (test database)", () => {
       .post(`/i/${token}/submit`)
       .send({ attested: true })
       .expect(400);
-    expect(res.body.missing).toHaveLength(19);
+    expect(res.body.missing).toHaveLength(21);
     await request(server()).post(`/i/${token}/submit`).send({}).expect(400);
     await request(server())
       .post(`/i/${token}/submit`)

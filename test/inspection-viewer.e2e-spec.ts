@@ -80,19 +80,22 @@ describe("vehicle inspections, staff photo viewer (Module 3 chat 2 step 1, test 
     shotId: string,
     position = 1,
     note: string | null = null,
+    parentShotId: string | null = null,
   ) => {
     counter += 1;
+    const slot = `${parentShotId ?? ""}${shotId}_${position}`;
     return db.query(
-      `INSERT INTO inspection_photos (inspection_id, shot_id, position, storage_key, thumb_key, captured_at, driver_note, sha256, retake_count)
-       VALUES ($1, $2, $3, $4, $5, '2026-11-16T14:00:00Z', $6, $7, 1)`,
+      `INSERT INTO inspection_photos (inspection_id, shot_id, position, storage_key, thumb_key, captured_at, driver_note, sha256, retake_count, parent_shot_id)
+       VALUES ($1, $2, $3, $4, $5, '2026-11-16T14:00:00Z', $6, $7, 1, $8)`,
       [
         inspectionId,
         shotId,
         position,
-        `inspections/${inspectionId}/${shotId}_${position}.jpg`,
-        `inspections/${inspectionId}/thumbs/${shotId}_${position}.jpg`,
+        `inspections/${inspectionId}/${slot}.jpg`,
+        `inspections/${inspectionId}/thumbs/${slot}.jpg`,
         note,
         counter.toString(16).padStart(64, "0"),
+        parentShotId,
       ],
     );
   };
@@ -137,8 +140,8 @@ describe("vehicle inspections, staff photo viewer (Module 3 chat 2 step 1, test 
   it("lists the 19 shots in their order, then the damage photos by number, whatever order they arrived in", async () => {
     const made = await makeInspection();
     await addPhoto(made.id, "DAMAGE", 2, "second dent");
-    await addPhoto(made.id, "INT_FUEL"); // shot 17
-    await addPhoto(made.id, "EXT_FRONT"); // shot 4
+    await addPhoto(made.id, "INT_FUEL"); // shot 19
+    await addPhoto(made.id, "EXT_FRONT"); // shot 5
     await addPhoto(made.id, "DAMAGE", 1, "first dent");
     await addPhoto(made.id, "EXT_DRIVER_SIDE"); // shot 1
     const { photos } = await service.findOne(made.id);
@@ -168,17 +171,57 @@ describe("vehicle inspections, staff photo viewer (Module 3 chat 2 step 1, test 
     expect(storage.signed.every((s) => s.seconds === 600)).toBe(true);
   });
 
-  it("names a download after the reference and the shot, or the damage number", async () => {
+  it("puts each shot's close-ups right after it, and tells which shot they belong to (D112)", async () => {
     const made = await makeInspection();
-    await addPhoto(made.id, "EXT_FRONT"); // the 4th shot
+    await addPhoto(made.id, "DAMAGE", 2, "deep", "EXT_FRONT");
+    await addPhoto(made.id, "EXT_REAR");
+    await addPhoto(made.id, "DAMAGE", 1, null, "EXT_REAR");
+    await addPhoto(made.id, "EXT_FRONT");
+    await addPhoto(made.id, "DAMAGE", 1, "light", "EXT_FRONT");
+    await addPhoto(made.id, "DAMAGE", 4, "old style"); // before D112: no shot
+    await db.query(
+      `INSERT INTO inspection_shot_answers (inspection_id, shot_id, has_damage) VALUES ($1, 'EXT_FRONT', true), ($1, 'EXT_REAR', true), ($1, 'EXT_WINDSHIELD', false)`,
+      [made.id],
+    );
+    const detail = await service.findOne(made.id);
+    expect(
+      detail.photos.map(
+        (p) => `${p.shotId}:${p.parentShotId ?? "-"}:${p.position}`,
+      ),
+    ).toEqual([
+      "EXT_FRONT:-:1",
+      "DAMAGE:EXT_FRONT:1",
+      "DAMAGE:EXT_FRONT:2",
+      "EXT_REAR:-:1",
+      "DAMAGE:EXT_REAR:1",
+      "DAMAGE:-:4",
+    ]);
+    expect(detail.answers).toEqual(
+      expect.arrayContaining([
+        { shotId: "EXT_FRONT", hasDamage: true },
+        { shotId: "EXT_REAR", hasDamage: true },
+        { shotId: "EXT_WINDSHIELD", hasDamage: false },
+      ]),
+    );
+    expect(detail.answers).toHaveLength(3);
+    expect(detail.photoCount).toBe(2);
+    expect(detail.damagePhotoCount).toBe(4);
+    expect(detail.requiredPhotoCount).toBe(21);
+  });
+
+  it("names a download after the reference and the shot, its close-up number, or an old damage number", async () => {
+    const made = await makeInspection();
+    await addPhoto(made.id, "EXT_FRONT"); // the 5th shot
+    await addPhoto(made.id, "DAMAGE", 2, null, "EXT_FRONT");
     await addPhoto(made.id, "DAMAGE", 3);
     await service.findOne(made.id);
     const names = storage.signed
       .map((s) => s.downloadName)
       .filter((n): n is string => !!n);
     expect(names).toEqual([
-      `${made.reference}_04_EXT_FRONT.jpg`,
-      `${made.reference}_03_DAMAGE.jpg`,
+      `${made.reference}_05_EXT_FRONT.jpg`,
+      `${made.reference}_05_EXT_FRONT_damage_2.jpg`,
+      `${made.reference}_damage_3.jpg`,
     ]);
   });
 

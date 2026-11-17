@@ -9,14 +9,16 @@ import { UpdateDriverProfileDto } from "../src/drivers/dto/driver-profile.dto.js
 import { Payment } from "../src/payments/payment.entity.js";
 import { openTestDatabase } from "./test-database.js";
 
-/** The 19 required shots in walk-around order (MODULE3_SPEC section 5). */
+/** The 21 required shots in walk-around order (MODULE3_SPEC section 5; the two mirrors since D112). */
 const SHOTS = [
   "EXT_DRIVER_SIDE",
   "EXT_LEFT_FRONT_CORNER",
+  "EXT_LEFT_MIRROR",
   "TIRE_FRONT_LEFT",
   "EXT_FRONT",
   "EXT_WINDSHIELD",
   "EXT_RIGHT_FRONT_CORNER",
+  "EXT_RIGHT_MIRROR",
   "TIRE_FRONT_RIGHT",
   "EXT_PASSENGER_SIDE",
   "EXT_RIGHT_REAR_CORNER",
@@ -80,11 +82,12 @@ describe("inspection tables and the driver's language (Module 3 step 1, test dat
     shotId: string,
     position: number,
     sha256 = HASH_A,
+    parentShotId: string | null = null,
   ) =>
     db.query(
-      `INSERT INTO inspection_photos (inspection_id, shot_id, position, storage_key, thumb_key, sha256)
-       VALUES ($1, $2, $3, 'k', 't', $4)`,
-      [inspectionId, shotId, position, sha256],
+      `INSERT INTO inspection_photos (inspection_id, shot_id, position, storage_key, thumb_key, sha256, parent_shot_id)
+       VALUES ($1, $2, $3, 'k', 't', $4, $5)`,
+      [inspectionId, shotId, position, sha256, parentShotId],
     );
 
   beforeAll(async () => {
@@ -104,7 +107,7 @@ describe("inspection tables and the driver's language (Module 3 step 1, test dat
   });
 
   describe("the shot list", () => {
-    it("holds the 19 required shots, in walk-around order", async () => {
+    it("holds the 21 required shots, in walk-around order", async () => {
       const rows = (await db.query(
         `SELECT shot_id, position, required, overlay_image
          FROM inspection_shots ORDER BY position`,
@@ -237,17 +240,26 @@ describe("inspection tables and the driver's language (Module 3 step 1, test dat
     const full = {
       submitted_at: new Date(),
       attested_at: new Date(),
-      odometer_miles: 84213,
-      fuel_level: "full",
     };
 
-    it("accepts a submitted inspection with the time, the attestation and both readings", async () => {
+    it("accepts a submitted inspection with the time and the attestation; the readings are optional since D112", async () => {
       expect(
         await refusedWith(insertInspection({ status: "submitted", ...full })),
       ).toBeNull();
+      expect(
+        await refusedWith(
+          insertInspection({
+            status: "submitted",
+            type: "check_out",
+            ...full,
+            odometer_miles: 84213,
+            fuel_level: "full",
+          }),
+        ),
+      ).toBeNull();
     });
 
-    it.each(["submitted_at", "attested_at", "odometer_miles", "fuel_level"])(
+    it.each(["submitted_at", "attested_at"])(
       "refuses a submitted inspection without %s",
       async (missing) => {
         const columns: Record<string, unknown> = { ...full };
@@ -292,7 +304,7 @@ describe("inspection tables and the driver's language (Module 3 step 1, test dat
       ).toMatch(/inspection_photos_slot_unique/);
     });
 
-    it("keeps damage photos apart by their number, 1 to 15", async () => {
+    it("keeps old free-standing damage photos apart by their number, 1 to 15", async () => {
       for (let n = 1; n <= 15; n += 1) {
         expect(
           await refusedWith(insertPhoto(inspectionId, "DAMAGE", n)),
@@ -304,6 +316,66 @@ describe("inspection tables and the driver's language (Module 3 step 1, test dat
       expect(await refusedWith(insertPhoto(inspectionId, "DAMAGE", 0))).toMatch(
         /inspection_photos_position_range/,
       );
+    });
+
+    it("keeps the close-ups of a shot apart by their number, 1 to 5, and only on real shots (D112)", async () => {
+      for (let n = 1; n <= 5; n += 1) {
+        expect(
+          await refusedWith(
+            insertPhoto(inspectionId, "DAMAGE", n, HASH_A, "EXT_FRONT"),
+          ),
+        ).toBeNull();
+      }
+      expect(
+        await refusedWith(
+          insertPhoto(inspectionId, "DAMAGE", 6, HASH_A, "EXT_FRONT"),
+        ),
+      ).toMatch(/inspection_photos_position_range/);
+      expect(
+        await refusedWith(
+          insertPhoto(inspectionId, "DAMAGE", 1, HASH_A, "EXT_FRONT"),
+        ),
+      ).toMatch(/inspection_photos_slot_unique/);
+      // Number 1 of another shot, and an old damage photo number 1, are other slots.
+      expect(
+        await refusedWith(
+          insertPhoto(inspectionId, "DAMAGE", 1, HASH_A, "EXT_REAR"),
+        ),
+      ).toBeNull();
+      expect(
+        await refusedWith(insertPhoto(inspectionId, "DAMAGE", 1)),
+      ).toBeNull();
+      // Only DAMAGE rows have a parent, and the parent must be a shot.
+      expect(
+        await refusedWith(
+          insertPhoto(inspectionId, "EXT_FRONT", 1, HASH_A, "EXT_REAR"),
+        ),
+      ).toMatch(/inspection_photos_position_range/);
+      expect(
+        await refusedWith(
+          insertPhoto(inspectionId, "DAMAGE", 2, HASH_A, "NOT_A_SHOT"),
+        ),
+      ).toMatch(/FK_inspection_photos_parent_shot/);
+    });
+
+    it("keeps one damage answer per shot, only for real shots (D112)", async () => {
+      const answer = (shotId: string) =>
+        db.query(
+          `INSERT INTO inspection_shot_answers (inspection_id, shot_id, has_damage) VALUES ($1, $2, true)`,
+          [inspectionId, shotId],
+        );
+      expect(await refusedWith(answer("EXT_FRONT"))).toBeNull();
+      expect(await refusedWith(answer("EXT_FRONT"))).toMatch(
+        /PK_inspection_shot_answers/,
+      );
+      expect(await refusedWith(answer("DAMAGE"))).toMatch(
+        /FK_inspection_shot_answers_shot/,
+      );
+      expect(
+        await refusedWith(
+          db.query(`DELETE FROM inspections WHERE id = $1`, [inspectionId]),
+        ),
+      ).toMatch(/FK_inspection_shot_answers_inspection/);
     });
 
     it("gives a required shot only position 1", async () => {

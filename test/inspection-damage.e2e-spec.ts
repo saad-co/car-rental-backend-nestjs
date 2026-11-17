@@ -50,10 +50,11 @@ describe("vehicle inspections, compare, damage items and the charge (Module 3 ch
     shotId: string,
     position = 1,
     note: string | null = null,
+    parentShotId: string | null = null,
   ) => {
     const [{ id }] = (await db.query(
-      `INSERT INTO inspection_photos (inspection_id, shot_id, position, storage_key, thumb_key, driver_note, sha256)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+      `INSERT INTO inspection_photos (inspection_id, shot_id, position, storage_key, thumb_key, driver_note, sha256, parent_shot_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
       [
         inspectionId,
         shotId,
@@ -62,12 +63,18 @@ describe("vehicle inspections, compare, damage items and the charge (Module 3 ch
         `t/${randomUUID()}`,
         note,
         "a".repeat(64),
+        parentShotId,
       ],
     )) as [{ id: string }];
     return id;
   };
+  const answer = (inspectionId: string, shotId: string, hasDamage: boolean) =>
+    db.query(
+      `INSERT INTO inspection_shot_answers (inspection_id, shot_id, has_damage) VALUES ($1, $2, $3)`,
+      [inspectionId, shotId, hasDamage],
+    );
 
-  /** All 19 shots on an inspection, and its readings; submitted. */
+  /** All 21 shots on an inspection, and its readings; submitted. */
   const finish = async (
     id: string,
     odometer: number,
@@ -155,10 +162,10 @@ describe("vehicle inspections, compare, damage items and the charge (Module 3 ch
   });
 
   describe("compare", () => {
-    it("sets the 19 check-out photos beside the check-in's and works out miles and fuel", async () => {
+    it("sets the 21 check-out photos beside the check-in's and works out miles and fuel", async () => {
       const compare = await damage.compare(checkOutId);
       expect(compare.available).toBe(true);
-      expect(compare.pairs).toHaveLength(19);
+      expect(compare.pairs).toHaveLength(21);
       expect(compare.pairs.every((p) => p.checkIn && p.checkOut)).toBe(true);
       expect(compare.milesDriven).toBe(1001);
       expect(compare.fuelChangeEighths).toBe(-4);
@@ -175,6 +182,78 @@ describe("vehicle inspections, compare, damage items and the charge (Module 3 ch
         "Dent on rear door",
       );
       expect(compare.checkOutDamage[0].damageItem).toBeNull();
+    });
+
+    it("sets each side's damage answer and close-ups beside the shot; only the return close-ups are markable (D112)", async () => {
+      await answer(checkInId, "EXT_LEFT_MIRROR", true);
+      await answer(checkOutId, "EXT_LEFT_MIRROR", true);
+      await answer(checkOutId, "EXT_FRONT", false);
+      await addPhoto(checkInId, "DAMAGE", 1, "Old crack", "EXT_LEFT_MIRROR");
+      const outCloseUp = await addPhoto(
+        checkOutId,
+        "DAMAGE",
+        1,
+        "Mirror hanging off",
+        "EXT_LEFT_MIRROR",
+      );
+      await addPhoto(checkOutId, "DAMAGE", 2, null, "EXT_LEFT_MIRROR");
+      const compare = await damage.compare(checkOutId);
+      const mirror = compare.pairs.find((p) => p.shotId === "EXT_LEFT_MIRROR")!;
+      expect(mirror.checkIn?.parentShotId).toBeNull();
+      expect(mirror.checkOut?.id).toBe(checkOutPhotos.get("EXT_LEFT_MIRROR"));
+      expect(mirror).toMatchObject({
+        checkInAnswer: true,
+        checkOutAnswer: true,
+      });
+      expect(mirror.checkInCloseUps.map((p) => p.driverNote)).toEqual([
+        "Old crack",
+      ]);
+      expect(
+        mirror.checkOutCloseUps.map((c) => [c.photo.id, c.damageItem]),
+      ).toEqual([
+        [outCloseUp, null],
+        [expect.any(String), null],
+      ]);
+      const front = compare.pairs.find((p) => p.shotId === "EXT_FRONT")!;
+      expect(front).toMatchObject({
+        checkInAnswer: null,
+        checkOutAnswer: false,
+        checkInCloseUps: [],
+        checkOutCloseUps: [],
+      });
+      // Close-ups stay out of the old free-standing lists.
+      expect(compare.checkInDamage).toHaveLength(1);
+      expect(compare.checkOutDamage).toHaveLength(1);
+
+      // A return close-up can be marked as new damage and shows its shot.
+      const item = await damage.mark(
+        checkOutId,
+        { photoId: outCloseUp, description: "Mirror broken" },
+        adminId,
+      );
+      expect(item).toMatchObject({
+        shotId: "DAMAGE",
+        parentShotId: "EXT_LEFT_MIRROR",
+        source: "driver_reported",
+      });
+      const again = await damage.compare(checkOutId);
+      expect(
+        again.pairs.find((p) => p.shotId === "EXT_LEFT_MIRROR")!
+          .checkOutCloseUps[0].damageItem?.id,
+      ).toBe(item.id);
+    });
+
+    it("leaves miles and fuel empty when the readings were not typed (D112: read from the photos)", async () => {
+      await db.query(
+        `UPDATE inspections SET odometer_miles = NULL, fuel_level = NULL WHERE id = $1`,
+        [checkOutId],
+      );
+      const compare = await damage.compare(checkOutId);
+      expect(compare).toMatchObject({
+        available: true,
+        milesDriven: null,
+        fuelChangeEighths: null,
+      });
     });
 
     it("says why when there is nothing to compare, instead of failing", async () => {
