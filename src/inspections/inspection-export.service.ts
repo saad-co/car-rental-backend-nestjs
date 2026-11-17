@@ -198,43 +198,52 @@ export class InspectionExportService {
       );
     }
 
-    const data = await buildInspectionReport({
-      reference: inspection.reference,
-      typeLabel:
-        inspection.type === InspectionType.checkIn ? "Check-in" : "Check-out",
-      statusLabel: STATUS_WORDS[inspection.status],
-      driverName: driver
-        ? `${driver.firstName} ${driver.lastName}`
-        : "Unknown driver",
-      vehicle: [
-        inspection.vehicleModel,
-        inspection.vehiclePlate,
-        inspection.vehicleVin ? `VIN ${inspection.vehicleVin}` : null,
-      ]
-        .filter(Boolean)
-        .join(" - "),
-      pairedReference: paired?.reference ?? null,
-      submittedAt: inspection.submittedAt,
-      odometer:
-        inspection.odometerMiles === null
-          ? "-"
-          : `${inspection.odometerMiles.toLocaleString("en-US")} mi`,
-      fuel: inspection.fuelLevel ? FUEL_WORDS[inspection.fuelLevel] : "-",
-      place:
-        inspection.gpsLat !== null && inspection.gpsLng !== null
-          ? `${inspection.gpsLat.toFixed(5)}, ${inspection.gpsLng.toFixed(5)}`
-          : null,
-      device: inspection.deviceInfo,
-      attestedAt: inspection.attestedAt,
-      review: inspection.reviewedAt
-        ? `Reviewed by ${reviewer ?? "an admin"}${inspection.reviewNotes ? `: ${inspection.reviewNotes}` : ""}`
-        : "Not reviewed",
-      shots,
-      damagePhotos,
-      damageItems: items,
-      generatedAt: this.now(),
-      generatedBy: admin ?? "an admin",
-    });
+    const data = await buildInspectionReport(
+      {
+        reference: inspection.reference,
+        typeLabel:
+          inspection.type === InspectionType.checkIn ? "Check-in" : "Check-out",
+        statusLabel: STATUS_WORDS[inspection.status],
+        driverName: driver
+          ? `${driver.firstName} ${driver.lastName}`
+          : "Unknown driver",
+        vehicle: [
+          inspection.vehicleModel,
+          inspection.vehiclePlate,
+          inspection.vehicleVin ? `VIN ${inspection.vehicleVin}` : null,
+        ]
+          .filter(Boolean)
+          .join(" - "),
+        pairedReference: paired?.reference ?? null,
+        submittedAt: inspection.submittedAt,
+        odometer:
+          inspection.odometerMiles === null
+            ? "-"
+            : `${inspection.odometerMiles.toLocaleString("en-US")} mi`,
+        fuel: inspection.fuelLevel ? FUEL_WORDS[inspection.fuelLevel] : "-",
+        place:
+          inspection.gpsLat !== null && inspection.gpsLng !== null
+            ? `${inspection.gpsLat.toFixed(5)}, ${inspection.gpsLng.toFixed(5)}`
+            : null,
+        device: inspection.deviceInfo,
+        attestedAt: inspection.attestedAt,
+        review: inspection.reviewedAt
+          ? `Reviewed by ${reviewer ?? "an admin"}${inspection.reviewNotes ? `: ${inspection.reviewNotes}` : ""}`
+          : "Not reviewed",
+        shots,
+        damagePhotos,
+        damageItems: items,
+        generatedAt: this.now(),
+        generatedBy: admin ?? "an admin",
+      },
+      (photo, error) => {
+        // The bucket gave bytes but they could not be drawn: say why, and count it with the unreadable ones.
+        unreadable++;
+        this.logger.error(
+          `Report of ${inspection.reference}: ${photo.title} thumbnail cannot be drawn (${photo.thumb?.length ?? 0} bytes, starts ${photo.thumb?.subarray(0, 4).toString("hex") ?? "-"}): ${errorText(error)}`,
+        );
+      },
+    );
     await this.audit(adminId, "inspection.export_pdf", inspection, {
       photos: rows.length,
       unreadable,

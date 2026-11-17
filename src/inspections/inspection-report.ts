@@ -174,11 +174,18 @@ class Sheet {
   }
 }
 
+/** Called when a photo's picture could not be put on the page: which photo, and why. */
+export type PhotoProblem = (photo: ReportPhoto, error: unknown) => void;
+
 /**
  * Draws a block of photos three to a row: the picture (or a note that the file is missing), the title, when it was received by
  * our server, the first characters of its fingerprint and the driver's note. Rows never split across pages.
  */
-async function drawPhotos(sheet: Sheet, photos: ReportPhoto[]): Promise<void> {
+async function drawPhotos(
+  sheet: Sheet,
+  photos: ReportPhoto[],
+  onProblem?: PhotoProblem,
+): Promise<void> {
   for (let i = 0; i < photos.length; i += COLUMNS) {
     const row = photos.slice(i, i + COLUMNS);
     const noteLines = Math.max(
@@ -208,8 +215,9 @@ async function drawPhotos(sheet: Sheet, photos: ReportPhoto[]): Promise<void> {
             height: h,
           });
           drawn = true;
-        } catch {
-          // Not a JPEG we can embed: the box below says so, never a blank space.
+        } catch (error) {
+          // The box below says so in the PDF, and the caller is told why (it logs it and counts it): never a silent blank.
+          onProblem?.(photo, error);
         }
       }
       if (!drawn) {
@@ -280,7 +288,10 @@ async function drawPhotos(sheet: Sheet, photos: ReportPhoto[]): Promise<void> {
  * the review, every photo as a thumbnail with its fingerprint, the damage photos with their notes, and the damage staff marked.
  * A4, built-in fonts, no network. A photo that cannot be read is shown as a box that says so.
  */
-export async function buildInspectionReport(data: ReportData): Promise<Buffer> {
+export async function buildInspectionReport(
+  data: ReportData,
+  onProblem?: PhotoProblem,
+): Promise<Buffer> {
   const doc = await PDFDocument.create();
   doc.setTitle(`Vehicle inspection ${data.reference}`);
   doc.setCreator("GonzoCar");
@@ -347,7 +358,7 @@ export async function buildInspectionReport(data: ReportData): Promise<Buffer> {
     bold: true,
   });
   sheet.gap(4);
-  await drawPhotos(sheet, data.shots);
+  await drawPhotos(sheet, data.shots, onProblem);
 
   sheet.gap(6);
   sheet.text(
@@ -357,7 +368,7 @@ export async function buildInspectionReport(data: ReportData): Promise<Buffer> {
   sheet.gap(4);
   if (data.damagePhotos.length === 0)
     sheet.text("The driver reported no damage.", { color: GREY });
-  else await drawPhotos(sheet, data.damagePhotos);
+  else await drawPhotos(sheet, data.damagePhotos, onProblem);
 
   const pages = doc.getPages();
   pages.forEach((page, i) => {
