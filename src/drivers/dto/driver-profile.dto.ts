@@ -1,12 +1,14 @@
 import { Transform } from "class-transformer";
 import {
   IsBoolean,
+  IsIn,
   IsISO8601,
   IsOptional,
   IsString,
   Matches,
   MaxLength,
 } from "class-validator";
+import { DriverLanguage } from "../driver.entity.js";
 
 /** Trims a text value; an empty one becomes `null` (nothing known), so clearing a field is sending it empty. */
 export const trimOrNull = ({ value }: { value: unknown }): unknown => {
@@ -82,6 +84,19 @@ export class DriverProfileFieldsDto {
   @Transform(yesNoOrNull)
   @IsBoolean()
   hasInsurance?: boolean | null;
+
+  /**
+   * The language of the texts and the vehicle-photo page: `en` or `es` (Module 3, D102). Left out = English on a new driver, and
+   * unchanged on an edit. It cannot be cleared: a driver always has one (an empty value counts as "left out").
+   */
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === "string" && value.trim() === "" ? undefined : value,
+  )
+  @IsOptional()
+  @IsIn(Object.values(DriverLanguage), {
+    message: "preferredLanguage must be en or es",
+  })
+  preferredLanguage?: DriverLanguage;
 }
 
 /** Body of `PATCH /drivers/:id/profile` (D85): the profile fields; the ones left out stay as they are. */

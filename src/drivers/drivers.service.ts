@@ -176,6 +176,7 @@ export class DriversService {
         dateOfBirth: driver.dateOfBirth,
         age: driverAge(driver.dateOfBirth),
         hasInsurance: driver.hasInsurance,
+        preferredLanguage: driver.preferredLanguage,
       },
     };
   }
@@ -280,6 +281,10 @@ export class DriversService {
             dateOfBirth: dto.dateOfBirth ?? null,
             hasInsurance: dto.hasInsurance ?? null,
             rentDueTime: dto.rentDueTime ?? null,
+            // Left out = the column's default (English).
+            ...(dto.preferredLanguage
+              ? { preferredLanguage: dto.preferredLanguage }
+              : {}),
           }),
         );
         for (const item of stored) {
@@ -335,6 +340,8 @@ export class DriversService {
       if (dto.dateOfBirth !== undefined) driver.dateOfBirth = dto.dateOfBirth;
       if (dto.hasInsurance !== undefined)
         driver.hasInsurance = dto.hasInsurance;
+      if (dto.preferredLanguage !== undefined)
+        driver.preferredLanguage = dto.preferredLanguage;
       await manager.save(driver);
     });
     // Ids only: the profile holds a date of birth and an address.

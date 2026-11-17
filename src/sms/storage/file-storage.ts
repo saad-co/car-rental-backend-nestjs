@@ -9,8 +9,15 @@ export interface FileStorage {
   /** The file's bytes. Throws when the key does not exist or on any other failure. */
   get(key: string): Promise<Buffer>;
 
-  /** A link that opens the file for `expiresInSeconds`, then stops working. Nothing is public. */
-  presignGet(key: string, expiresInSeconds: number): Promise<string>;
+  /**
+   * A link that opens the file for `expiresInSeconds`, then stops working. Nothing is public. With `downloadName` the link makes
+   * the browser save the file under that name instead of showing it (Module 3: "Download original").
+   */
+  presignGet(
+    key: string,
+    expiresInSeconds: number,
+    options?: { downloadName?: string },
+  ): Promise<string>;
 
   /** Removes the file under `key`. A key that is already gone is not an error. Throws on any other failure. */
   delete(key: string): Promise<void>;
