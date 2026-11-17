@@ -1,8 +1,14 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
+import { LedgerModule } from "../ledger/ledger.module.js";
 import { SettingsModule } from "../settings/settings.module.js";
 import { FileStorageModule } from "../sms/storage/file-storage.module.js";
 import { SmsModule } from "../sms/sms.module.js";
+import { DamageItem } from "./damage-item.entity.js";
+import { InspectionExportController } from "./inspection-export.controller.js";
+import { InspectionExportService } from "./inspection-export.service.js";
+import { InspectionDamageController } from "./inspection-damage.controller.js";
+import { InspectionDamageService } from "./inspection-damage.service.js";
 import { InspectionCaptureController } from "./inspection-capture.controller.js";
 import { InspectionCaptureService } from "./inspection-capture.service.js";
 import { InspectionEvent } from "./inspection-event.entity.js";
@@ -25,15 +31,24 @@ import { TokenRateLimitGuard } from "./token-rate-limit.guard.js";
       InspectionShot,
       InspectionPhoto,
       InspectionEvent,
+      DamageItem,
     ]),
     SmsModule,
     SettingsModule,
     FileStorageModule,
+    LedgerModule,
   ],
-  controllers: [InspectionsController, InspectionCaptureController],
+  controllers: [
+    InspectionsController,
+    InspectionDamageController,
+    InspectionExportController,
+    InspectionCaptureController,
+  ],
   providers: [
     InspectionsService,
     InspectionCaptureService,
+    InspectionDamageService,
+    InspectionExportService,
     TokenRateLimitGuard,
   ],
   exports: [InspectionsService],

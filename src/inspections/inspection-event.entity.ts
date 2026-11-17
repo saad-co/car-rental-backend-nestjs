@@ -24,7 +24,11 @@ export type InspectionEventType =
   | "language_changed"
   | "revoked"
   | "reviewed"
-  | "flagged";
+  | "flagged"
+  | "staff_note"
+  | "damage_marked"
+  | "damage_cleared"
+  | "damage_charged";
 
 /**
  * One line of an inspection's activity log (spec p. 11: link sent, opened, each upload, submitted, reviewed; who and when).

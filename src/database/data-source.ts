@@ -14,6 +14,7 @@ import { MessageTemplate } from "../message-templates/message-template.entity.js
 import { Driver } from "../drivers/driver.entity.js";
 import { DriverNote } from "../drivers/notes/driver-note.entity.js";
 import { RecurringCharge } from "../recurring-charges/recurring-charge.entity.js";
+import { DamageItem } from "../inspections/damage-item.entity.js";
 import { InspectionEvent } from "../inspections/inspection-event.entity.js";
 import { InspectionPhoto } from "../inspections/inspection-photo.entity.js";
 import { InspectionShot } from "../inspections/inspection-shot.entity.js";
@@ -63,6 +64,7 @@ export default new DataSource({
     InspectionShot,
     InspectionPhoto,
     InspectionEvent,
+    DamageItem,
   ],
   // `.ts` when run from the sources (tsx, local), `.js` when run compiled (production). Never
   // both: the build also writes `.d.ts` type files next to each migration, which are not migrations.

@@ -133,7 +133,7 @@ describe("EmailIntakeService.syncNewMessages (test database)", () => {
   });
 
   beforeEach(async () => {
-    await db.query("TRUNCATE ledger_entries, payments, inbound_emails");
+    await db.query("TRUNCATE damage_items, ledger_entries, payments, inbound_emails");
     extractor = new FakeExtractor();
     mailbox = new FakeMailbox([]);
   });

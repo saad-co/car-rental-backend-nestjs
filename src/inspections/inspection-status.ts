@@ -33,6 +33,26 @@ export function effectiveStatus(
   return inspection.status;
 }
 
+/** How long a submitted inspection may wait for a staff review before it is flagged for attention (spec p. 11). */
+export const REVIEW_OVERDUE_HOURS = 24;
+
+/**
+ * True when staff should look at this inspection: it was flagged (new damage found), or it was submitted more than 24 hours ago
+ * and nobody has reviewed it. Worked out on read, so no job has to flip anything when the clock passes.
+ */
+export function needsAttention(
+  inspection: Pick<Inspection, "status" | "submittedAt">,
+  now: Date,
+): boolean {
+  if (inspection.status === InspectionStatus.flagged) return true;
+  return (
+    inspection.status === InspectionStatus.submitted &&
+    inspection.submittedAt !== null &&
+    now.getTime() - inspection.submittedAt.getTime() >
+      REVIEW_OVERDUE_HOURS * 3_600_000
+  );
+}
+
 /** True if the link of this inspection opens the capture page right now (open, link handed out, not run out of time). */
 export function linkWorks(
   inspection: Pick<Inspection, "status" | "tokenExpiresAt">,

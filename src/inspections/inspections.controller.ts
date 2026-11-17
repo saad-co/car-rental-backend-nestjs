@@ -14,10 +14,14 @@ import type { AuthenticatedUser } from "../auth/jwt-auth.guard.js";
 import { PaginationQueryDto } from "../common/dto/pagination-query.dto.js";
 import {
   CreateInspectionDto,
+  AddInspectionNoteDto,
   InspectionDetailDto,
   InspectionDto,
+  InspectionEventDto,
   InspectionLinkDto,
   InspectionListDto,
+  LatestInspectionsDto,
+  ReviewInspectionDto,
   SendInspectionLinkDto,
 } from "./dto/inspection.dto.js";
 import { InspectionsService } from "./inspections.service.js";
@@ -38,6 +42,17 @@ export class InspectionsController {
     @Query() query: PaginationQueryDto,
   ): Promise<InspectionListDto> {
     return this.inspections.list(id, query);
+  }
+
+  /**
+   * `GET /drivers/:id/inspections/latest`: the driver's latest check-in and latest check-out (revoked ones left out), each
+   * null when there is none. `404` unknown driver.
+   */
+  @Get("drivers/:id/inspections/latest")
+  latest(
+    @Param("id", ParseUUIDPipe) id: string,
+  ): Promise<LatestInspectionsDto> {
+    return this.inspections.latest(id);
   }
 
   /**
@@ -87,6 +102,30 @@ export class InspectionsController {
     @CurrentUser() admin: AuthenticatedUser,
   ): Promise<InspectionLinkDto> {
     return this.inspections.reissue(id, admin.id);
+  }
+
+  /**
+   * `POST /inspections/:id/review`: marks a submitted or flagged inspection reviewed (who, when, an optional note up to 500
+   * characters). `409` not submitted yet, revoked, or already reviewed.
+   */
+  @Post("inspections/:id/review")
+  @HttpCode(HttpStatus.OK)
+  review(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() body: ReviewInspectionDto,
+    @CurrentUser() admin: AuthenticatedUser,
+  ): Promise<InspectionDto> {
+    return this.inspections.review(id, body, admin.id);
+  }
+
+  /** `POST /inspections/:id/notes`: adds a staff note (1 to 500 characters) to the activity log. `404` unknown. */
+  @Post("inspections/:id/notes")
+  addNote(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() body: AddInspectionNoteDto,
+    @CurrentUser() admin: AuthenticatedUser,
+  ): Promise<InspectionEventDto> {
+    return this.inspections.addNote(id, body, admin.id);
   }
 
   /** `POST /inspections/:id/revoke`: cancels the inspection; its link stops working for good. `409` already submitted or revoked. */

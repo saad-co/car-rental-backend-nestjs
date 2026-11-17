@@ -1,7 +1,11 @@
 import { DriverLanguage } from "../drivers/driver.entity.js";
 import { InspectionStatus, InspectionType } from "./inspection.entity.js";
 import { inspectionLinkText } from "./inspection-sms.js";
-import { effectiveStatus, linkWorks } from "./inspection-status.js";
+import {
+  effectiveStatus,
+  linkWorks,
+  needsAttention,
+} from "./inspection-status.js";
 import { hashToken, looksLikeToken, newToken } from "./inspection-token.js";
 
 describe("inspection link tokens (D102)", () => {
@@ -174,5 +178,41 @@ describe("the text that carries the link", () => {
       language: DriverLanguage.en,
     });
     expect(text).toContain("Hi Pat$&,");
+  });
+});
+
+describe("needs attention (flagged, or submitted and unreviewed for more than 24 hours)", () => {
+  const submittedAt = new Date("2026-11-16T12:00:00Z");
+  const hours = (n: number) => new Date(submittedAt.getTime() + n * 3_600_000);
+
+  it("is false up to exactly 24 hours and true after", () => {
+    const row = { status: InspectionStatus.submitted, submittedAt };
+    expect(needsAttention(row, hours(23))).toBe(false);
+    expect(needsAttention(row, hours(24))).toBe(false);
+    expect(needsAttention(row, new Date(hours(24).getTime() + 1))).toBe(true);
+  });
+
+  it("is true for a flagged one at any time", () => {
+    expect(
+      needsAttention(
+        { status: InspectionStatus.flagged, submittedAt },
+        hours(0),
+      ),
+    ).toBe(true);
+  });
+
+  it("is false once reviewed, and for anything not submitted", () => {
+    for (const status of [
+      InspectionStatus.reviewed,
+      InspectionStatus.created,
+      InspectionStatus.linkSent,
+      InspectionStatus.opened,
+      InspectionStatus.inProgress,
+      InspectionStatus.revoked,
+    ]) {
+      expect(needsAttention({ status, submittedAt: null }, hours(200))).toBe(
+        false,
+      );
+    }
   });
 });

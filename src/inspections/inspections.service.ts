@@ -1,17 +1,24 @@
 import {
   ConflictException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
   BadRequestException,
+  Optional,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { InjectDataSource } from "@nestjs/typeorm";
-import { DataSource, EntityManager, In } from "typeorm";
+import { DataSource, EntityManager, In, Not } from "typeorm";
 import { recordAudit } from "../audit/record-audit.js";
 import { chicagoDate } from "../common/chicago-date.js";
 import { PaginationQueryDto } from "../common/dto/pagination-query.dto.js";
 import { Contract, ContractStatus } from "../contracts/contract.entity.js";
+import {
+  FILE_LINK_SECONDS,
+  type FileStorage,
+} from "../sms/storage/file-storage.js";
+import { FILE_STORAGE } from "../sms/storage/file-storage.module.js";
 import { isUniqueViolation } from "../database/postgres-errors.js";
 import { Driver } from "../drivers/driver.entity.js";
 import { SettingsService } from "../settings/settings.service.js";
@@ -24,7 +31,11 @@ import {
   InspectionEventDto,
   InspectionLinkDto,
   InspectionListDto,
+  InspectionPhotoDto,
   InspectionVehicleDto,
+  LatestInspectionsDto,
+  ReviewInspectionDto,
+  AddInspectionNoteDto,
   SendInspectionLinkDto,
 } from "./dto/inspection.dto.js";
 import {
@@ -32,9 +43,14 @@ import {
   type InspectionEventType,
 } from "./inspection-event.entity.js";
 import { inspectionLinkText } from "./inspection-sms.js";
-import { effectiveStatus, isOpen } from "./inspection-status.js";
+import {
+  effectiveStatus,
+  isOpen,
+  needsAttention,
+} from "./inspection-status.js";
 import { hashToken, newToken } from "./inspection-token.js";
-import { DAMAGE_SHOT_ID } from "./inspection-photo.entity.js";
+import { DAMAGE_SHOT_ID, InspectionPhoto } from "./inspection-photo.entity.js";
+import { InspectionShot } from "./inspection-shot.entity.js";
 import {
   Inspection,
   InspectionStatus,
@@ -64,6 +80,10 @@ export class InspectionsService {
     private readonly sms: SmsService,
     private readonly settings: SettingsService,
     private readonly config: ConfigService,
+    // `null` when no bucket is set up (the photo links are then null); optional so a test can leave it out.
+    @Optional()
+    @Inject(FILE_STORAGE)
+    private readonly storage: FileStorage | null = null,
   ) {}
 
   // ----------------------------------------------------------------- reading
@@ -116,9 +136,77 @@ export class InspectionsService {
        WHERE e.inspection_id = $1 ORDER BY e.created_at ASC, e.id ASC`,
       [id],
     )) as InspectionEventDto[];
+    const reviewer = inspection.reviewedById
+      ? ((await this.dataSource.query(`SELECT email FROM users WHERE id = $1`, [
+          inspection.reviewedById,
+        ])) as { email: string }[])
+      : [];
     return Object.assign(this.toDto(inspection, counts, this.now()), {
       events,
+      reviewedByEmail: reviewer[0]?.email ?? null,
+      reviewNote: inspection.reviewNotes,
+      gpsLat: inspection.gpsLat,
+      gpsLng: inspection.gpsLng,
+      deviceInfo: inspection.deviceInfo,
+      attestedAt: inspection.attestedAt,
+      photos: await this.photosOf(inspection),
     });
+  }
+
+  /**
+   * The photos of one inspection in viewing order (the 19 shots by their position, then the damage close-ups by number), each
+   * with its signed links. Storage keys never leave the server.
+   */
+  async photosOf(inspection: Inspection): Promise<InspectionPhotoDto[]> {
+    const [photos, shots] = await Promise.all([
+      this.dataSource
+        .getRepository(InspectionPhoto)
+        .findBy({ inspectionId: inspection.id }),
+      this.dataSource.getRepository(InspectionShot).find(),
+    ]);
+    const shotPosition = new Map(shots.map((s) => [s.shotId, s.position]));
+    const ordered = [...photos].sort((a, b) => {
+      const aDamage = a.shotId === DAMAGE_SHOT_ID ? 1 : 0;
+      const bDamage = b.shotId === DAMAGE_SHOT_ID ? 1 : 0;
+      return (
+        aDamage - bDamage ||
+        (shotPosition.get(a.shotId) ?? 0) - (shotPosition.get(b.shotId) ?? 0) ||
+        a.position - b.position
+      );
+    });
+    return Promise.all(
+      ordered.map(async (photo) => {
+        const number = String(
+          photo.shotId === DAMAGE_SHOT_ID
+            ? photo.position
+            : (shotPosition.get(photo.shotId) ?? 0),
+        ).padStart(2, "0");
+        const downloadName = `${inspection.reference}_${number}_${photo.shotId}.jpg`;
+        return {
+          id: photo.id,
+          shotId: photo.shotId,
+          position: photo.position,
+          driverNote: photo.driverNote,
+          capturedAt: photo.capturedAt,
+          uploadedAt: photo.uploadedAt,
+          retakeCount: photo.retakeCount,
+          sha256: photo.sha256,
+          thumbUrl: await this.presign(photo.thumbKey),
+          fullUrl: await this.presign(photo.storageKey),
+          downloadUrl: await this.presign(photo.storageKey, { downloadName }),
+        };
+      }),
+    );
+  }
+
+  /** A short-lived link to a file in the bucket, or null when there is no bucket. */
+  private presign(
+    key: string,
+    options?: { downloadName?: string },
+  ): Promise<string | null> {
+    return this.storage
+      ? this.storage.presignGet(key, FILE_LINK_SECONDS, options)
+      : Promise.resolve(null);
   }
 
   // ---------------------------------------------------------------- creating
@@ -327,6 +415,115 @@ export class InspectionsService {
     return this.dtoOfWithCounts(revoked);
   }
 
+  // ------------------------------------------------------------ staff review
+
+  /**
+   * Marks a submitted (or flagged) inspection reviewed: who and when, with an optional note. The log and the audit trail get a
+   * line in the same transaction. Nothing else changes: the photos and readings are evidence and stay as they were.
+   * @throws NotFoundException unknown inspection.
+   * @throws ConflictException not submitted yet, revoked, or already reviewed.
+   */
+  async review(
+    id: string,
+    body: ReviewInspectionDto,
+    adminId: string,
+  ): Promise<InspectionDto> {
+    const note = body.note ?? null;
+    const reviewed = await this.dataSource.transaction(async (manager) => {
+      const inspection = await this.lockInspection(manager, id);
+      if (inspection.status === InspectionStatus.reviewed) {
+        throw new ConflictException("This inspection was already reviewed.");
+      }
+      if (
+        inspection.status !== InspectionStatus.submitted &&
+        inspection.status !== InspectionStatus.flagged
+      ) {
+        throw new ConflictException(
+          "Only a submitted inspection can be reviewed.",
+        );
+      }
+      const before = inspection.status;
+      inspection.status = InspectionStatus.reviewed;
+      inspection.reviewedById = adminId;
+      inspection.reviewedAt = this.now();
+      inspection.reviewNotes = note;
+      await manager.save(inspection);
+      await this.logEvent(manager, id, "reviewed", adminId, { note });
+      await recordAudit(manager, [
+        {
+          actorId: adminId,
+          action: "inspection.review",
+          entityType: "inspection",
+          entityId: id,
+          before: { status: before },
+          after: { status: InspectionStatus.reviewed, note },
+        },
+      ]);
+      return inspection;
+    });
+    this.logger.log(`Admin ${adminId} reviewed ${reviewed.reference}.`);
+    return this.dtoOfWithCounts(reviewed);
+  }
+
+  /**
+   * Adds a staff note to an inspection's activity log (a line of type `staff_note`). Allowed in any state: a note about a
+   * revoked or unfinished inspection is still worth keeping.
+   * @throws NotFoundException unknown inspection.
+   */
+  async addNote(
+    id: string,
+    body: AddInspectionNoteDto,
+    adminId: string,
+  ): Promise<InspectionEventDto> {
+    const event = await this.dataSource.transaction(async (manager) => {
+      await this.lockInspection(manager, id);
+      const saved = await this.logEvent(manager, id, "staff_note", adminId, {
+        text: body.text,
+      });
+      await recordAudit(manager, [
+        {
+          actorId: adminId,
+          action: "inspection.note",
+          entityType: "inspection",
+          entityId: id,
+          after: { text: body.text },
+        },
+      ]);
+      return saved;
+    });
+    const [actor] = (await this.dataSource.query(
+      `SELECT email FROM users WHERE id = $1`,
+      [adminId],
+    )) as { email: string }[];
+    return {
+      id: event.id,
+      type: event.type,
+      actorEmail: actor?.email ?? null,
+      meta: event.meta,
+      createdAt: event.createdAt,
+    };
+  }
+
+  /**
+   * The driver's latest check-in and latest check-out (revoked ones left out; the newest by the time they were made). The
+   * summary card on the ledger page shows exactly these two.
+   * @throws NotFoundException unknown driver.
+   */
+  async latest(driverId: string): Promise<LatestInspectionsDto> {
+    await this.assertDriverExists(this.dataSource.manager, driverId);
+    const latestOf = async (type: InspectionType) => {
+      const row = await this.dataSource.getRepository(Inspection).findOne({
+        where: { driverId, type, status: Not(InspectionStatus.revoked) },
+        order: { createdAt: "DESC", id: "DESC" },
+      });
+      return row ? this.dtoOfWithCounts(row) : null;
+    };
+    return {
+      checkIn: await latestOf(InspectionType.checkIn),
+      checkOut: await latestOf(InspectionType.checkOut),
+    };
+  }
+
   // ----------------------------------------------------------------- helpers
 
   /**
@@ -521,7 +718,7 @@ export class InspectionsService {
     type: InspectionEventType,
     actorId: string | null,
     meta: Record<string, unknown> | null,
-  ): Promise<unknown> {
+  ): Promise<InspectionEvent> {
     return manager.save(
       manager.create(InspectionEvent, { inspectionId, type, actorId, meta }),
     );
@@ -548,9 +745,7 @@ export class InspectionsService {
     return this.toDto(inspection, new Map(), this.now());
   }
 
-  private async dtoOfWithCounts(
-    inspection: Inspection,
-  ): Promise<InspectionDto> {
+  async dtoOfWithCounts(inspection: Inspection): Promise<InspectionDto> {
     return this.toDto(
       inspection,
       await this.photoCounts([inspection.id]),
@@ -586,6 +781,8 @@ export class InspectionsService {
       fuelLevel: inspection.fuelLevel,
       photoCount: count?.shots ?? 0,
       damagePhotoCount: count?.damage ?? 0,
+      reviewedAt: inspection.reviewedAt,
+      needsAttention: needsAttention(inspection, now),
       createdAt: inspection.createdAt,
     };
   }

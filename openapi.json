@@ -3615,6 +3615,37 @@
         ]
       }
     },
+    "/drivers/{id}/inspections/latest": {
+      "get": {
+        "operationId": "InspectionsController_latest",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LatestInspectionsDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`GET /drivers/:id/inspections/latest`: the driver's latest check-in and latest check-out (revoked ones left out), each\nnull when there is none. `404` unknown driver.",
+        "tags": [
+          "Inspections"
+        ]
+      }
+    },
     "/inspections/{id}": {
       "get": {
         "operationId": "InspectionsController_findOne",
@@ -3708,6 +3739,88 @@
         ]
       }
     },
+    "/inspections/{id}/review": {
+      "post": {
+        "operationId": "InspectionsController_review",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewInspectionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InspectionDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`POST /inspections/:id/review`: marks a submitted or flagged inspection reviewed (who, when, an optional note up to 500\ncharacters). `409` not submitted yet, revoked, or already reviewed.",
+        "tags": [
+          "Inspections"
+        ]
+      }
+    },
+    "/inspections/{id}/notes": {
+      "post": {
+        "operationId": "InspectionsController_addNote",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddInspectionNoteDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InspectionEventDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`POST /inspections/:id/notes`: adds a staff note (1 to 500 characters) to the activity log. `404` unknown.",
+        "tags": [
+          "Inspections"
+        ]
+      }
+    },
     "/inspections/{id}/revoke": {
       "post": {
         "operationId": "InspectionsController_revoke",
@@ -3736,6 +3849,191 @@
         "summary": "`POST /inspections/:id/revoke`: cancels the inspection; its link stops working for good. `409` already submitted or revoked.",
         "tags": [
           "Inspections"
+        ]
+      }
+    },
+    "/inspections/{id}/compare": {
+      "get": {
+        "operationId": "InspectionDamageController_compare",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InspectionCompareDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`GET /inspections/:id/compare`: the check-out beside its check-in (19 pairs, miles, fuel, damage). `available: false` with\na `reason` when there is nothing to compare. `404` unknown.",
+        "tags": [
+          "InspectionDamage"
+        ]
+      }
+    },
+    "/inspections/{id}/damage-items": {
+      "post": {
+        "operationId": "InspectionDamageController_mark",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDamageItemDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DamageItemDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`POST /inspections/:id/damage-items`: \"New damage\" on one check-out photo; flags the inspection. `404` unknown inspection or\nphoto; `409` not a submitted, paired check-out, or the photo is already marked.",
+        "tags": [
+          "InspectionDamage"
+        ]
+      }
+    },
+    "/damage-items/{id}": {
+      "delete": {
+        "operationId": "InspectionDamageController_unmark",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "summary": "`DELETE /damage-items/:id`: back to \"No change\". `404` unknown; `409` already charged.",
+        "tags": [
+          "InspectionDamage"
+        ]
+      }
+    },
+    "/damage-items/{id}/charge": {
+      "post": {
+        "operationId": "InspectionDamageController_charge",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateLedgerEntryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChargeDamageItemResultDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`POST /damage-items/:id/charge`: charges the driver for the damage (one ledger debit; the body is the same as a manual\nledger entry and `direction` must be `debit`). Sending the same `requestKey` again returns the same entry. `400` not a\ndebit or the ledger refused it; `404` unknown; `409` already charged.",
+        "tags": [
+          "InspectionDamage"
+        ]
+      }
+    },
+    "/inspections/{id}/export.zip": {
+      "get": {
+        "operationId": "InspectionExportController_zip",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "`GET /inspections/:id/export.zip`: every original photo, `<reference>/NN_<SHOT_ID>.jpg` and `damage_N.jpg`. A photo the\nbucket cannot give is named in `MISSING.txt` inside. `404` unknown; `409` no photos; `503` no file storage.",
+        "tags": [
+          "InspectionExport"
+        ]
+      }
+    },
+    "/inspections/{id}/report.pdf": {
+      "get": {
+        "operationId": "InspectionExportController_report",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "`GET /inspections/:id/report.pdf`: the one-file report. `404` unknown; `503` no file storage.",
+        "tags": [
+          "InspectionExport"
         ]
       }
     },
@@ -9467,6 +9765,16 @@
             "type": "number",
             "description": "Damage close-ups received so far."
           },
+          "reviewedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "When staff marked it reviewed; null until then."
+          },
+          "needsAttention": {
+            "type": "boolean",
+            "description": "True when staff should look at it: flagged for new damage, or submitted more than 24 hours ago and still not reviewed\n(spec p. 11). Worked out on read."
+          },
           "createdAt": {
             "format": "date-time",
             "type": "string"
@@ -9490,6 +9798,8 @@
           "fuelLevel",
           "photoCount",
           "damagePhotoCount",
+          "reviewedAt",
+          "needsAttention",
           "createdAt"
         ]
       },
@@ -9528,6 +9838,33 @@
           "page",
           "limit",
           "contractVehicle"
+        ]
+      },
+      "LatestInspectionsDto": {
+        "type": "object",
+        "properties": {
+          "checkIn": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/InspectionDto"
+              }
+            ]
+          },
+          "checkOut": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/InspectionDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "checkIn",
+          "checkOut"
         ]
       },
       "InspectionVehicleInputDto": {
@@ -9606,6 +9943,74 @@
           "actorEmail",
           "meta",
           "createdAt"
+        ]
+      },
+      "InspectionPhotoDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "shotId": {
+            "type": "string",
+            "description": "A shot id from the 19-shot list, or `DAMAGE` for a close-up added by the driver."
+          },
+          "position": {
+            "type": "number",
+            "description": "1 for a shot; 1 to 15 for damage."
+          },
+          "driverNote": {
+            "type": "string",
+            "nullable": true,
+            "description": "The driver's note under the photo."
+          },
+          "capturedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "The time on the phone when it was taken (a device value: informative only)."
+          },
+          "uploadedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "The server's time when the file arrived: the one to trust."
+          },
+          "retakeCount": {
+            "type": "number",
+            "description": "How many times the driver replaced this photo."
+          },
+          "sha256": {
+            "type": "string",
+            "description": "The server's SHA-256 fingerprint of the file, for disputes."
+          },
+          "thumbUrl": {
+            "type": "string",
+            "nullable": true,
+            "description": "The 400 px thumbnail; null when the bucket is not set up."
+          },
+          "fullUrl": {
+            "type": "string",
+            "nullable": true,
+            "description": "The full photo, to show full screen."
+          },
+          "downloadUrl": {
+            "type": "string",
+            "nullable": true,
+            "description": "The full photo as a download (the browser saves it as `<reference>_<NN>_<SHOT>.jpg`)."
+          }
+        },
+        "required": [
+          "id",
+          "shotId",
+          "position",
+          "driverNote",
+          "capturedAt",
+          "uploadedAt",
+          "retakeCount",
+          "sha256",
+          "thumbUrl",
+          "fullUrl",
+          "downloadUrl"
         ]
       },
       "InspectionDetailDto": {
@@ -9708,14 +10113,61 @@
             "type": "number",
             "description": "Damage close-ups received so far."
           },
+          "reviewedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "When staff marked it reviewed; null until then."
+          },
+          "needsAttention": {
+            "type": "boolean",
+            "description": "True when staff should look at it: flagged for new damage, or submitted more than 24 hours ago and still not reviewed\n(spec p. 11). Worked out on read."
+          },
           "createdAt": {
             "format": "date-time",
             "type": "string"
+          },
+          "reviewedByEmail": {
+            "type": "string",
+            "nullable": true,
+            "description": "The admin who reviewed it; null until reviewed."
+          },
+          "reviewNote": {
+            "type": "string",
+            "nullable": true,
+            "description": "The note kept with the review, if any."
           },
           "events": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/InspectionEventDto"
+            }
+          },
+          "gpsLat": {
+            "type": "number",
+            "nullable": true,
+            "description": "Where the phone was when the driver submitted, if it had already allowed location."
+          },
+          "gpsLng": {
+            "type": "number",
+            "nullable": true
+          },
+          "deviceInfo": {
+            "type": "string",
+            "nullable": true,
+            "description": "The browser and phone, as the browser reported them."
+          },
+          "attestedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "When the driver ticked the box that the photos show the car's condition right now."
+          },
+          "photos": {
+            "description": "The 19 shots in order, then the damage close-ups in the order taken.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InspectionPhotoDto"
             }
           }
         },
@@ -9737,8 +10189,17 @@
           "fuelLevel",
           "photoCount",
           "damagePhotoCount",
+          "reviewedAt",
+          "needsAttention",
           "createdAt",
-          "events"
+          "reviewedByEmail",
+          "reviewNote",
+          "events",
+          "gpsLat",
+          "gpsLng",
+          "deviceInfo",
+          "attestedAt",
+          "photos"
         ]
       },
       "SendInspectionLinkDto": {
@@ -9793,6 +10254,265 @@
         "required": [
           "inspection",
           "link"
+        ]
+      },
+      "ReviewInspectionDto": {
+        "type": "object",
+        "properties": {
+          "note": {
+            "type": "string",
+            "nullable": true,
+            "description": "An optional note kept with the review, up to 500 characters.",
+            "maxLength": 500
+          }
+        }
+      },
+      "AddInspectionNoteDto": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "A staff note, 1 to 500 characters after trimming. It joins the activity log.",
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "DamageItemDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "inspectionId": {
+            "type": "string",
+            "description": "The check-out it was found on."
+          },
+          "photoId": {
+            "type": "string",
+            "description": "The check-out photo that shows it."
+          },
+          "shotId": {
+            "type": "string",
+            "description": "Where on the car: a shot id, or `DAMAGE` for a close-up the driver added."
+          },
+          "source": {
+            "description": "`driver_reported` = the driver added the close-up; `staff_flagged` = staff found it on one of the 19 shots.",
+            "enum": [
+              "driver_reported",
+              "staff_flagged"
+            ],
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "new_during_rental",
+              "charged"
+            ],
+            "type": "string"
+          },
+          "ledgerEntryId": {
+            "type": "string",
+            "nullable": true,
+            "description": "The ledger charge made for it (set when `status` is `charged`)."
+          },
+          "ledgerRef": {
+            "type": "string",
+            "nullable": true
+          },
+          "amountCents": {
+            "type": "number",
+            "nullable": true
+          },
+          "createdByEmail": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "inspectionId",
+          "photoId",
+          "shotId",
+          "source",
+          "description",
+          "status",
+          "ledgerEntryId",
+          "ledgerRef",
+          "amountCents",
+          "createdByEmail",
+          "createdAt"
+        ]
+      },
+      "ComparePairDto": {
+        "type": "object",
+        "properties": {
+          "shotId": {
+            "type": "string"
+          },
+          "checkIn": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/InspectionPhotoDto"
+              }
+            ]
+          },
+          "checkOut": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/InspectionPhotoDto"
+              }
+            ]
+          },
+          "damageItem": {
+            "nullable": true,
+            "description": "Null = \"No change\".",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DamageItemDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "shotId",
+          "checkIn",
+          "checkOut",
+          "damageItem"
+        ]
+      },
+      "CompareDamagePhotoDto": {
+        "type": "object",
+        "properties": {
+          "photo": {
+            "$ref": "#/components/schemas/InspectionPhotoDto"
+          },
+          "damageItem": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DamageItemDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "photo",
+          "damageItem"
+        ]
+      },
+      "InspectionCompareDto": {
+        "type": "object",
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "checkOut": {
+            "$ref": "#/components/schemas/InspectionDto"
+          },
+          "checkIn": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/InspectionDto"
+              }
+            ]
+          },
+          "milesDriven": {
+            "type": "number",
+            "nullable": true,
+            "description": "Check-out odometer minus check-in odometer."
+          },
+          "fuelChangeEighths": {
+            "type": "number",
+            "nullable": true,
+            "description": "Check-out fuel minus check-in fuel, in eighths of a tank."
+          },
+          "pairs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ComparePairDto"
+            }
+          },
+          "checkInDamage": {
+            "description": "Damage the driver photographed at pickup: already there, read-only and never chargeable.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InspectionPhotoDto"
+            }
+          },
+          "checkOutDamage": {
+            "description": "Damage close-ups the driver added at return, each markable as new damage.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CompareDamagePhotoDto"
+            }
+          }
+        },
+        "required": [
+          "available",
+          "reason",
+          "checkOut",
+          "checkIn",
+          "milesDriven",
+          "fuelChangeEighths",
+          "pairs",
+          "checkInDamage",
+          "checkOutDamage"
+        ]
+      },
+      "CreateDamageItemDto": {
+        "type": "object",
+        "properties": {
+          "photoId": {
+            "type": "string",
+            "description": "The check-out photo that shows the damage (one of its 19 shots or one of its damage close-ups).",
+            "format": "uuid"
+          },
+          "description": {
+            "type": "string",
+            "description": "What the damage is, 1 to 500 characters after trimming.",
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "photoId",
+          "description"
+        ]
+      },
+      "ChargeDamageItemResultDto": {
+        "type": "object",
+        "properties": {
+          "item": {
+            "$ref": "#/components/schemas/DamageItemDto"
+          },
+          "entry": {
+            "$ref": "#/components/schemas/LedgerEntryDto"
+          }
+        },
+        "required": [
+          "item",
+          "entry"
         ]
       },
       "CaptureVehicleDto": {
