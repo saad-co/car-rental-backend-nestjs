@@ -204,7 +204,9 @@ async function drawPhotos(
       let drawn = false;
       if (photo.thumb) {
         try {
-          const image = await sheet.doc.embedJpg(photo.thumb);
+          // A copy that owns its memory: Node serves buffers under 4 KB from a shared pool, and pdf-lib reads such a buffer from
+          // the start of the pool instead of the start of the buffer ("SOI not found in JPEG"). Small thumbnails hit this.
+          const image = await sheet.doc.embedJpg(new Uint8Array(photo.thumb));
           const scale = Math.min(CELL_W / image.width, THUMB_H / image.height);
           const w = image.width * scale;
           const h = image.height * scale;
