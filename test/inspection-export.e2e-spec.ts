@@ -245,6 +245,15 @@ describe("vehicle inspections, ZIP and PDF export (Module 3 chat 2 step 4, test 
       expect((await audits()).at(-1)?.after).toMatchObject({ unreadable: 1 });
     });
 
+    it("counts a thumbnail that was read but cannot be drawn (not a JPEG), instead of dropping it silently", async () => {
+      await addPhoto("EXT_FRONT");
+      const bad = await addPhoto("EXT_REAR");
+      storage.files.set(bad.thumbKey, Buffer.from("<Error>not a jpeg</Error>"));
+      const { data } = await service.report(inspectionId, adminId);
+      expect(data.subarray(0, 5).toString("latin1")).toBe("%PDF-");
+      expect((await audits()).at(-1)?.after).toMatchObject({ unreadable: 1 });
+    });
+
     it("works with no photos, spreads 19 photos over more than one page, and handles a long note", async () => {
       const empty = await PDFDocument.load(
         (await service.report(inspectionId, adminId)).data,
