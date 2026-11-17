@@ -2,6 +2,7 @@ import { ApiProperty } from "@nestjs/swagger";
 import { Transform } from "class-transformer";
 import {
   Equals,
+  IsBoolean,
   IsEnum,
   IsInt,
   IsISO8601,
@@ -17,7 +18,7 @@ import { DriverLanguage } from "../../drivers/driver.entity.js";
 import { trimOrNull } from "../../drivers/dto/driver-profile.dto.js";
 import { FuelLevel, InspectionType } from "../inspection.entity.js";
 import {
-  MAX_DAMAGE_PHOTOS,
+  MAX_CLOSE_UPS_PER_SHOT,
   MAX_PHOTO_NOTE_LENGTH,
 } from "../inspection-photo.entity.js";
 
@@ -41,13 +42,20 @@ const textToNumber = ({ value }: { value: unknown }) =>
  * as text). Everything is optional: the page may send the photo first and the note or the reading a moment later.
  */
 export class UploadPhotoDto {
-  /** Which damage close-up, 1 to 15. Only for the shot `DAMAGE`; a required shot has just one photo. */
+  /** Which close-up of the shot, 1 to 5. Only for the shot `DAMAGE`; a required shot has just one photo. */
   @IsOptional()
   @Transform(textToNumber)
   @IsInt()
   @Min(1)
-  @Max(MAX_DAMAGE_PHOTOS)
+  @Max(MAX_CLOSE_UPS_PER_SHOT)
   position?: number;
+
+  /** For a damage close-up (`DAMAGE`): the required shot it belongs to, e.g. `EXT_LEFT_MIRROR` (D112). Required with `DAMAGE`. */
+  @IsOptional()
+  @Transform(emptyToUndefined)
+  @IsString()
+  @MaxLength(40)
+  parentShotId?: string;
 
   /** The optional "+ Damage note", or the note under a damage close-up. Sent empty, it is cleared. */
   @IsOptional()
@@ -62,7 +70,7 @@ export class UploadPhotoDto {
   @IsISO8601()
   capturedAt?: string;
 
-  /** The mileage typed from the odometer photo, whole miles. Only with the shot `INT_ODOMETER`. */
+  /** The mileage typed from the odometer photo, whole miles. Only with the shot `INT_ODOMETER`. Not sent by the page since D112. */
   @IsOptional()
   @Transform(textToNumber)
   @IsInt({ message: "odometerMiles must be a whole number" })
@@ -70,7 +78,7 @@ export class UploadPhotoDto {
   @Max(2_000_000)
   odometerMiles?: number;
 
-  /** The fuel level chosen on the fuel bar. Only with the shot `INT_FUEL`. */
+  /** The fuel level chosen on the fuel bar. Only with the shot `INT_FUEL`. Not sent by the page since D112. */
   @IsOptional()
   @Transform(emptyToUndefined)
   @IsEnum(FuelLevel)
@@ -104,6 +112,18 @@ export class SubmitInspectionDto {
   deviceInfo?: string | null;
 }
 
+/** Body of `PUT /i/:token/shots/:shotId/damage-answer`: the driver's answer to "Is there any damage on the <shot>?" (D112). */
+export class DamageAnswerDto {
+  @IsBoolean({ message: "hasDamage must be true or false" })
+  hasDamage: boolean;
+}
+
+/** One answer already given, so a reopened link resumes where it was. */
+export class ShotAnswerDto {
+  shotId: string;
+  hasDamage: boolean;
+}
+
 /** Body of `POST /i/:token/language`. */
 export class SetLanguageDto {
   @IsIn(Object.values(DriverLanguage), {
@@ -130,15 +150,21 @@ export class CaptureShotDto {
 export class CapturePhotoDto {
   /** A shot id, or `DAMAGE`. */
   shotId: string;
-  /** 1 for a required shot; 1 to 15 for damage. */
+  /** 1 for a required shot; 1 to 5 for a close-up (1 to 15 for an old free-standing damage photo). */
   position: number;
+  /** For a close-up: the required shot it belongs to. */
+  parentShotId: string | null;
   note: string | null;
   /** A short-lived link to the 400 px thumbnail; null when the bucket is not set up. */
   thumbUrl: string | null;
 }
 
-/** Damage recorded at check-in, shown at the top of the damage step of a check-out so drivers skip it. */
+/**
+ * Damage recorded at check-in, shown at a check-out next to the same shot's damage question, so the driver does not report it
+ * again. `parentShotId` is the shot (null for an old free-standing damage photo).
+ */
 export class PriorDamageDto {
+  parentShotId: string | null;
   note: string | null;
   thumbUrl: string | null;
 }
@@ -161,14 +187,16 @@ export class CaptureStateDto {
   vehicle: CaptureVehicleDto | null;
   /** Every shot, in order; `required` ones must all have a photo before the page can submit. */
   shots: CaptureShotDto[];
-  /** The photos received so far, damage included. */
+  /** The photos received so far, close-ups included. */
   photos: CapturePhotoDto[];
+  /** The damage answers given so far, one per shot answered. */
+  answers: ShotAnswerDto[];
   odometerMiles: number | null;
   fuelLevel: FuelLevel | null;
   /** The damage photos of the paired check-in, for a check-out. Empty otherwise. */
   priorDamage: PriorDamageDto[];
-  /** The most damage photos allowed. */
-  maxDamagePhotos: number;
+  /** The most close-ups one shot can hold (5). */
+  maxCloseUpsPerShot: number;
   /** When the link stops working (open only). */
   expiresAt: Date | null;
   /** When it was submitted (submitted only). */
@@ -181,6 +209,7 @@ export class CaptureStateDto {
 export class UploadedPhotoDto {
   shotId: string;
   position: number;
+  parentShotId: string | null;
   /** True when this call stored a new file (a first photo or a retake); false when only the note or reading was updated. */
   stored: boolean;
   /** How many times the driver replaced this photo. */

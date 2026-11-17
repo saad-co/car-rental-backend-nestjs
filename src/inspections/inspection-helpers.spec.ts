@@ -122,7 +122,7 @@ describe("the text that carries the link", () => {
         language: DriverLanguage.en,
       }),
     ).toBe(
-      "GonzoCar: Hi Maria, before you drive the 2021 Toyota Camry (AB 12345), please complete your vehicle check-in photos here: https://app.test/i/TOKEN It takes about 5 minutes. Link expires in 24 hours.",
+      "GonzoCar: Hi Maria, before you drive the 2021 Toyota Camry (AB 12345), please complete your vehicle check-in photos here: https://app.test/i/TOKEN It takes about 5 minutes. Link expires in 72 hours.",
     );
   });
 

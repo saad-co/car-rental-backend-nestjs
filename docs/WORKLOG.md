@@ -4,6 +4,15 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-11-18 — Module 3 revisions (Abulkalam 2026-11-17, D112-D115)
+- **Branch** `feature/inspection-revisions` in both repos (worktrees `wt-inspection-revisions-*`, slot 1: 5001 / 5174, database `car_rental_inspection_revisions`).
+- **Backend:** migration `1795000000000-InspectionRevisions` (2 mirror shots, positions renumbered to 21; `inspection_photos.parent_shot_id` with its CHECK and unique slot index; table `inspection_shot_answers`; submitted shape no longer needs readings); `PUT /i/:token/shots/:shotId/damage-answer`; close-up upload (`parentShotId`, 1 to 5); submit rules (photo, answer, close-up per Yes); 72-hour floor and SMS text; B145; compare pairs carry answers and close-ups; viewer, ZIP and PDF order each shot then its close-ups (`inspection-photo-order.ts`); `requiredPhotoCount` on the list DTO.
+- **Frontend:** capture page (no corner thumbnail, no readings, fuel sample SVG, per-shot question and close-up screens, mirrors, submit marks, resume to the next missing photo / answer / close-up); staff photo page, compare, driver card and ledger summary card.
+- **Verified:** backend unit 522, e2e 926, lint, build, `migration:run:prod`, migration revert and re-run; frontend 90 tests, lint, build. Browser at phone size: a check-in and a check-out of 21 shots with close-ups on the left mirror, resume, the 72-hour link. Staff pages, compare (a return close-up marked, the charge dialog prefilled and closed, the mark undone: no ledger entry), ZIP (23 files) and PDF (3 pages, 22 images).
+- **Not done:** the real-phone test on staging; B146 (client reads the new words). The staging admin password change is Abulkalam's to do (`/docs`: `POST /auth/login`, Authorize, `POST /auth/change-password`).
+
+---
+
 ### 2026-11-17 — Module 3 (chats 1 and 2) merged and deployed to staging
 - **Merged into `dev`:** backend PRs #58 (Module 3: capture API, staff review, compare, damage items, charge, ZIP and PDF), #59 and #60 (PDF thumbnail logging and the small-buffer fix); frontend PR #38. **Deployed to staging** by the "Deployment" steps: backend `95eee65`, frontend `eea4c28`; the pre-deploy ran `CreateInspections` and `CreateDamageItems`; `railway logs` clean. Staging variables unchanged (demo mode `VITE_HIDE_FINANCIALS=true` still on; SMS live).
 - **Verified on staging** (entry below): the whole flow with a test driver, and the PDF fix (21 of 21 thumbnails on every run).

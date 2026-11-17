@@ -19,7 +19,9 @@ import { MAX_UPLOAD_BYTES } from "../applications/documents/upload-file.js";
 import { Public } from "../auth/public.decorator.js";
 import {
   CaptureStateDto,
+  DamageAnswerDto,
   SetLanguageDto,
+  ShotAnswerDto,
   SubmitInspectionDto,
   SubmittedInspectionDto,
   UploadedPhotoDto,
@@ -52,9 +54,10 @@ export class InspectionCaptureController {
 
   /**
    * `PUT /i/:token/photos/:shotId`: stores one photo, as multipart form data: the file `photo` (a JPEG, at most 10 MB) and the
-   * optional text fields `position` (damage only, 1 to 15), `note`, `capturedAt`, `odometerMiles` (shot `INT_ODOMETER`) and
-   * `fuelLevel` (shot `INT_FUEL`). `shotId` is a required shot or `DAMAGE`. Safe to repeat: the same file changes nothing, a
-   * different one is a retake. Without a file it only updates the note or reading of a photo already stored.
+   * optional text fields `position` (close-ups only, 1 to 5), `parentShotId` (close-ups only: the shot the damage is on), `note`,
+   * `capturedAt`, `odometerMiles` (shot `INT_ODOMETER`) and `fuelLevel` (shot `INT_FUEL`). `shotId` is a required shot or `DAMAGE`
+   * (a close-up, D112; it also records "yes, damage" for its shot). Safe to repeat: the same file changes nothing, a different one
+   * is a retake. Without a file it only updates the note or reading of a photo already stored.
    * `410` expired, unknown or revoked link; `409` already submitted; `400` bad input.
    */
   @Put("photos/:shotId")
@@ -70,7 +73,12 @@ export class InspectionCaptureController {
         photo: { type: "string", format: "binary" },
         position: {
           type: "integer",
-          description: "Damage photos only, 1 to 15",
+          description: "Damage close-ups only, 1 to 5",
+        },
+        parentShotId: {
+          type: "string",
+          description:
+            "Damage close-ups only: the required shot they belong to",
         },
         note: { type: "string" },
         capturedAt: { type: "string", description: "ISO 8601, from the phone" },
@@ -106,8 +114,21 @@ export class InspectionCaptureController {
   }
 
   /**
-   * `POST /i/:token/submit`: closes the inspection. Needs every required photo, the mileage, the fuel level and
-   * `attested: true`; `gpsLat` and `gpsLng` (both or neither) and `deviceInfo` are optional. Repeating it after success returns the
+   * `PUT /i/:token/shots/:shotId/damage-answer`: the driver's answer to "Is there any damage on the <shot>?" (`hasDamage`,
+   * D112). Safe to repeat. `404` not a required shot; `409` already submitted, or "no" while the shot has close-ups; `410` expired.
+   */
+  @Put("shots/:shotId/damage-answer")
+  answerDamage(
+    @Param("token") token: string,
+    @Param("shotId") shotId: string,
+    @Body() body: DamageAnswerDto,
+  ): Promise<ShotAnswerDto> {
+    return this.capture.answerDamage(token, shotId, body.hasDamage);
+  }
+
+  /**
+   * `POST /i/:token/submit`: closes the inspection. Needs every required photo with its damage answer, at least one close-up for
+   * each "yes", and `attested: true`; `gpsLat` and `gpsLng` (both or neither) and `deviceInfo` are optional. Repeating it after success returns the
    * same answer. `410` expired link; `400` something missing.
    */
   @Post("submit")

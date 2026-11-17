@@ -413,7 +413,7 @@ describe("vehicle inspections, staff side (Module 3 step 2, test database)", () 
       const [text] = await texts();
       expect(text.mode).toBe("dry_run");
       expect(text.body).toBe(
-        `GonzoCar: Hi Maria, before you drive the 2021 Toyota Camry (AB 12345), please complete your vehicle check-in photos here: ${sent.link} It takes about 5 minutes. Link expires in 24 hours.`,
+        `GonzoCar: Hi Maria, before you drive the 2021 Toyota Camry (AB 12345), please complete your vehicle check-in photos here: ${sent.link} It takes about 5 minutes. Link expires in 72 hours.`,
       );
       expect(quo.sent).toEqual([]); // dry run: Quo is never called
       expect(await events(made.id)).toEqual([
@@ -473,18 +473,25 @@ describe("vehicle inspections, staff side (Module 3 step 2, test database)", () 
       expect(eventText).not.toContain(token);
     });
 
-    it("makes the link work for 24 hours, or for as many hours as the setting says", async () => {
+    it("makes the link work for 72 hours, longer if the setting says so, never shorter (D112)", async () => {
       const made = await createIn();
       const sent = await service.send(made.id, adminId);
       expect(sent.inspection.tokenExpiresAt).toEqual(
-        new Date(T0.getTime() + 24 * 3_600_000),
+        new Date(T0.getTime() + 72 * 3_600_000),
       );
       await db.query(
         `INSERT INTO app_settings (key, value) VALUES ('inspection_link_hours', '2')`,
       );
-      const again = await service.send(made.id, adminId);
-      expect(again.inspection.tokenExpiresAt).toEqual(
-        new Date(T0.getTime() + 2 * 3_600_000),
+      const short = await service.send(made.id, adminId);
+      expect(short.inspection.tokenExpiresAt).toEqual(
+        new Date(T0.getTime() + 72 * 3_600_000),
+      );
+      await db.query(
+        `UPDATE app_settings SET value = '96' WHERE key = 'inspection_link_hours'`,
+      );
+      const long = await service.send(made.id, adminId);
+      expect(long.inspection.tokenExpiresAt).toEqual(
+        new Date(T0.getTime() + 96 * 3_600_000),
       );
     });
 
@@ -495,7 +502,7 @@ describe("vehicle inspections, staff side (Module 3 step 2, test database)", () 
       const made = await createIn();
       const sent = await service.send(made.id, adminId);
       expect(sent.inspection.tokenExpiresAt).toEqual(
-        new Date(T0.getTime() + 24 * 3_600_000),
+        new Date(T0.getTime() + 72 * 3_600_000),
       );
     });
 
@@ -527,12 +534,12 @@ describe("vehicle inspections, staff side (Module 3 step 2, test database)", () 
     it("can send again after the link has run out of time", async () => {
       const made = await createIn();
       await service.send(made.id, adminId);
-      clock = new Date(T0.getTime() + 25 * 3_600_000);
+      clock = new Date(T0.getTime() + 73 * 3_600_000);
       expect((await service.findOne(made.id)).status).toBe("expired");
       const sent = await service.send(made.id, adminId);
       expect(sent.inspection.status).toBe("link_sent");
       expect(sent.inspection.tokenExpiresAt).toEqual(
-        new Date(clock.getTime() + 24 * 3_600_000),
+        new Date(clock.getTime() + 72 * 3_600_000),
       );
     });
 
@@ -604,7 +611,7 @@ describe("vehicle inspections, staff side (Module 3 step 2, test database)", () 
       expect(inspection.status).toBe("link_sent");
       expect(inspection.linkSentAt).toBeNull(); // handed out by copy, never texted
       expect(inspection.tokenExpiresAt).toEqual(
-        new Date(T0.getTime() + 24 * 3_600_000),
+        new Date(T0.getTime() + 72 * 3_600_000),
       );
       expect(await count("sms_messages")).toBe(0);
       expect((await row(made.id)).token_hash).toBe(hashToken(tokenOf(link)));

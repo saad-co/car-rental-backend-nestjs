@@ -18,6 +18,7 @@ import {
   InspectionType,
 } from "../inspection.entity.js";
 import type { EffectiveInspectionStatus } from "../inspection-status.js";
+import { ShotAnswerDto } from "./capture.dto.js";
 
 /** The vehicle typed by an admin for a driver who has no signed contract with a vehicle (our suggestion, D102). */
 export class InspectionVehicleInputDto {
@@ -87,6 +88,8 @@ export class InspectionDto {
   fuelLevel: FuelLevel | null;
   /** Photos of the required shots received so far. */
   photoCount: number;
+  /** How many shots are required (21 since D112), for "x of 21 photos". */
+  requiredPhotoCount: number;
   /** Damage close-ups received so far. */
   damagePhotoCount: number;
   /** When staff marked it reviewed; null until then. */
@@ -115,9 +118,11 @@ export class InspectionEventDto {
  */
 export class InspectionPhotoDto {
   id: string;
-  /** A shot id from the 19-shot list, or `DAMAGE` for a close-up added by the driver. */
+  /** A shot id from the shot list, or `DAMAGE` for a damage close-up added by the driver. */
   shotId: string;
-  /** 1 for a shot; 1 to 15 for damage. */
+  /** For a close-up: the shot it shows damage on (D112). Null for a shot, and for an old free-standing damage photo. */
+  parentShotId: string | null;
+  /** 1 for a shot; 1 to 5 for a close-up (1 to 15 for an old free-standing damage photo). */
   position: number;
   /** The driver's note under the photo. */
   driverNote: string | null;
@@ -133,7 +138,7 @@ export class InspectionPhotoDto {
   thumbUrl: string | null;
   /** The full photo, to show full screen. */
   fullUrl: string | null;
-  /** The full photo as a download (the browser saves it as `<reference>_<NN>_<SHOT>.jpg`). */
+  /** The full photo as a download, saved as `<reference>_05_EXT_FRONT.jpg`, or `..._damage_2.jpg` for a close-up. */
   downloadUrl: string | null;
 }
 
@@ -177,8 +182,10 @@ export class InspectionDetailDto extends InspectionDto {
   deviceInfo: string | null;
   /** When the driver ticked the box that the photos show the car's condition right now. */
   attestedAt: Date | null;
-  /** The 19 shots in order, then the damage close-ups in the order taken. */
+  /** The shots in order, each followed by its damage close-ups; then any old free-standing damage photos. */
   photos: InspectionPhotoDto[];
+  /** The driver's answer to "Is there any damage in this photo?", per shot answered (D112). Empty for older inspections. */
+  answers: ShotAnswerDto[];
 }
 
 /** One page of a driver's inspections, newest first. */
@@ -212,7 +219,7 @@ export class SendInspectionLinkDto extends InspectionLinkDto {
 
 /** Body of `POST /inspections/:id/damage-items`: "New damage" on one check-out photo. */
 export class CreateDamageItemDto {
-  /** The check-out photo that shows the damage (one of its 19 shots or one of its damage close-ups). */
+  /** The check-out photo that shows the damage (one of its shots or one of its damage close-ups). */
   @IsUUID()
   photoId: string;
 
@@ -233,7 +240,9 @@ export class DamageItemDto {
   photoId: string;
   /** Where on the car: a shot id, or `DAMAGE` for a close-up the driver added. */
   shotId: string;
-  /** `driver_reported` = the driver added the close-up; `staff_flagged` = staff found it on one of the 19 shots. */
+  /** For a close-up: the shot it belongs to (D112). */
+  parentShotId: string | null;
+  /** `driver_reported` = the driver added the close-up; `staff_flagged` = staff found it on one of the shots. */
   source: "driver_reported" | "staff_flagged";
   description: string;
   status: "new_during_rental" | "charged";
@@ -245,19 +254,27 @@ export class DamageItemDto {
   createdAt: Date;
 }
 
-/** One of the 19 shots: the check-in photo beside the check-out photo, and what staff decided. */
+/** A damage close-up of the check-out and whether staff marked it as new damage. */
+export class CompareDamagePhotoDto {
+  photo: InspectionPhotoDto;
+  damageItem: DamageItemDto | null;
+}
+
+/**
+ * One shot: the check-in photo beside the check-out photo, what staff decided, and (D112) each side's damage answer and
+ * close-ups. Check-in close-ups are read-only (damage already there at pickup); check-out close-ups can be marked as new damage.
+ */
 export class ComparePairDto {
   shotId: string;
   checkIn: InspectionPhotoDto | null;
   checkOut: InspectionPhotoDto | null;
   /** Null = "No change". */
   damageItem: DamageItemDto | null;
-}
-
-/** A damage close-up of the check-out and whether staff marked it as new damage. */
-export class CompareDamagePhotoDto {
-  photo: InspectionPhotoDto;
-  damageItem: DamageItemDto | null;
+  /** The driver's damage answer at pickup and at return; null when not answered (older inspections). */
+  checkInAnswer: boolean | null;
+  checkOutAnswer: boolean | null;
+  checkInCloseUps: InspectionPhotoDto[];
+  checkOutCloseUps: CompareDamagePhotoDto[];
 }
 
 /**
@@ -269,14 +286,14 @@ export class InspectionCompareDto {
   reason: string | null;
   checkOut: InspectionDto;
   checkIn: InspectionDto | null;
-  /** Check-out odometer minus check-in odometer. */
+  /** Check-out odometer minus check-in odometer; null unless both were typed (inspections made before D112). */
   milesDriven: number | null;
-  /** Check-out fuel minus check-in fuel, in eighths of a tank. */
+  /** Check-out fuel minus check-in fuel, in eighths of a tank; null unless both were chosen (before D112). */
   fuelChangeEighths: number | null;
   pairs: ComparePairDto[];
-  /** Damage the driver photographed at pickup: already there, read-only and never chargeable. */
+  /** Old free-standing damage photos of the check-in (before D112): already there, read-only and never chargeable. */
   checkInDamage: InspectionPhotoDto[];
-  /** Damage close-ups the driver added at return, each markable as new damage. */
+  /** Old free-standing damage photos of the check-out (before D112), each markable as new damage. */
   checkOutDamage: CompareDamagePhotoDto[];
 }
 

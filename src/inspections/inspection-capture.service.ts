@@ -12,7 +12,7 @@ import {
 import { ConfigService } from "@nestjs/config";
 import { InjectDataSource } from "@nestjs/typeorm";
 import sharp from "sharp";
-import { DataSource, EntityManager } from "typeorm";
+import { DataSource, EntityManager, IsNull } from "typeorm";
 import { MAX_UPLOAD_BYTES } from "../applications/documents/upload-file.js";
 import { sniffFileType } from "../applications/documents/sniff-file-type.js";
 import { Driver, DriverLanguage } from "../drivers/driver.entity.js";
@@ -26,6 +26,7 @@ import {
   CaptureStateDto,
   PriorDamageDto,
   SetLanguageDto,
+  ShotAnswerDto,
   SubmittedInspectionDto,
   SubmitInspectionDto,
   UploadedPhotoDto,
@@ -38,8 +39,9 @@ import {
 import {
   DAMAGE_SHOT_ID,
   InspectionPhoto,
-  MAX_DAMAGE_PHOTOS,
+  MAX_CLOSE_UPS_PER_SHOT,
 } from "./inspection-photo.entity.js";
+import { InspectionShotAnswer } from "./inspection-shot-answer.entity.js";
 import { InspectionShot } from "./inspection-shot.entity.js";
 import { linkWorks } from "./inspection-status.js";
 import { hashToken, looksLikeToken } from "./inspection-token.js";
@@ -111,7 +113,10 @@ export class InspectionCaptureService {
     });
     const photos = await manager.find(InspectionPhoto, {
       where: { inspectionId: inspection.id },
-      order: { shotId: "ASC", position: "ASC" },
+      order: { shotId: "ASC", parentShotId: "ASC", position: "ASC" },
+    });
+    const answers = await manager.find(InspectionShotAnswer, {
+      where: { inspectionId: inspection.id },
     });
     return Object.assign(this.emptyState("open"), {
       reference: inspection.reference,
@@ -130,6 +135,10 @@ export class InspectionCaptureService {
         required: shot.required,
       })),
       photos: await Promise.all(photos.map((p) => this.photoDto(p))),
+      answers: answers.map((a): ShotAnswerDto => ({
+        shotId: a.shotId,
+        hasDamage: a.hasDamage,
+      })),
       odometerMiles: inspection.odometerMiles,
       fuelLevel: inspection.fuelLevel,
       priorDamage: await this.priorDamage(inspection),
@@ -143,8 +152,12 @@ export class InspectionCaptureService {
    * Stores one photo (or only updates the note or a reading of one already stored). Safe to repeat: the same bytes for the same
    * slot change nothing, different bytes are a retake that replaces the file and counts in `retakeCount`. The server stamps its
    * own time and the SHA-256 of the file it received.
+   *
+   * A damage close-up (D112) is `DAMAGE` with `parentShotId` (a required shot) and `position` 1 to 5. Storing one also records the
+   * answer "yes, damage" for that shot, so the answer and the close-ups can never disagree, whatever order they arrive in.
    * @throws GoneException unknown, expired or revoked link. @throws ConflictException already submitted.
-   * @throws BadRequestException unknown shot, not a JPEG, a reading on the wrong shot, or no photo yet for a note-only update.
+   * @throws BadRequestException unknown shot, not a JPEG, a reading on the wrong shot, a close-up without its shot, or no photo
+   * yet for a note-only update.
    */
   async uploadPhoto(
     token: string,
@@ -159,12 +172,22 @@ export class InspectionCaptureService {
     }
     const storage = this.storage;
     const isDamage = shotId === DAMAGE_SHOT_ID;
-    const shot = isDamage
-      ? null
-      : await this.dataSource
-          .getRepository(InspectionShot)
-          .findOneBy({ shotId });
-    if (!isDamage && !shot) throw new NotFoundException("Unknown shot.");
+    if (!isDamage && dto.parentShotId !== undefined) {
+      throw new BadRequestException(
+        "Only a damage close-up belongs to another shot.",
+      );
+    }
+    if (isDamage && dto.parentShotId === undefined) {
+      throw new BadRequestException(
+        "A damage close-up needs the shot it belongs to (parentShotId).",
+      );
+    }
+    // The shot the file is filed under: the shot itself, or the parent of a close-up.
+    const shot = await this.dataSource
+      .getRepository(InspectionShot)
+      .findOneBy({ shotId: isDamage ? dto.parentShotId : shotId });
+    if (!shot) throw new NotFoundException("Unknown shot.");
+    const parentShotId = isDamage ? shot.shotId : null;
     const position = isDamage ? (dto.position ?? 1) : 1;
     if (!isDamage && dto.position !== undefined && dto.position !== 1) {
       throw new BadRequestException("Only damage photos have a number.");
@@ -198,15 +221,18 @@ export class InspectionCaptureService {
       const existing = await manager.findOneBy(InspectionPhoto, {
         inspectionId: inspection.id,
         shotId,
+        parentShotId: parentShotId ?? IsNull(),
         position,
       });
       if (!file && !existing) {
         throw new BadRequestException("Send the photo first.");
       }
       const now = this.now();
+      // `03_EXT_LEFT_MIRROR.jpg`, and its close-ups `03_EXT_LEFT_MIRROR_damage_1.jpg` to `_damage_5.jpg`.
+      const base = `${String(shot.position).padStart(2, "0")}_${shot.shotId}`;
       const fileName = isDamage
-        ? `D${String(position).padStart(2, "0")}_${DAMAGE_SHOT_ID}.jpg`
-        : `${String(shot!.position).padStart(2, "0")}_${shotId}.jpg`;
+        ? `${base}_damage_${position}.jpg`
+        : `${base}.jpg`;
       const storageKey = `inspections/${inspection.id}/${fileName}`;
       const thumbKey = `inspections/${inspection.id}/thumbs/${fileName}`;
 
@@ -242,6 +268,7 @@ export class InspectionCaptureService {
             manager.create(InspectionPhoto, {
               inspectionId: inspection.id,
               shotId,
+              parentShotId,
               position,
               storageKey,
               thumbKey,
@@ -282,9 +309,13 @@ export class InspectionCaptureService {
         inspection.status = InspectionStatus.inProgress;
       }
       await manager.save(inspection);
+      if (parentShotId) {
+        await this.saveAnswer(manager, inspection.id, parentShotId, true);
+      }
       if (storesFile) {
         await this.logEvent(manager, inspection.id, "photo_uploaded", {
           shotId,
+          ...(parentShotId ? { parentShotId } : {}),
           position,
           retake: existing !== null,
         });
@@ -295,6 +326,7 @@ export class InspectionCaptureService {
     return {
       shotId,
       position,
+      parentShotId,
       stored: result.storesFile,
       retakeCount: result.photo.retakeCount,
       sha256: result.photo.sha256,
@@ -302,14 +334,53 @@ export class InspectionCaptureService {
     };
   }
 
+  // ---------------------------------------------------------- damage answer
+
+  /**
+   * Records the driver's answer to "Is there any damage on the <shot>?" (D112). Safe to repeat. "No" is refused while that shot
+   * has close-ups: the photos are evidence and the page has no way to delete them, so the answer must stay "yes".
+   * @throws GoneException unknown, expired or revoked link. @throws ConflictException already submitted, or "no" with close-ups.
+   * @throws NotFoundException not a required shot.
+   */
+  async answerDamage(
+    token: string,
+    shotId: string,
+    hasDamage: boolean,
+  ): Promise<ShotAnswerDto> {
+    const shot = await this.dataSource
+      .getRepository(InspectionShot)
+      .findOneBy({ shotId });
+    if (!shot) throw new NotFoundException("Unknown shot.");
+    const found = await this.findByToken(this.dataSource.manager, token);
+    if (!found) throw new GoneException(EXPIRED_MESSAGE);
+    await this.dataSource.transaction(async (manager) => {
+      const inspection = await this.lockOpen(manager, found.id);
+      if (!hasDamage) {
+        const closeUps = await manager.countBy(InspectionPhoto, {
+          inspectionId: inspection.id,
+          shotId: DAMAGE_SHOT_ID,
+          parentShotId: shotId,
+        });
+        if (closeUps > 0) {
+          throw new ConflictException(
+            "This shot already has damage photos, so the answer stays yes.",
+          );
+        }
+      }
+      await this.saveAnswer(manager, inspection.id, shotId, hasDamage);
+    });
+    return { shotId, hasDamage };
+  }
+
   // ----------------------------------------------------------------- submit
 
   /**
-   * Closes the inspection: needs all required photos, the mileage and the fuel level, and the box checked. Sets `submitted`, which
-   * also ends the link. Submitting again an inspection that is already submitted returns the same answer (a retry after a lost
-   * response is not an error).
+   * Closes the inspection: needs, for every required shot, its photo and the damage answer, and for every "yes" at least one
+   * close-up (D112); and the box checked. The mileage and fuel are read from their photos, so no typed reading is needed. Sets
+   * `submitted`, which also ends the link. Submitting again an inspection that is already submitted returns the same answer (a
+   * retry after a lost response is not an error).
    * @throws GoneException unknown, expired or revoked link.
-   * @throws BadRequestException a required photo or a reading is missing.
+   * @throws BadRequestException a photo, an answer or a close-up is missing (`missing` lists the shot ids).
    */
   async submit(
     token: string,
@@ -327,30 +398,56 @@ export class InspectionCaptureService {
 
     const submitted = await this.dataSource.transaction(async (manager) => {
       const inspection = await this.lockOpen(manager, found.id);
-      const required = await manager.findBy(InspectionShot, { required: true });
-      const have = new Set(
-        (
-          await manager.find(InspectionPhoto, {
-            where: { inspectionId: inspection.id },
-            select: { shotId: true },
-          })
-        ).map((p) => p.shotId),
+      const required = (
+        await manager.findBy(InspectionShot, { required: true })
+      ).sort((a, b) => a.position - b.position);
+      const photos = await manager.find(InspectionPhoto, {
+        where: { inspectionId: inspection.id },
+        select: { id: true, shotId: true, parentShotId: true },
+      });
+      const shotsWithPhoto = new Set(
+        photos.filter((p) => p.parentShotId === null).map((p) => p.shotId),
       );
-      const missing = required
-        .sort((a, b) => a.position - b.position)
-        .filter((shot) => !have.has(shot.shotId))
+      const shotsWithCloseUp = new Set(
+        photos.map((p) => p.parentShotId).filter((id) => id !== null),
+      );
+      const answers = new Map(
+        (
+          await manager.findBy(InspectionShotAnswer, {
+            inspectionId: inspection.id,
+          })
+        ).map((a) => [a.shotId, a.hasDamage]),
+      );
+      const missingPhotos = required
+        .filter((shot) => !shotsWithPhoto.has(shot.shotId))
         .map((shot) => shot.shotId);
-      if (missing.length > 0) {
+      if (missingPhotos.length > 0) {
         throw new BadRequestException({
-          message: `Some required photos are missing (${missing.length}).`,
-          missing,
+          message: `Some required photos are missing (${missingPhotos.length}).`,
+          missing: missingPhotos,
         });
       }
-      if (inspection.odometerMiles === null) {
-        throw new BadRequestException("The mileage has not been entered.");
+      const unanswered = required
+        .filter((shot) => !answers.has(shot.shotId))
+        .map((shot) => shot.shotId);
+      if (unanswered.length > 0) {
+        throw new BadRequestException({
+          message: `Some damage questions are not answered (${unanswered.length}).`,
+          missing: unanswered,
+        });
       }
-      if (inspection.fuelLevel === null) {
-        throw new BadRequestException("The fuel level has not been chosen.");
+      const yesWithoutPhoto = required
+        .filter(
+          (shot) =>
+            answers.get(shot.shotId) === true &&
+            !shotsWithCloseUp.has(shot.shotId),
+        )
+        .map((shot) => shot.shotId);
+      if (yesWithoutPhoto.length > 0) {
+        throw new BadRequestException({
+          message: `Some shots with damage have no damage photo (${yesWithoutPhoto.length}).`,
+          missing: yesWithoutPhoto,
+        });
       }
       const now = this.now();
       inspection.status = InspectionStatus.submitted;
@@ -363,8 +460,9 @@ export class InspectionCaptureService {
       }
       inspection.deviceInfo = dto.deviceInfo ?? null;
       await manager.save(inspection);
+      // Every photo counts, close-ups included (B145: this used to count distinct shot ids, so all damage photos counted as one).
       await this.logEvent(manager, inspection.id, "submitted", {
-        photos: have.size,
+        photos: photos.length,
       });
       return inspection;
     });
@@ -463,17 +561,18 @@ export class InspectionCaptureService {
       vehicle: null,
       shots: [],
       photos: [],
+      answers: [],
       odometerMiles: null,
       fuelLevel: null,
       priorDamage: [],
-      maxDamagePhotos: MAX_DAMAGE_PHOTOS,
+      maxCloseUpsPerShot: MAX_CLOSE_UPS_PER_SHOT,
       expiresAt: null,
       submittedAt: null,
       supportPhone: this.config.get<string>("INSPECTION_SUPPORT_PHONE") || null,
     };
   }
 
-  /** The damage close-ups of the paired check-in (for a check-out), in the order they were taken. */
+  /** The damage photos of the paired check-in (for a check-out), by shot and number; old free-standing ones have no shot. */
   private async priorDamage(inspection: Inspection): Promise<PriorDamageDto[]> {
     if (!inspection.pairedInspectionId) return [];
     const photos = await this.dataSource.getRepository(InspectionPhoto).find({
@@ -481,20 +580,45 @@ export class InspectionCaptureService {
         inspectionId: inspection.pairedInspectionId,
         shotId: DAMAGE_SHOT_ID,
       },
-      order: { position: "ASC" },
+      order: { parentShotId: "ASC", position: "ASC" },
     });
     return Promise.all(
       photos.map(async (p) => ({
+        parentShotId: p.parentShotId,
         note: p.driverNote,
         thumbUrl: await this.presign(p.thumbKey),
       })),
     );
   }
 
+  /** Inserts or updates the answer for one shot (the primary key is the pair, so a repeat updates the same row). */
+  private async saveAnswer(
+    manager: EntityManager,
+    inspectionId: string,
+    shotId: string,
+    hasDamage: boolean,
+  ): Promise<void> {
+    const before = await manager.findOneBy(InspectionShotAnswer, {
+      inspectionId,
+      shotId,
+    });
+    if (before?.hasDamage === hasDamage) return;
+    await manager.upsert(
+      InspectionShotAnswer,
+      { inspectionId, shotId, hasDamage },
+      { conflictPaths: ["inspectionId", "shotId"] },
+    );
+    await this.logEvent(manager, inspectionId, "damage_answered", {
+      shotId,
+      hasDamage,
+    });
+  }
+
   private async photoDto(photo: InspectionPhoto): Promise<CapturePhotoDto> {
     return {
       shotId: photo.shotId,
       position: photo.position,
+      parentShotId: photo.parentShotId,
       note: photo.driverNote,
       thumbUrl: await this.presign(photo.thumbKey),
     };

@@ -24,12 +24,14 @@ import {
   CreateDamageItemDto,
   DamageItemDto,
   InspectionCompareDto,
+  InspectionPhotoDto,
 } from "./dto/inspection.dto.js";
 import { DamageItem, DamageItemStatus } from "./damage-item.entity.js";
 import { fuelChangeEighths, milesDriven } from "./inspection-compare.js";
 import { InspectionEvent } from "./inspection-event.entity.js";
 import type { InspectionEventType } from "./inspection-event.entity.js";
 import { DAMAGE_SHOT_ID, InspectionPhoto } from "./inspection-photo.entity.js";
+import { InspectionShotAnswer } from "./inspection-shot-answer.entity.js";
 import { InspectionShot } from "./inspection-shot.entity.js";
 import {
   Inspection,
@@ -52,6 +54,7 @@ interface DamageRow {
   inspectionId: string;
   photoId: string;
   shotId: string;
+  parentShotId: string | null;
   description: string;
   status: DamageItemStatus;
   ledgerEntryId: string | null;
@@ -83,8 +86,9 @@ export class InspectionDamageService {
   // ----------------------------------------------------------------- compare
 
   /**
-   * The check-out beside its check-in: the 19 shots in pairs, miles driven, fuel change, the pickup damage (read-only) and the
-   * damage items marked so far. When nothing can be compared, `available` is false and `reason` says why (so the page can show
+   * The check-out beside its check-in: the shots in pairs, each with both sides' damage answers and close-ups (D112), miles
+   * driven and fuel change (only when both were typed, before D112), old free-standing damage photos, and the damage items marked
+   * so far. When nothing can be compared, `available` is false and `reason` says why (so the page can show
    * the words instead of an error).
    * @throws NotFoundException unknown inspection.
    */
@@ -124,24 +128,44 @@ export class InspectionDamageService {
       return unavailable("The paired check-in is not submitted.");
     }
 
-    const [outPhotos, inPhotos, shots, items] = await Promise.all([
-      this.inspections.photosOf(checkOut),
-      this.inspections.photosOf(checkIn),
-      this.dataSource
-        .getRepository(InspectionShot)
-        .find({ order: { position: "ASC" } }),
-      this.itemsOf(this.dataSource.manager, { inspectionId: id }),
-    ]);
+    const answerRepo = this.dataSource.getRepository(InspectionShotAnswer);
+    const [outPhotos, inPhotos, shots, items, outAnswers, inAnswers] =
+      await Promise.all([
+        this.inspections.photosOf(checkOut),
+        this.inspections.photosOf(checkIn),
+        this.dataSource
+          .getRepository(InspectionShot)
+          .find({ order: { position: "ASC" } }),
+        this.itemsOf(this.dataSource.manager, { inspectionId: id }),
+        answerRepo.findBy({ inspectionId: checkOut.id }),
+        answerRepo.findBy({ inspectionId: checkIn.id }),
+      ]);
     const itemByPhoto = new Map(items.map((item) => [item.photoId, item]));
+    const answerOf = (answers: InspectionShotAnswer[], shotId: string) =>
+      answers.find((a) => a.shotId === shotId)?.hasDamage ?? null;
+    const isShot = (p: InspectionPhotoDto, shotId: string) =>
+      p.shotId === shotId && p.parentShotId === null;
     const pairs: ComparePairDto[] = shots.map((shot) => {
-      const out = outPhotos.find((p) => p.shotId === shot.shotId) ?? null;
+      const out = outPhotos.find((p) => isShot(p, shot.shotId)) ?? null;
       return {
         shotId: shot.shotId,
-        checkIn: inPhotos.find((p) => p.shotId === shot.shotId) ?? null,
+        checkIn: inPhotos.find((p) => isShot(p, shot.shotId)) ?? null,
         checkOut: out,
         damageItem: out ? (itemByPhoto.get(out.id) ?? null) : null,
+        checkInAnswer: answerOf(inAnswers, shot.shotId),
+        checkOutAnswer: answerOf(outAnswers, shot.shotId),
+        checkInCloseUps: inPhotos.filter((p) => p.parentShotId === shot.shotId),
+        checkOutCloseUps: outPhotos
+          .filter((p) => p.parentShotId === shot.shotId)
+          .map((photo) => ({
+            photo,
+            damageItem: itemByPhoto.get(photo.id) ?? null,
+          })),
       };
     });
+    // A free-standing damage photo: an inspection made before D112.
+    const isOldDamage = (p: InspectionPhotoDto) =>
+      p.shotId === DAMAGE_SHOT_ID && p.parentShotId === null;
     return {
       available: true,
       reason: null,
@@ -153,13 +177,11 @@ export class InspectionDamageService {
         checkOut.fuelLevel,
       ),
       pairs,
-      checkInDamage: inPhotos.filter((p) => p.shotId === DAMAGE_SHOT_ID),
-      checkOutDamage: outPhotos
-        .filter((p) => p.shotId === DAMAGE_SHOT_ID)
-        .map((photo) => ({
-          photo,
-          damageItem: itemByPhoto.get(photo.id) ?? null,
-        })),
+      checkInDamage: inPhotos.filter(isOldDamage),
+      checkOutDamage: outPhotos.filter(isOldDamage).map((photo) => ({
+        photo,
+        damageItem: itemByPhoto.get(photo.id) ?? null,
+      })),
     };
   }
 
@@ -419,6 +441,7 @@ export class InspectionDamageService {
   ): Promise<DamageItemDto[]> {
     const rows = (await manager.query(
       `SELECT d.id, d.inspection_id AS "inspectionId", d.photo_id AS "photoId", p.shot_id AS "shotId",
+              p.parent_shot_id AS "parentShotId",
               d.description, d.status, d.ledger_entry_id AS "ledgerEntryId",
               le.kind AS "entryKind", le.direction AS "entryDirection", le.entry_no AS "entryNo",
               le.amount_cents AS "amountCents", u.email AS "createdByEmail", d.created_at AS "createdAt"
@@ -435,6 +458,7 @@ export class InspectionDamageService {
       inspectionId: row.inspectionId,
       photoId: row.photoId,
       shotId: row.shotId,
+      parentShotId: row.parentShotId,
       source:
         row.shotId === DAMAGE_SHOT_ID ? "driver_reported" : "staff_flagged",
       description: row.description,

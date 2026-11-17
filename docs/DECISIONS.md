@@ -1329,3 +1329,23 @@ demo, and the data we hold about drivers' identity stays as small and as quiet a
 - **Downloads are fetches, not links:** the admin token is a request header, so the page fetches the bytes and saves them (`saveBlob`); a plain link would arrive without the token.
 - **Every export is audited** (`inspection.export_zip`, `inspection.export_pdf`, with counts); nothing is stored: each export is made fresh from the bucket.
 - **Sources:** MODULE3_SPEC.md section 12.
+
+### D112 — 2026-11-17 — Module 3 revisions: damage asked per shot, close-ups tied to their shot (Abulkalam)
+- **What:** after each required photo the driver answers "Is there any damage on <shot>?"; Yes asks for 1 to 5 close-ups of that shot (note optional). The end-of-walk "Any other damage?" section is gone. Requested after a real-phone test on staging.
+- **Close-ups stay `DAMAGE` rows** in `inspection_photos` with a new nullable `parent_shot_id`: no second photo table, so the viewer, signed links, damage items and the charge work unchanged on a close-up. Old free-standing damage photos (parent empty, positions 1 to 15) stay valid and are still shown in their own section.
+- **The answer has its own table** (`inspection_shot_answers`, key inspection + shot) because a "No" has no photo to hang on, and a photo upload may still be queued on the phone when the answer is sent. Answers are sent at once and the page waits for the server (an error is shown, never swallowed). Changing to No is refused (409) while close-ups of that shot exist; a close-up upload records Yes by itself.
+- **Database rules:** CHECK `inspection_photos_position_range` (close-up ⇒ `DAMAGE`, position 1 to 5); unique slot index on `(inspection_id, shot_id, COALESCE(parent_shot_id, ''), position)` so a retried upload cannot double a close-up. Submit requires an answer for every required shot and at least one close-up for every Yes.
+- **Sources:** MODULE3_SPEC.md section 12, "Revisions 2026-11-17".
+
+### D113 — 2026-11-17 — Module 3 revisions: mileage and fuel are photo only (Abulkalam)
+- The typed mileage and the fuel buttons are removed; staff read both from the odometer and fuel photos. The columns `odometer_miles` and `fuel_level` stay (old inspections keep their values and still show them); `inspections_submitted_shape` no longer requires them. Miles driven and fuel change on compare appear only when both inspections have typed values, otherwise "compare the two photos".
+- The fuel shot shows a sample gauge so the driver knows what to photograph: our own SVG drawing (`public/inspection/fuel-gauge-sample.svg`), labelled as an example, never a copied picture.
+- The previous-photo corner thumbnail on every shot screen is removed (asked by Abulkalam; it confused on a real phone). A retake is still done from the submit screen.
+
+### D114 — 2026-11-17 — Module 3 revisions: left and right side mirror shots (Abulkalam)
+- Two required shots, `EXT_LEFT_MIRROR` and `EXT_RIGHT_MIRROR`, placed after the front corner of their side, so the walk-around order stays a circle; 21 shots. The migration moves positions in two passes (+100, then the final numbers) because `position` is unique. The staff `SHOT_ORDER` is now an explicit list matching the database. Titles and instructions in our extra translation file (the client's file stays as shipped).
+- **Open inspections at deploy** (links already sent) will ask for the two mirrors and an answer per shot when reopened; their photos so far are kept.
+
+### D115 — 2026-11-17 — Module 3 revisions: links last at least 72 hours (Abulkalam)
+- `SettingsService.inspectionLinkHours()` returns the `inspection_link_hours` setting only when it is above 72, otherwise 72 (a floor, not a fixed value, so it can be set longer). The SMS says "Link expires in 72 hours" / "El enlace vence en 72 horas", the staff dialog "The link works for at least 72 hours". Links sent before the deploy keep their 24-hour expiry; Revoke and reissue gives a 72-hour one.
+- Also fixed (B145): the "Driver submitted (N photos)" log counts every photo, close-ups included.

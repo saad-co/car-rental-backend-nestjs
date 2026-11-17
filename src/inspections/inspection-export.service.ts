@@ -24,6 +24,8 @@ import {
   type ReportDamage,
   type ReportPhoto,
 } from "./inspection-report.js";
+import { photoFileStem, sortPhotos } from "./inspection-photo-order.js";
+import { InspectionShotAnswer } from "./inspection-shot-answer.entity.js";
 import { InspectionShot } from "./inspection-shot.entity.js";
 import {
   FuelLevel,
@@ -62,10 +64,10 @@ const STATUS_WORDS: Record<InspectionStatus, string> = {
   [InspectionStatus.revoked]: "Revoked",
 };
 
-/** One photo row with the shot's number and title (the order and words the driver saw). */
+/** One photo row with its file name (no extension) and title (the order and words the driver saw). */
 interface PhotoRow {
   photo: InspectionPhoto;
-  number: number;
+  stem: string;
   title: string;
 }
 
@@ -95,8 +97,8 @@ export class InspectionExportService {
   // --------------------------------------------------------------------- zip
 
   /**
-   * The ZIP of the inspection's original photos: `<reference>/NN_<SHOT_ID>.jpg` for the 19 shots and `damage_N.jpg` for the damage
-   * close-ups. A file the bucket cannot give is left out and named in `MISSING.txt` inside the ZIP (never silently).
+   * The ZIP of the inspection's original photos: `<reference>/NN_<SHOT_ID>.jpg` for each shot, `NN_<SHOT_ID>_damage_K.jpg` for
+   * its close-ups (D112), and `damage_N.jpg` for an old free-standing damage photo. A file the bucket cannot give is left out and named in `MISSING.txt` inside the ZIP (never silently).
    * @throws NotFoundException unknown inspection.
    * @throws ConflictException no photos yet.
    * @throws ServiceUnavailableException no file storage is set up.
@@ -109,11 +111,8 @@ export class InspectionExportService {
     }
     const entries: ZipEntry[] = [];
     const missing: string[] = [];
-    for (const { photo, number } of rows) {
-      const name =
-        photo.shotId === DAMAGE_SHOT_ID
-          ? `damage_${photo.position}.jpg`
-          : `${String(number).padStart(2, "0")}_${photo.shotId}.jpg`;
+    for (const { photo, stem } of rows) {
+      const name = `${stem}.jpg`;
       try {
         entries.push({
           name: `${inspection.reference}/${name}`,
@@ -150,7 +149,14 @@ export class InspectionExportService {
    */
   async report(id: string, adminId: string): Promise<ExportedFile> {
     const storage = this.requireStorage();
-    const { inspection, rows } = await this.load(id);
+    const { inspection, rows, requiredShots } = await this.load(id);
+    const answers = new Map(
+      (
+        await this.dataSource
+          .getRepository(InspectionShotAnswer)
+          .findBy({ inspectionId: id })
+      ).map((a) => [a.shotId, a.hasDamage]),
+    );
     const [driver, reviewer, paired, items, admin] = await Promise.all([
       this.dataSource
         .getRepository(Driver)
@@ -190,13 +196,32 @@ export class InspectionExportService {
         driverNote: photo.driverNote,
       };
     };
+    // The shots with their close-ups right after them (D112); old free-standing damage photos in their own section.
     const shots: ReportPhoto[] = [];
     const damagePhotos: ReportPhoto[] = [];
     for (const row of rows) {
-      (row.photo.shotId === DAMAGE_SHOT_ID ? damagePhotos : shots).push(
-        await reportPhoto(row),
+      const photo = row.photo;
+      if (photo.shotId === DAMAGE_SHOT_ID && !photo.parentShotId) {
+        damagePhotos.push(await reportPhoto(row));
+        continue;
+      }
+      const answer =
+        photo.shotId === DAMAGE_SHOT_ID ? undefined : answers.get(photo.shotId);
+      shots.push(
+        await reportPhoto({
+          ...row,
+          title:
+            answer === undefined
+              ? row.title
+              : `${row.title} - ${answer ? "damage: yes" : "no damage"}`,
+        }),
       );
     }
+    const shotCount = rows.filter(
+      (r) => r.photo.shotId !== DAMAGE_SHOT_ID,
+    ).length;
+    const closeUpCount = rows.filter((r) => r.photo.parentShotId).length;
+    const damagedShots = [...answers.values()].filter(Boolean).length;
 
     const data = await buildInspectionReport(
       {
@@ -216,11 +241,14 @@ export class InspectionExportService {
           .join(" - "),
         pairedReference: paired?.reference ?? null,
         submittedAt: inspection.submittedAt,
+        // Typed before D112; since then read from the photo.
         odometer:
           inspection.odometerMiles === null
-            ? "-"
+            ? "See the odometer photo"
             : `${inspection.odometerMiles.toLocaleString("en-US")} mi`,
-        fuel: inspection.fuelLevel ? FUEL_WORDS[inspection.fuelLevel] : "-",
+        fuel: inspection.fuelLevel
+          ? FUEL_WORDS[inspection.fuelLevel]
+          : "See the fuel photo",
         place:
           inspection.gpsLat !== null && inspection.gpsLng !== null
             ? `${inspection.gpsLat.toFixed(5)}, ${inspection.gpsLng.toFixed(5)}`
@@ -230,6 +258,13 @@ export class InspectionExportService {
         review: inspection.reviewedAt
           ? `Reviewed by ${reviewer ?? "an admin"}${inspection.reviewNotes ? `: ${inspection.reviewNotes}` : ""}`
           : "Not reviewed",
+        photosHeading: `Photos: ${shotCount} of ${requiredShots} shots, ${closeUpCount} damage close-up${closeUpCount === 1 ? "" : "s"}`,
+        damageSummary:
+          answers.size === 0
+            ? null
+            : damagedShots === 0
+              ? "The driver reported no damage on any shot."
+              : `The driver reported damage on ${damagedShots} shot${damagedShots === 1 ? "" : "s"}; the close-ups follow each shot.`,
         shots,
         damagePhotos,
         damageItems: items,
@@ -262,10 +297,14 @@ export class InspectionExportService {
     return this.storage;
   }
 
-  /** The inspection and its photos in viewing order: the 19 shots by their position, then the damage close-ups by number. */
+  /** The inspection, its photos in viewing order (`sortPhotos`), and how many shots are required. */
   private async load(
     id: string,
-  ): Promise<{ inspection: Inspection; rows: PhotoRow[] }> {
+  ): Promise<{
+    inspection: Inspection;
+    rows: PhotoRow[];
+    requiredShots: number;
+  }> {
     const inspection = await this.dataSource
       .getRepository(Inspection)
       .findOneBy({ id });
@@ -276,26 +315,23 @@ export class InspectionExportService {
         .findBy({ inspectionId: id }),
       this.dataSource.getRepository(InspectionShot).find(),
     ]);
-    const shotInfo = new Map(shots.map((s) => [s.shotId, s]));
-    const rows = photos
-      .map((photo): PhotoRow => {
-        const damage = photo.shotId === DAMAGE_SHOT_ID;
-        return {
-          photo,
-          number: damage
-            ? photo.position
-            : (shotInfo.get(photo.shotId)?.position ?? 0),
-          title: damage
-            ? `Damage photo ${photo.position}`
-            : (shotInfo.get(photo.shotId)?.title ?? photo.shotId),
-        };
-      })
-      .sort(
-        (a, b) =>
-          Number(a.photo.shotId === DAMAGE_SHOT_ID) -
-            Number(b.photo.shotId === DAMAGE_SHOT_ID) || a.number - b.number,
-      );
-    return { inspection, rows };
+    const titleOf = new Map(shots.map((s) => [s.shotId, s.title]));
+    const shotPosition = new Map(shots.map((s) => [s.shotId, s.position]));
+    const rows = sortPhotos(photos, shotPosition).map((photo): PhotoRow => ({
+      photo,
+      stem: photoFileStem(photo, shotPosition),
+      title:
+        photo.shotId !== DAMAGE_SHOT_ID
+          ? (titleOf.get(photo.shotId) ?? photo.shotId)
+          : photo.parentShotId
+            ? `${titleOf.get(photo.parentShotId) ?? photo.parentShotId} - damage close-up ${photo.position}`
+            : `Damage photo ${photo.position}`,
+    }));
+    return {
+      inspection,
+      rows,
+      requiredShots: shots.filter((s) => s.required).length,
+    };
   }
 
   /** The damage staff marked on a check-out, in words, with the ledger line when it was charged. */

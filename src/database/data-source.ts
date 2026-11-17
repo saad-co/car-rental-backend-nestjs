@@ -17,6 +17,7 @@ import { RecurringCharge } from "../recurring-charges/recurring-charge.entity.js
 import { DamageItem } from "../inspections/damage-item.entity.js";
 import { InspectionEvent } from "../inspections/inspection-event.entity.js";
 import { InspectionPhoto } from "../inspections/inspection-photo.entity.js";
+import { InspectionShotAnswer } from "../inspections/inspection-shot-answer.entity.js";
 import { InspectionShot } from "../inspections/inspection-shot.entity.js";
 import { Inspection } from "../inspections/inspection.entity.js";
 import { LedgerEntry } from "../ledger/ledger-entry.entity.js";
@@ -64,6 +65,7 @@ export default new DataSource({
     InspectionShot,
     InspectionPhoto,
     InspectionEvent,
+    InspectionShotAnswer,
     DamageItem,
   ],
   // `.ts` when run from the sources (tsx, local), `.js` when run compiled (production). Never

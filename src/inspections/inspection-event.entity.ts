@@ -20,6 +20,7 @@ export type InspectionEventType =
   | "link_issued"
   | "opened"
   | "photo_uploaded"
+  | "damage_answered"
   | "submitted"
   | "language_changed"
   | "revoked"

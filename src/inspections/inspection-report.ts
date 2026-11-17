@@ -32,7 +32,13 @@ export interface ReportData {
   device: string | null;
   attestedAt: Date | null;
   review: string;
+  /** The heading over the photos, e.g. "Photos: 21 of 21 shots, 2 damage close-ups". */
+  photosHeading: string;
+  /** What the driver answered about damage, in one line; null for an inspection made before the per-shot question (D112). */
+  damageSummary: string | null;
+  /** The shots in order, each followed by its damage close-ups. */
   shots: ReportPhoto[];
+  /** Free-standing damage photos of an inspection made before D112. */
   damagePhotos: ReportPhoto[];
   damageItems: ReportDamage[];
   generatedAt: Date;
@@ -355,22 +361,23 @@ export async function buildInspectionReport(
   }
 
   sheet.gap(12);
-  sheet.text(`The 19 photos (${data.shots.length} received)`, {
-    size: 13,
-    bold: true,
-  });
+  sheet.text(data.photosHeading, { size: 13, bold: true });
+  if (data.damageSummary) sheet.text(data.damageSummary, { color: GREY });
   sheet.gap(4);
   await drawPhotos(sheet, data.shots, onProblem);
 
-  sheet.gap(6);
-  sheet.text(
-    `Damage photos added by the driver (${data.damagePhotos.length})`,
-    { size: 13, bold: true },
-  );
-  sheet.gap(4);
-  if (data.damagePhotos.length === 0)
-    sheet.text("The driver reported no damage.", { color: GREY });
-  else await drawPhotos(sheet, data.damagePhotos, onProblem);
+  // Before D112 damage photos stood apart, at the end of the walk-around.
+  if (data.damageSummary === null || data.damagePhotos.length > 0) {
+    sheet.gap(6);
+    sheet.text(
+      `Damage photos added by the driver (${data.damagePhotos.length})`,
+      { size: 13, bold: true },
+    );
+    sheet.gap(4);
+    if (data.damagePhotos.length === 0)
+      sheet.text("The driver reported no damage.", { color: GREY });
+    else await drawPhotos(sheet, data.damagePhotos, onProblem);
+  }
 
   const pages = doc.getPages();
   pages.forEach((page, i) => {

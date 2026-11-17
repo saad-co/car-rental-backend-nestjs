@@ -50,6 +50,8 @@ import {
 } from "./inspection-status.js";
 import { hashToken, newToken } from "./inspection-token.js";
 import { DAMAGE_SHOT_ID, InspectionPhoto } from "./inspection-photo.entity.js";
+import { photoFileStem, sortPhotos } from "./inspection-photo-order.js";
+import { InspectionShotAnswer } from "./inspection-shot-answer.entity.js";
 import { InspectionShot } from "./inspection-shot.entity.js";
 import {
   Inspection,
@@ -130,6 +132,9 @@ export class InspectionsService {
       .findOneBy({ id });
     if (!inspection) throw new NotFoundException("Inspection not found.");
     const counts = await this.photoCounts([id]);
+    const answers = await this.dataSource
+      .getRepository(InspectionShotAnswer)
+      .findBy({ inspectionId: id });
     const events = (await this.dataSource.query(
       `SELECT e.id, e.type, u.email AS "actorEmail", e.meta, e.created_at AS "createdAt"
        FROM inspection_events e LEFT JOIN users u ON u.id = e.actor_id
@@ -150,12 +155,17 @@ export class InspectionsService {
       deviceInfo: inspection.deviceInfo,
       attestedAt: inspection.attestedAt,
       photos: await this.photosOf(inspection),
+      answers: answers.map((a) => ({
+        shotId: a.shotId,
+        hasDamage: a.hasDamage,
+      })),
     });
   }
 
   /**
-   * The photos of one inspection in viewing order (the 19 shots by their position, then the damage close-ups by number), each
-   * with its signed links. Storage keys never leave the server.
+   * The photos of one inspection in viewing order, each with its signed links: the shots by their position, each followed by its
+   * damage close-ups (D112), then any free-standing damage photos of an inspection made before D112. Storage keys never leave
+   * the server.
    */
   async photosOf(inspection: Inspection): Promise<InspectionPhotoDto[]> {
     const [photos, shots] = await Promise.all([
@@ -165,26 +175,14 @@ export class InspectionsService {
       this.dataSource.getRepository(InspectionShot).find(),
     ]);
     const shotPosition = new Map(shots.map((s) => [s.shotId, s.position]));
-    const ordered = [...photos].sort((a, b) => {
-      const aDamage = a.shotId === DAMAGE_SHOT_ID ? 1 : 0;
-      const bDamage = b.shotId === DAMAGE_SHOT_ID ? 1 : 0;
-      return (
-        aDamage - bDamage ||
-        (shotPosition.get(a.shotId) ?? 0) - (shotPosition.get(b.shotId) ?? 0) ||
-        a.position - b.position
-      );
-    });
+    const ordered = sortPhotos(photos, shotPosition);
     return Promise.all(
       ordered.map(async (photo) => {
-        const number = String(
-          photo.shotId === DAMAGE_SHOT_ID
-            ? photo.position
-            : (shotPosition.get(photo.shotId) ?? 0),
-        ).padStart(2, "0");
-        const downloadName = `${inspection.reference}_${number}_${photo.shotId}.jpg`;
+        const downloadName = `${inspection.reference}_${photoFileStem(photo, shotPosition)}.jpg`;
         return {
           id: photo.id,
           shotId: photo.shotId,
+          parentShotId: photo.parentShotId,
           position: photo.position,
           driverNote: photo.driverNote,
           capturedAt: photo.capturedAt,
@@ -284,7 +282,7 @@ export class InspectionsService {
       this.logger.log(
         `Admin ${adminId} made ${created.reference} (${created.type}) for driver ${driverId}.`,
       );
-      return this.dtoOf(created);
+      return await this.dtoOfWithCounts(created);
     } catch (error) {
       // Two admins at once: the other one's inspection won the race, so return it.
       if (isUniqueViolation(error, "inspections_one_open_per_type")) {
@@ -293,7 +291,7 @@ export class InspectionsService {
           driverId,
           dto.type,
         );
-        if (open) return this.dtoOf(open);
+        if (open) return this.dtoOfWithCounts(open);
       }
       throw error;
     }
@@ -724,11 +722,15 @@ export class InspectionsService {
     );
   }
 
-  /** Photos received per inspection: required shots and damage close-ups, in one query for any number of inspections. */
-  private async photoCounts(
-    inspectionIds: string[],
-  ): Promise<Map<string, { shots: number; damage: number }>> {
-    const counts = new Map<string, { shots: number; damage: number }>();
+  /**
+   * Photos received per inspection (required shots and damage close-ups, in one query for any number of inspections), and how
+   * many shots are required (21 since D112).
+   */
+  private async photoCounts(inspectionIds: string[]): Promise<PhotoCounts> {
+    const required = await this.dataSource
+      .getRepository(InspectionShot)
+      .countBy({ required: true });
+    const counts: PhotoCounts = { byInspection: new Map(), required };
     if (inspectionIds.length === 0) return counts;
     const rows = (await this.dataSource.query(
       `SELECT inspection_id AS "inspectionId",
@@ -737,12 +739,8 @@ export class InspectionsService {
        FROM inspection_photos WHERE inspection_id = ANY($1::uuid[]) GROUP BY inspection_id`,
       [inspectionIds, DAMAGE_SHOT_ID],
     )) as { inspectionId: string; shots: number; damage: number }[];
-    for (const row of rows) counts.set(row.inspectionId, row);
+    for (const row of rows) counts.byInspection.set(row.inspectionId, row);
     return counts;
-  }
-
-  private dtoOf(inspection: Inspection): InspectionDto {
-    return this.toDto(inspection, new Map(), this.now());
   }
 
   async dtoOfWithCounts(inspection: Inspection): Promise<InspectionDto> {
@@ -755,10 +753,10 @@ export class InspectionsService {
 
   private toDto(
     inspection: Inspection,
-    counts: Map<string, { shots: number; damage: number }>,
+    counts: PhotoCounts,
     now: Date,
   ): InspectionDto {
-    const count = counts.get(inspection.id);
+    const count = counts.byInspection.get(inspection.id);
     return {
       id: inspection.id,
       reference: inspection.reference,
@@ -780,10 +778,17 @@ export class InspectionsService {
       odometerMiles: inspection.odometerMiles,
       fuelLevel: inspection.fuelLevel,
       photoCount: count?.shots ?? 0,
+      requiredPhotoCount: counts.required,
       damagePhotoCount: count?.damage ?? 0,
       reviewedAt: inspection.reviewedAt,
       needsAttention: needsAttention(inspection, now),
       createdAt: inspection.createdAt,
     };
   }
+}
+
+/** What `photoCounts` answers. */
+interface PhotoCounts {
+  byInspection: Map<string, { shots: number; damage: number }>;
+  required: number;
 }

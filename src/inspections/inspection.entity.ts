@@ -83,12 +83,11 @@ export const SUBMITTED_INSPECTION_STATUSES = [
 })
 // The driver page lists a driver's inspections newest first.
 @Index("inspections_driver_created_idx", ["driverId", "createdAt"])
-// A submitted inspection has its time, the attestation and both readings: the page cannot submit without them (spec section 7),
-// and no code path or manual SQL can mark one submitted without them.
+// A submitted inspection has its time and the attestation; no code path or manual SQL can mark one submitted without them. The
+// typed mileage and fuel level were required too until D112; now staff read both from the photos, so they are optional.
 @Check(
   "inspections_submitted_shape",
-  `("status" IN ('submitted', 'reviewed', 'flagged')) = ("submitted_at" IS NOT NULL)
-   AND ("status" NOT IN ('submitted', 'reviewed', 'flagged') OR ("attested_at" IS NOT NULL AND "odometer_miles" IS NOT NULL AND "fuel_level" IS NOT NULL))`,
+  `("status" IN ('submitted', 'reviewed', 'flagged')) = ("submitted_at" IS NOT NULL) AND ("status" NOT IN ('submitted', 'reviewed', 'flagged') OR "attested_at" IS NOT NULL)`,
 )
 @Check("inspections_odometer_not_negative", `"odometer_miles" >= 0`)
 export class Inspection {
@@ -157,7 +156,7 @@ export class Inspection {
   @Column({ name: "token_hash", type: "varchar", length: 64 })
   tokenHash: string;
 
-  /** When the link stops working: 24 hours (a setting) after it was last sent or issued. A stored time; "expired" is worked out on read. */
+  /** When the link stops working: 72 hours or more (a setting, D112) after it was last sent or issued. A stored time; "expired" is worked out on read. */
   @Column({ name: "token_expires_at", type: "timestamptz" })
   tokenExpiresAt: Date;
 

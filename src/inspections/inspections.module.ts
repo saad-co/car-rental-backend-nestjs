@@ -13,6 +13,7 @@ import { InspectionCaptureController } from "./inspection-capture.controller.js"
 import { InspectionCaptureService } from "./inspection-capture.service.js";
 import { InspectionEvent } from "./inspection-event.entity.js";
 import { InspectionPhoto } from "./inspection-photo.entity.js";
+import { InspectionShotAnswer } from "./inspection-shot-answer.entity.js";
 import { InspectionShot } from "./inspection-shot.entity.js";
 import { Inspection } from "./inspection.entity.js";
 import { InspectionsController } from "./inspections.controller.js";
@@ -31,6 +32,7 @@ import { TokenRateLimitGuard } from "./token-rate-limit.guard.js";
       InspectionShot,
       InspectionPhoto,
       InspectionEvent,
+      InspectionShotAnswer,
       DamageItem,
     ]),
     SmsModule,
