@@ -2040,6 +2040,37 @@
         ]
       }
     },
+    "/drivers/{driverId}/licence/read": {
+      "post": {
+        "operationId": "ContractsController_readFullLicence",
+        "parameters": [
+          {
+            "name": "driverId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LicenceFullDetailsDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`POST /drivers/:driverId/licence/read`: reads everything printed on the front of the driver's licence with the AI,\nfor the driver page's \"Driver data\" card (D116). Nothing is saved; POST because every call asks the AI again. Same\nanswers as the contract read: `404` unknown driver, `409` no licence on file or none found in it, `502` the AI or\nthe bucket failed, `503` the AI is not set up.",
+        "tags": [
+          "Contracts"
+        ]
+      }
+    },
     "/drivers/{driverId}/contract": {
       "get": {
         "operationId": "ContractsController_getCurrent",
@@ -7604,6 +7635,90 @@
           "licenseNumber",
           "licenseState",
           "dateOfBirth"
+        ]
+      },
+      "LicenceFullDetailsDto": {
+        "type": "object",
+        "properties": {
+          "fullName": {
+            "type": "string",
+            "nullable": true,
+            "description": "The holder's name as printed."
+          },
+          "address": {
+            "type": "string",
+            "nullable": true,
+            "description": "One line: street, city, state and ZIP."
+          },
+          "licenseNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "licenseState": {
+            "type": "string",
+            "nullable": true,
+            "description": "Two-letter code of the issuing state."
+          },
+          "licenseClass": {
+            "type": "string",
+            "nullable": true
+          },
+          "dateOfBirth": {
+            "type": "string",
+            "nullable": true,
+            "description": "`YYYY-MM-DD`."
+          },
+          "issueDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "`YYYY-MM-DD`."
+          },
+          "expiryDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "`YYYY-MM-DD`; may be in the past (an expired licence)."
+          },
+          "sex": {
+            "type": "string",
+            "nullable": true
+          },
+          "height": {
+            "type": "string",
+            "nullable": true
+          },
+          "eyeColor": {
+            "type": "string",
+            "nullable": true
+          },
+          "restrictions": {
+            "type": "string",
+            "nullable": true
+          },
+          "endorsements": {
+            "type": "string",
+            "nullable": true
+          },
+          "documentNumber": {
+            "type": "string",
+            "nullable": true,
+            "description": "The document discriminator (DD)."
+          }
+        },
+        "required": [
+          "fullName",
+          "address",
+          "licenseNumber",
+          "licenseState",
+          "licenseClass",
+          "dateOfBirth",
+          "issueDate",
+          "expiryDate",
+          "sex",
+          "height",
+          "eyeColor",
+          "restrictions",
+          "endorsements",
+          "documentNumber"
         ]
       },
       "ContractStatus": {

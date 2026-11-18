@@ -21,6 +21,7 @@ import {
   ContractCompanyDto,
   FleetVehicleDto,
   LicenceDetailsDto,
+  LicenceFullDetailsDto,
   ContractCurrentDto,
   ContractDocumentsDto,
   ContractDto,
@@ -73,6 +74,20 @@ export class ContractsController {
     @Param("driverId", ParseUUIDPipe) driverId: string,
   ): Promise<LicenceDetailsDto> {
     return this.licenceReader.read(driverId);
+  }
+
+  /**
+   * `POST /drivers/:driverId/licence/read`: reads everything printed on the front of the driver's licence with the AI,
+   * for the driver page's "Driver data" card (D116). Nothing is saved; POST because every call asks the AI again. Same
+   * answers as the contract read: `404` unknown driver, `409` no licence on file or none found in it, `502` the AI or
+   * the bucket failed, `503` the AI is not set up.
+   */
+  @Post("drivers/:driverId/licence/read")
+  @HttpCode(HttpStatus.OK)
+  readFullLicence(
+    @Param("driverId", ParseUUIDPipe) driverId: string,
+  ): Promise<LicenceFullDetailsDto> {
+    return this.licenceReader.readFull(driverId);
   }
 
   /** `GET /drivers/:driverId/contract`: the open draft or else the contract sent last, or `{ contract: null }`. `404` unknown driver. */
