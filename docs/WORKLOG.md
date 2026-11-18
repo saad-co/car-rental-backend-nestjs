@@ -4,6 +4,15 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-11-19 — Driver data card and full licence read (D116, B147)
+- **Branch** `feature/driver-data` in both repos (worktrees `wt-driver-data-*`, slot 2: 5002 / 5175, database `car_rental_driver_data`). Not committed, not merged, not deployed.
+- **Backend:** `POST /drivers/:driverId/licence/read` (`ContractsController`), `LicenceReaderService.readFull()` with the shared `ask()`, `LICENCE_FULL_SYSTEM` / `LICENCE_FULL_SCHEMA` / `validateFullLicence` in `licence-extraction.ts`, `LicenceFullDetailsDto`; neutral error texts. No migration. New `licence-reader.service.spec.ts` (fake AI and storage).
+- **Frontend:** `DriverDataCard.tsx` (after Profile), `driverDataSections.ts` (+ test), `CopyButton.tsx` (from TailAdmin), `useReadFullLicence`, `useApplication(id, enabled)`; client regenerated.
+- **Verified:** backend unit 529, e2e 926, lint, build, `migration:run:prod`; frontend 96 tests, `tsc -b`, lint, build. Browser (local): a driver from an application and one added directly show the right values; a copy button and "Copy all" write the right text; "Read licence with AI" read all 14 fields of a made-up licence correctly (4.5 s); the no-licence message; a Gemini 503 shown as an error. The local Gonzo Car licence is a real person's: not sent to the AI. Local test driver "Dummy Tester" now holds the made-up licence.
+- **Not done:** review by Abulkalam; commit, rebase, PRs, deploy.
+
+---
+
 ### 2026-11-18 — Module 3 revisions (Abulkalam 2026-11-17, D112-D115)
 - **Merged and deployed to staging** (Abulkalam asked for commit, merge and deploy in chat): backend PR #62 (`7644820`), frontend PR #39 (`d2dd5d9`), by the "Deployment" steps; the pre-deploy ran `InspectionRevisions`; backend started clean, `railway logs` without errors; checked: frontend 200, `fuel-gauge-sample.svg` 200, `damage-answer` in the OpenAPI document, the mirror shots in the frontend bundle. Staging variables unchanged (demo mode on, SMS live). Links sent before this deploy keep their 24-hour expiry; open ones will ask for the mirrors and the answers.
 - **Branch** `feature/inspection-revisions` in both repos (worktrees `wt-inspection-revisions-*`, slot 1: 5001 / 5174, database `car_rental_inspection_revisions`).

@@ -1349,3 +1349,18 @@ demo, and the data we hold about drivers' identity stays as small and as quiet a
 ### D115 — 2026-11-17 — Module 3 revisions: links last at least 72 hours (Abulkalam)
 - `SettingsService.inspectionLinkHours()` returns the `inspection_link_hours` setting only when it is above 72, otherwise 72 (a floor, not a fixed value, so it can be set longer). The SMS says "Link expires in 72 hours" / "El enlace vence en 72 horas", the staff dialog "The link works for at least 72 hours". Links sent before the deploy keep their 24-hour expiry; Revoke and reissue gives a 72-hour one.
 - Also fixed (B145): the "Driver submitted (N photos)" log counts every photo, close-ups included.
+
+### D116 — 2026-11-19 — Driver data card: every value as copyable text, and the whole licence front read by AI (Abulkalam; B147)
+- **Request (Abulkalam, 2026-11-19):** on the driver page, all the driver's data (and their application's) as plain text the manager can copy one value at a time, plus everything on the driver's licence read with AI and shown the same way.
+- **Placement (Abulkalam chose it from three options):** a "Driver data" card in the left column of `/admin/drivers/:id`, after Profile. Sections: Contact, Profile, Payment aliases, Application answers (only for a driver from an application; same labels and values as the application page, `ANSWER_TABS` + `otherFields`), Contract and vehicle (only when there is a contract), Licence (read by AI). Each value has a copy button (TailAdmin's copy button from `api-keys/ApiKeyTable.tsx`, now `CopyButton`); "Copy all" copies every section as "Section" then "Label: value" lines. Empty values are left out, so every row shown can be copied. Built from what the page already loads: no new endpoint for the data.
+- **Licence read: on a button, not saved (Abulkalam chose it).** `POST /drivers/:driverId/licence/read` sends the licence front (the same file as D86) to the AI and returns 14 fields as printed: full name, address, number, state, class, date of birth, issue and expiry dates, sex, height, eyes, restrictions, endorsements, document number (DD). No table, no migration: the card keeps the answer until the page is left, and every press sends the licence to Google again (D86 privacy note: real licences only with the paid key or the client's consent). About 3-5 s per read.
+- **Separate from the contract read:** its own prompt, schema and checks (`LICENCE_FULL_*`, `validateFullLicence`), so the contract draft's four-field read (D86) is unchanged. Both share `LicenceReaderService.ask()` (driver check, file, picture, AI call, errors). Checks: malformed values become null; dates must be real days; the date of birth in the past; the issue date not after today; an expiry date in the past is kept (an expired licence is shown as printed). The error texts of both reads no longer say "type the details" (wrong on this card).
+- **Demo mode (D99):** money rows of the contract section are hidden when `VITE_HIDE_FINANCIALS=true`.
+- **Sources:**
+
+| Field or step | Source | Status |
+|---|---|---|
+| Copyable driver + application data, copy each value | Abulkalam, 2026-11-19 | confirmed |
+| Licence read with AI, shown as copyable text | Abulkalam, 2026-11-19 | confirmed |
+| A card on the page; a button, not saved; the 14 front fields | Proposed by us, chosen by Abulkalam 2026-11-19 | confirmed |
+| "Copy all"; the Contract and vehicle section; money hidden in demo mode | Our addition | to confirm at review |

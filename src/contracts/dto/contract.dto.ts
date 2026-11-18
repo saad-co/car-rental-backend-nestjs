@@ -218,6 +218,34 @@ export class LicenceDetailsDto {
   dateOfBirth: string | null;
 }
 
+/**
+ * Everything read from the front of the driver's licence by the AI, for the driver page's "Driver data" card (D116); null
+ * for what it could not read. Texts as printed; dates `YYYY-MM-DD`. Nothing is saved.
+ */
+export class LicenceFullDetailsDto {
+  /** The holder's name as printed. */
+  fullName: string | null;
+  /** One line: street, city, state and ZIP. */
+  address: string | null;
+  licenseNumber: string | null;
+  /** Two-letter code of the issuing state. */
+  licenseState: string | null;
+  licenseClass: string | null;
+  /** `YYYY-MM-DD`. */
+  dateOfBirth: string | null;
+  /** `YYYY-MM-DD`. */
+  issueDate: string | null;
+  /** `YYYY-MM-DD`; may be in the past (an expired licence). */
+  expiryDate: string | null;
+  sex: string | null;
+  height: string | null;
+  eyeColor: string | null;
+  restrictions: string | null;
+  endorsements: string | null;
+  /** The document discriminator (DD). */
+  documentNumber: string | null;
+}
+
 /** One of the business's vehicles (B120): picking it fills the contract's vehicle boxes. Empty text when unknown. */
 export class FleetVehicleDto {
   /** Year, make and model, e.g. "2015 Toyota Prius Hybrid". */
