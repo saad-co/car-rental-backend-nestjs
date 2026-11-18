@@ -83,6 +83,12 @@ export class DriversController {
         zip: { type: "string" },
         dateOfBirth: { type: "string", description: "YYYY-MM-DD" },
         hasInsurance: { type: "string", description: "true or false" },
+        preferredLanguage: {
+          type: "string",
+          enum: ["en", "es"],
+          description:
+            "Language of texts and the vehicle-photo page; en if left out",
+        },
         rentDueTime: {
           type: "string",
           description: "Time rent is due, Chicago time, HH:MM (24 hours)",

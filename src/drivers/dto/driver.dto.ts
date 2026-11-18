@@ -1,6 +1,10 @@
 import { AliasType } from "../../aliases/normalize-alias.js";
 import { AliasSource } from "../../aliases/payment-alias.entity.js";
-import { DriverLeftReason, DriverStatus } from "../driver.entity.js";
+import {
+  DriverLanguage,
+  DriverLeftReason,
+  DriverStatus,
+} from "../driver.entity.js";
 
 /** One payment alias of a driver: a name, handle or company they pay from, under a payment method. */
 export class DriverAliasDto {
@@ -86,6 +90,8 @@ export class DriverProfileDto {
   age: number | null;
   /** Current auto insurance; null = not known. */
   hasInsurance: boolean | null;
+  /** The language of this driver's texts and vehicle-photo page (D102); `en` until chosen. */
+  preferredLanguage: DriverLanguage;
 }
 
 /** One driver with the profile: the answer of `GET /drivers/:id` and of every change to a driver. */

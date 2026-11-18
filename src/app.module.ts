@@ -7,6 +7,7 @@ import { AppController } from "./app.controller.js";
 import { AppService } from "./app.service.js";
 import { validateEnv } from "./config/env.validation.js";
 import { buildBaseOptions } from "./database/typeorm-options.js";
+import { InspectionsModule } from "./inspections/inspections.module.js";
 import { DriversModule } from "./drivers/drivers.module.js";
 import { AuditModule } from "./audit/audit.module.js";
 import { RemindersModule } from "./reminders/reminders.module.js";
@@ -50,6 +51,7 @@ import { UsersModule } from "./users/users.module.js";
     RecurringChargesModule,
     MessageTemplatesModule,
     DriversModule,
+    InspectionsModule,
     EmailIntakeModule,
     PaymentsModule,
     AliasesModule,

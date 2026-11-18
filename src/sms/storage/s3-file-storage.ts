@@ -72,10 +72,22 @@ export class S3FileStorage implements FileStorage {
     return Buffer.from(await result.Body.transformToByteArray());
   }
 
-  presignGet(key: string, expiresInSeconds: number): Promise<string> {
+  presignGet(
+    key: string,
+    expiresInSeconds: number,
+    options?: { downloadName?: string },
+  ): Promise<string> {
     return getSignedUrl(
       this.client,
-      new GetObjectCommand({ Bucket: this.options.bucket, Key: key }),
+      new GetObjectCommand({
+        Bucket: this.options.bucket,
+        Key: key,
+        // Makes the browser save the file instead of showing it. Quotes and line breaks are removed so a name can never break
+        // out of the header value.
+        ResponseContentDisposition: options?.downloadName
+          ? `attachment; filename="${options.downloadName.replace(/["\\\r\n]/g, "_")}"`
+          : undefined,
+      }),
       { expiresIn: expiresInSeconds },
     );
   }

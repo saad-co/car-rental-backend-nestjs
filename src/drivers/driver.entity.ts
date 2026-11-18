@@ -33,6 +33,15 @@ export enum DriverLeftReason {
   cooperativeReturnedCar = "cooperative_returned_car",
 }
 
+/**
+ * The language a driver reads texts and the vehicle-photo page in (Module 3, D102). English unless set: the capture page opens
+ * in the phone's language and saves the driver's choice here, and the link text goes out in this language.
+ */
+export enum DriverLanguage {
+  en = "en",
+  es = "es",
+}
+
 /** Largest amount a 4-byte `integer` column holds: the only limit on the deposit amount (D82). */
 export const MAX_DEPOSIT_CENTS = 2_147_483_647;
 
@@ -130,6 +139,16 @@ export class Driver {
   /** Current auto insurance: yes / no; null = not asked or not known. */
   @Column({ name: "has_insurance", type: "boolean", nullable: true })
   hasInsurance: boolean | null;
+
+  /** The language of the texts and the vehicle-photo page for this driver (D102). Never empty: English until chosen. */
+  @Column({
+    name: "preferred_language",
+    type: "enum",
+    enum: DriverLanguage,
+    enumName: "driver_language",
+    default: DriverLanguage.en,
+  })
+  preferredLanguage: DriverLanguage;
 
   /** New drivers start `onboarding`; they become `active` when the last onboarding step is ticked (D56). */
   @Column({

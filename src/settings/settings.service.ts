@@ -6,6 +6,9 @@ import { AppSetting } from "./app-setting.entity.js";
 const REMINDERS_ENABLED = "reminders_enabled";
 const REMINDERS_ENABLED_AT = "reminders_enabled_at";
 const PAYMENT_LINK = "payment_link";
+const INSPECTION_LINK_HOURS = "inspection_link_hours";
+/** The shortest a vehicle-photo link may work (Abulkalam, 2026-11-17, D112). */
+export const MIN_INSPECTION_LINK_HOURS = 72;
 
 /** The payment-reminder settings (Fleet revisions section 6). */
 export interface ReminderSettings {
@@ -53,6 +56,18 @@ export class SettingsService {
     }
     await this.put(PAYMENT_LINK, input.paymentLink ?? "", adminId);
     return this.reminders();
+  }
+
+  /**
+   * How many hours a vehicle-photo link works after it is sent or issued (Module 3, D102). 72 hours, the minimum Abulkalam set on
+   * 2026-11-17 (D112; it was 24); the `inspection_link_hours` row can make it longer, never shorter. There is no screen for it.
+   */
+  async inspectionLinkHours(): Promise<number> {
+    const row = await this.settings.findOneBy({ key: INSPECTION_LINK_HOURS });
+    const hours = Number(row?.value);
+    return Number.isInteger(hours) && hours > MIN_INSPECTION_LINK_HOURS
+      ? hours
+      : MIN_INSPECTION_LINK_HOURS;
   }
 
   private async put(key: string, value: string, adminId: string) {
