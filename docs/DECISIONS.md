@@ -1232,3 +1232,14 @@ demo, and the data we hold about drivers' identity stays as small and as quiet a
 | Signed contract not edited; a change takes over from a date | D74 (the signed PDF cannot change) and the existing newer-contract hand-over (D83) | our suggestion, agreed by Abulkalam |
 | Never starts before today or on a day whose rent is posted | Ours: no back-charge (D100) and no silently skipped rent (ledger key unique) | our suggestion |
 | Replace what has not started; Remove a pending change; the change history | Ours, approved with the plan | our addition |
+
+### D102 — 2026-11-16 — Module 3 (vehicle check-in / check-out photos): random token, one link per inspection, vehicle copied from the contract, manual sending, two chats (Abulkalam; see MODULE3_SPEC.md)
+- **Why:** the client's spec of 2026-11-10 asks for a texted link that opens a guided photo capture, with staff review and compare. It was written for the client's own stack, so some choices differ from it on purpose.
+- **Random token, not a JWT:** 32+ random characters, only the SHA-256 hash stored. The spec needs a link that can be revoked, reissued and closed on submit; a stateless JWT can do none of that, and its payload is readable (an email or driver id in it would leak).
+- **One capture page, one link per inspection** (not one link for check-in and check-out): one open inspection per type per driver + vehicle + contract, a link closes on submit, a check-out is paired to its check-in.
+- **Vehicle:** model, VIN and plate are copied from the driver's contract onto the inspection when the link is made; a driver with no contract gets the vehicle typed by the admin (our suggestion). No vehicle table (F22 stays open); vehicle-level history is not built.
+- **Manual sending only:** the admin sends the link through the Quo chat or copies it. Automatic triggers, reminder and confirmation texts, email, Task Board, dispatch and manager roles, spot checks, deposit return and Phase 2 AI are not built (B139).
+- **Language:** `drivers.preferred_language` (`en` / `es`, default `en`); the capture page uses the client's translation file as shipped.
+- **Storage:** our S3-compatible bucket (D50, D54); Cloudflare R2 is a configuration change. Keys use ids, not driver names (our suggestion).
+- **Work split:** two chats, (1) link and capture page, (2) staff review and compare (MODULE3_SPEC.md section 10).
+- **Sources:** MODULE3_SPEC.md section 12.
