@@ -5,11 +5,12 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 ---
 
 ### 2026-11-19 — Driver data card and full licence read (D116, B147)
+- **Merged and deployed to staging 2026-11-19** (Abulkalam asked in chat): backend PR #64 (`05c3ff2`), frontend PR #40 (`7320478`), by the "Deployment" steps. No migration (`No migrations are pending`); `POST /drivers/:driverId/licence/read` mapped, answers 401 without login; frontend and `/docs` 200; no errors in the logs. The licence read was not tried on staging: the Gemini key there must not get real licences until it is paid or the client agrees (D86).
 - **Branch** `feature/driver-data` in both repos (worktrees `wt-driver-data-*`, slot 2: 5002 / 5175, database `car_rental_driver_data`). Not committed, not merged, not deployed.
 - **Backend:** `POST /drivers/:driverId/licence/read` (`ContractsController`), `LicenceReaderService.readFull()` with the shared `ask()`, `LICENCE_FULL_SYSTEM` / `LICENCE_FULL_SCHEMA` / `validateFullLicence` in `licence-extraction.ts`, `LicenceFullDetailsDto`; neutral error texts. No migration. New `licence-reader.service.spec.ts` (fake AI and storage).
 - **Frontend:** `DriverDataCard.tsx` (after Profile), `driverDataSections.ts` (+ test), `CopyButton.tsx` (from TailAdmin), `useReadFullLicence`, `useApplication(id, enabled)`; client regenerated.
 - **Verified:** backend unit 529, e2e 926, lint, build, `migration:run:prod`; frontend 96 tests, `tsc -b`, lint, build. Browser (local): a driver from an application and one added directly show the right values; a copy button and "Copy all" write the right text; "Read licence with AI" read all 14 fields of a made-up licence correctly (4.5 s); the no-licence message; a Gemini 503 shown as an error. The local Gonzo Car licence is a real person's: not sent to the AI. Local test driver "Dummy Tester" now holds the made-up licence.
-- **Not done:** review by Abulkalam; commit, rebase, PRs, deploy.
+- **Not done:** a try on staging with a made-up licence; clean-up of the `wt-driver-data-*` worktrees and databases (when Abulkalam says).
 
 ---
 
