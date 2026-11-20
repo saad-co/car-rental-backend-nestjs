@@ -4,6 +4,15 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-11-20 — Edit a driver's email and phone (D117, B148)
+- **Built, not committed, not merged, not deployed.** Branch `feature/edit-contact` in both repos (worktrees `wt-edit-contact-*`, slot 3: 5003 / 5176, databases `car_rental_edit_contact` and `_test`). Started from the client's answers for B124 (Jhonny Duque's phone, Graham Baker's email), which had no way into the system.
+- **Backend:** `PATCH /drivers/:id/contact` (`DriversController`), `DriversService.updateContact`, `UpdateDriverContactDto`; audit line `driver.contact_edit` with old and new values; a driver with a login cannot change the email. No migration. Tests added to `test/driver-create.e2e-spec.ts` (6). `openapi.json` re-exported.
+- **Frontend:** `DriverContactCard.tsx` (Edit button and dialog) replaces the read-only Contact card in `DriverDetail.tsx`; `contactChanges.ts` (+ test) sends only changed fields; `useUpdateDriverContact`; client regenerated.
+- **Verified:** backend unit 529, e2e 932, lint, build; frontend 101 tests, lint, build. **Browser (local, slot 3, made-up drivers Zed Contacttest and Yan Sharedphone):** the Contact card shows Edit; the dialog starts from the saved values; an email another driver has is refused with "A driver with this email already exists." and nothing is saved; a new email (typed with capitals) and phone (`312 555 0177`) save, the card shows `zed.new@example.com` and `(312) 555-0177`, the database holds the lower-cased email and `+13125550177`, and `audit_logs` has one `driver.contact_edit` line with the old and new values and the admin's email.
+- **Not done:** the real values (Jhonny +17088559218, Graham grahambaker36@gmail.com) are NOT set on staging; Abulkalam updates all the driver data at once after the deploy. Clean-up of `wt-edit-contact-*` and its databases when Abulkalam says.
+
+---
+
 ### 2026-11-19 — Driver data card and full licence read (D116, B147)
 - **Merged and deployed to staging 2026-11-19** (Abulkalam asked in chat): backend PR #64 (`05c3ff2`), frontend PR #40 (`7320478`), by the "Deployment" steps. No migration (`No migrations are pending`); `POST /drivers/:driverId/licence/read` mapped, answers 401 without login; frontend and `/docs` 200; no errors in the logs. The licence read was not tried on staging: the Gemini key there must not get real licences until it is paid or the client agrees (D86).
 - **Branch** `feature/driver-data` in both repos (worktrees `wt-driver-data-*`, slot 2: 5002 / 5175, database `car_rental_driver_data`). Not committed, not merged, not deployed.

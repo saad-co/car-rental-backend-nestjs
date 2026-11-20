@@ -42,6 +42,8 @@ import { DriverDetailDto, DriverDto, DriverListDto } from "./dto/driver.dto.js";
 import { ListDriversQueryDto } from "./dto/list-drivers-query.dto.js";
 import type { UpdateDriverRentSettingsDto } from "./dto/rent-settings.dto.js";
 import { OnboardingStep } from "./dto/set-onboarding-step.dto.js";
+import type { UpdateDriverContactDto } from "./dto/update-contact.dto.js";
+import { recordAudit } from "../audit/record-audit.js";
 import { toUsE164 } from "./us-phone.js";
 
 /** The files an admin attaches while adding a driver directly (D85), by slot; both are optional. */
@@ -319,7 +321,7 @@ export class DriversService {
 
   /**
    * Changes the profile fields of a driver (D85). A field left out stays as it is; one sent empty is cleared. Names, email
-   * and phone are not changed here (they tie the driver to payments, the chat and the contract).
+   * and phone are not changed here (email and phone have their own `updateContact`, D117).
    * @throws NotFoundException unknown driver.
    * @throws BadRequestException a date of birth in the future.
    */
@@ -346,6 +348,82 @@ export class DriversService {
     });
     // Ids only: the profile holds a date of birth and an address.
     this.logger.log(`Admin ${adminId} edited the profile of driver ${id}.`);
+    return this.findOne(id);
+  }
+
+  /**
+   * Changes the driver's email and phone (B148, D117). A field left out, or sent with the value the driver already has, stays.
+   * The email must be free (one driver per email); the phone may be shared (B117) and must be a US number. Nothing else
+   * moves: past texts stay under the old number, signed contracts keep what they were sent with, and the application keeps
+   * its own copy. The audit line `driver.contact_edit` holds the old and new values (personal data, so they go in the audit
+   * table and not in the log), written in the same transaction as the change.
+   * @throws NotFoundException unknown driver.
+   * @throws BadRequestException the phone is not a US number.
+   * @throws ConflictException another driver has the email, or this driver has a login (its login email would no longer match).
+   */
+  async updateContact(
+    id: string,
+    dto: UpdateDriverContactDto,
+    adminId: string,
+  ): Promise<DriverDetailDto> {
+    let phone: string | undefined;
+    if (dto.phone !== undefined) {
+      const parsed = toUsE164(dto.phone);
+      if (!parsed) {
+        throw new BadRequestException(
+          `Phone "${dto.phone}" is not a valid US number.`,
+        );
+      }
+      phone = parsed;
+    }
+    try {
+      await this.drivers.manager.transaction(async (manager) => {
+        const driver = await this.lockDriver(manager, id);
+        const before: Record<string, string> = {};
+        const after: Record<string, string> = {};
+        if (dto.email !== undefined && dto.email !== driver.email) {
+          if (driver.userId !== null) {
+            throw new ConflictException(
+              "This driver has a login, so the email cannot be changed here.",
+            );
+          }
+          if (await manager.exists(Driver, { where: { email: dto.email } })) {
+            throw new ConflictException(
+              "A driver with this email already exists.",
+            );
+          }
+          before.email = driver.email;
+          after.email = dto.email;
+          driver.email = dto.email;
+        }
+        if (phone !== undefined && phone !== driver.phone) {
+          before.phone = driver.phone;
+          after.phone = phone;
+          driver.phone = phone;
+        }
+        if (Object.keys(after).length === 0) return; // nothing differs: nothing to save or log
+        await manager.save(driver);
+        await recordAudit(manager, [
+          {
+            actorId: adminId,
+            action: "driver.contact_edit",
+            entityType: "driver",
+            entityId: id,
+            before,
+            after,
+          },
+        ]);
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        // Someone gave another driver this email between our check and the save.
+        throw new ConflictException("A driver with this email already exists.");
+      }
+      throw error;
+    }
+    this.logger.log(
+      `Admin ${adminId} edited the contact details of driver ${id}.`,
+    );
     return this.findOne(id);
   }
 

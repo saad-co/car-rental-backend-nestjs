@@ -22,6 +22,7 @@ import { AddContractDocumentKind1794086000000 } from "../src/database/migrations
 import { CreateDriverDto } from "../src/drivers/dto/create-driver.dto.js";
 import { UpdateDriverProfileDto } from "../src/drivers/dto/driver-profile.dto.js";
 import { ListDriversQueryDto } from "../src/drivers/dto/list-drivers-query.dto.js";
+import { UpdateDriverContactDto } from "../src/drivers/dto/update-contact.dto.js";
 import { Payment } from "../src/payments/payment.entity.js";
 import type { FileStorage } from "../src/sms/storage/file-storage.js";
 import { PasswordService } from "../src/users/password.service.js";
@@ -524,6 +525,132 @@ describe("an admin adds a driver directly (D85, test database)", () => {
       await expect(
         edit("00000000-0000-0000-0000-000000000000", { city: "x" }),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe("editing the contact details (B148, D117)", () => {
+    const editContact = (id: string, body: Record<string, unknown>) =>
+      drivers.updateContact(
+        id,
+        plainToInstance(UpdateDriverContactDto, body),
+        adminId,
+      );
+    const problems = (body: Record<string, unknown>) =>
+      validateSync(plainToInstance(UpdateDriverContactDto, body), {
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      }).map((e) => e.property);
+    const auditLines = () =>
+      db.query(
+        `SELECT actor_id, action, entity_type, entity_id, before, after FROM audit_logs ORDER BY created_at`,
+      ) as Promise<
+        {
+          actor_id: string;
+          action: string;
+          entity_type: string;
+          entity_id: string;
+          before: Record<string, string>;
+          after: Record<string, string>;
+        }[]
+      >;
+
+    it("changes the email and the phone together and writes one audit line with the old and new values", async () => {
+      const driver = await create();
+
+      const changed = await editContact(driver.id, {
+        email: " Graham.Baker36@Gmail.com ",
+        phone: "(708) 855-9218",
+      });
+
+      expect(changed.email).toBe("graham.baker36@gmail.com");
+      expect(changed.phone).toBe("+17088559218");
+      expect(await auditLines()).toEqual([
+        {
+          actor_id: adminId,
+          action: "driver.contact_edit",
+          entity_type: "driver",
+          entity_id: driver.id,
+          before: { email: "pat.driver@test.dev", phone: "+13057210909" },
+          after: { email: "graham.baker36@gmail.com", phone: "+17088559218" },
+        },
+      ]);
+    });
+
+    it("keeps a field left out, and the audit line holds only what changed", async () => {
+      const driver = await create();
+
+      const changed = await editContact(driver.id, { phone: "708-855-9218" });
+
+      expect(changed.email).toBe("pat.driver@test.dev");
+      expect(changed.phone).toBe("+17088559218");
+      const [line] = await auditLines();
+      expect(line.before).toEqual({ phone: "+13057210909" });
+      expect(line.after).toEqual({ phone: "+17088559218" });
+    });
+
+    it("saves and logs nothing when the values are the ones the driver has", async () => {
+      const driver = await create();
+
+      await editContact(driver.id, {
+        email: "PAT.driver@test.dev",
+        phone: "(305) 721-0909",
+      });
+
+      expect(await auditLines()).toEqual([]);
+    });
+
+    it("refuses an email another driver has, but allows a phone another driver has (B117)", async () => {
+      const first = await create();
+      const second = await create({
+        email: "second@test.dev",
+        phone: "(312) 555-0102",
+      });
+
+      await expect(
+        editContact(second.id, { email: first.email }),
+      ).rejects.toThrow(ConflictException);
+      const shared = await editContact(second.id, { phone: first.phone });
+      expect(shared.phone).toBe(first.phone);
+      expect((await auditLines()).map((l) => l.entity_id)).toEqual([second.id]);
+    });
+
+    it("refuses an email change for a driver who has a login, and an unknown driver", async () => {
+      const driver = await create();
+      const [{ id: userId }] = (await db.query(
+        `INSERT INTO users (email, password_hash, role) VALUES ('pat.driver@test.dev', 'x', 'driver') RETURNING id`,
+      )) as [{ id: string }];
+      await db.query(`UPDATE drivers SET user_id = $1 WHERE id = $2`, [
+        userId,
+        driver.id,
+      ]);
+
+      await expect(
+        editContact(driver.id, { email: "new@test.dev" }),
+      ).rejects.toThrow(ConflictException);
+      // the phone has no login to disagree with
+      expect(
+        (await editContact(driver.id, { phone: "708-855-9218" })).phone,
+      ).toBe("+17088559218");
+      await expect(
+        editContact("00000000-0000-0000-0000-000000000000", {
+          phone: "708-855-9218",
+        }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it("refuses a phone that is not a US number, and an empty or invalid value in the body", async () => {
+      const driver = await create();
+
+      await expect(editContact(driver.id, { phone: "12345" })).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(problems({ email: "not-an-email" })).toEqual(["email"]);
+      expect(problems({ email: "" })).toEqual(["email"]);
+      expect(problems({ phone: "" })).toEqual(["phone"]);
+      expect(problems({ phone: null })).toEqual(["phone"]);
+      expect(problems({})).toEqual([]);
+      expect(problems({ firstName: "Nope" })).toEqual(["firstName"]);
+      expect(await auditLines()).toEqual([]);
     });
   });
 

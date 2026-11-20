@@ -1364,3 +1364,18 @@ demo, and the data we hold about drivers' identity stays as small and as quiet a
 | Licence read with AI, shown as copyable text | Abulkalam, 2026-11-19 | confirmed |
 | A card on the page; a button, not saved; the 14 front fields | Proposed by us, chosen by Abulkalam 2026-11-19 | confirmed |
 | "Copy all"; the Contract and vehicle section; money hidden in demo mode | Our addition | to confirm at review |
+
+### D117 — 2026-11-20 — A driver's email and phone can be edited on the driver page (Abulkalam; B148, B110 item 2)
+- **Why:** the client's answers for B124 gave a real phone for Jhonny Duque and a real email for Graham Baker, and there was no way to put them in except the database. The Contact card is now editable. This reverses the rule of D85 / B110 ("name, email and phone are not editable"), for email and phone only; **names stay not editable** (not asked for).
+- **`PATCH /drivers/:id/contact`** (`updateContact`): body `email` and `phone`, both optional (a field left out stays); neither can be cleared (a `400`). The email is trimmed, lower-cased and must be valid; the phone must be a US number (`toUsE164`, same as Add driver). The change is sent in one transaction with the driver row locked.
+- **Email must be free** (`409` when another driver has it); the unique index stays the safety net. **A phone may be shared** by several drivers (B117), so there is no phone check. **A driver with a login (`user_id`) cannot change the email** (`409`): the login email would no longer match; no driver has a login today (the portal is paused, B99), so this only guards the future.
+- **Audit:** one line `driver.contact_edit` in `audit_logs` (D95) with the old and new values of the fields that changed, in the same transaction. The values are personal data, so they go in the audit table and not in the application log (which only says that an admin edited the contact details of the driver id). Sending the values the driver already has saves and logs nothing.
+- **What does NOT move:** texts already sent or received stay under the old number (the chat is keyed by phone, D50), so after a phone change the old messages stay on the old number and new ones start a new thread; a contract already sent or signed keeps the email and phone it was sent with; the original application keeps its own copy; payment aliases (`email`, `phone` types) are not touched. The dialog says so.
+- **Frontend:** an Edit button on the Contact card (`DriverContactCard`); only the fields that really changed are sent (`contactChanges`), so an unchanged email is never sent back (it would block a phone-only edit for a driver with a login).
+- **Sources:**
+
+| Field or step | Source | Status |
+|---|---|---|
+| Edit email and phone on the driver page | Abulkalam, 2026-11-20 (asked "there should be an option to edit contact details directly") | confirmed |
+| Audit line with old and new values | Our addition, same rule as the ledger edit (D94) | to confirm at review |
+| Refuse an email change for a driver with a login; texts, contracts and applications keep their old values | Our addition (keeps data consistent) | to confirm at review |

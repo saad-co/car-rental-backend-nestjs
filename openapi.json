@@ -2590,6 +2590,47 @@
         ]
       }
     },
+    "/drivers/{id}/contact": {
+      "patch": {
+        "operationId": "DriversController_updateContact",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateDriverContactDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverDetailDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`PATCH /drivers/:id/contact`: changes the driver's email and phone (B148, D117). A field left out stays. Returns the\nupdated driver. `400` for a bad email or a phone that is not a US number, `404` if unknown, `409` when another driver\nalready has the email or the driver has a login (its email would no longer match).",
+        "tags": [
+          "Drivers"
+        ]
+      }
+    },
     "/drivers/{id}/rent-settings": {
       "patch": {
         "operationId": "DriversController_updateRentSettings",
@@ -8666,6 +8707,22 @@
               "en",
               "es"
             ]
+          }
+        }
+      },
+      "UpdateDriverContactDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "Stored lower-case.",
+            "maxLength": 254,
+            "format": "email"
+          },
+          "phone": {
+            "type": "string",
+            "description": "A US number in any common writing; stored as `+1` and 10 digits.",
+            "maxLength": 30
           }
         }
       },
