@@ -32,6 +32,7 @@ import {
 import { ListDriversQueryDto } from "./dto/list-drivers-query.dto.js";
 import { UpdateDriverRentSettingsDto } from "./dto/rent-settings.dto.js";
 import { SetOnboardingStepDto } from "./dto/set-onboarding-step.dto.js";
+import { UpdateDriverContactDto } from "./dto/update-contact.dto.js";
 
 /** Admin driver routes under `/drivers`. All need a logged-in admin (global JwtAuthGuard). */
 @Controller("drivers")
@@ -135,6 +136,20 @@ export class DriversController {
     @CurrentUser() admin: AuthenticatedUser,
   ): Promise<DriverDetailDto> {
     return this.drivers.updateProfile(id, body, admin.id);
+  }
+
+  /**
+   * `PATCH /drivers/:id/contact`: changes the driver's email and phone (B148, D117). A field left out stays. Returns the
+   * updated driver. `400` for a bad email or a phone that is not a US number, `404` if unknown, `409` when another driver
+   * already has the email or the driver has a login (its email would no longer match).
+   */
+  @Patch(":id/contact")
+  updateContact(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() body: UpdateDriverContactDto,
+    @CurrentUser() admin: AuthenticatedUser,
+  ): Promise<DriverDetailDto> {
+    return this.drivers.updateContact(id, body, admin.id);
   }
 
   /**
