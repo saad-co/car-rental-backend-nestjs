@@ -1379,3 +1379,16 @@ demo, and the data we hold about drivers' identity stays as small and as quiet a
 | Edit email and phone on the driver page | Abulkalam, 2026-11-20 (asked "there should be an option to edit contact details directly") | confirmed |
 | Audit line with old and new values | Our addition, same rule as the ledger edit (D94) | to confirm at review |
 | Refuse an email change for a driver with a login; texts, contracts and applications keep their old values | Our addition (keeps data consistent) | to confirm at review |
+
+### D118 — 2026-11-26 — Contract address: stated or licence, chosen on the draft; clear messages when the AI service refuses (Abulkalam; B149)
+- **Why:** a driver often lives somewhere other than where the licence was issued. The contract has one address (`contracts.lessee_address`, printed as `LESSEE_ADDRESS`), which was only ever filled from the licence by AI. The driver also gives an address in the application (the profile's street, apartment, city, state, ZIP). The admin now picks which of the two goes on the contract.
+- **Frontend only, no migration, no backend change for the address.** A two-option switch above the Address box on the draft's Driver details card: "Stated address (from the application)" fills the box with the profile address as one line (`statedAddressLine`: street, "Apt N", city, state and ZIP, empty parts left out; the website form has no state, so "Alsip 60803" is normal); "Licence address (read by AI)" fills it with the licence's address, from the last read or from a new one (only the address is used, the other boxes stay). The box stays editable; typing in it clears the choice. The PDF prints whatever is saved in the box, so the admin saves the draft after switching. With no stated address the first option is disabled and says why; a licence with no readable address says so.
+- **The choice is not stored (Abulkalam, 2026-11-26).** Only the text is saved. A reopened draft whose address equals the stated one shows "stated" again; any other text shows no choice.
+- **AI errors say what to do.** `LicenceReaderService.ask` used to turn every AI failure into one 502 ("could not read the licence just now"). The Gemini adapter already told apart a rate limit or quota (429, `LlmRateLimitError`) and an overloaded model (500/502/503/504, `LlmUnavailableError`); the service now answers **429** "The AI service's limit has been reached (Gemini free tier). Add credits to the Gemini API key, or try again in a minute.", **503** "The AI service is busy right now. Try again in a moment.", and keeps **502** for anything else. Both licence reads share it (the contract's four boxes and the Driver data card). Gemini uses 429 for both a per-minute limit and a used-up quota and the adapter does not tell them apart, so the text covers both. The log line still carries only the driver id.
+- **Sources:**
+
+| Field or step | Source | Status |
+|---|---|---|
+| Choose stated or licence address for the contract | Abulkalam, 2026-11-26 (a driver may live outside the state of the licence) | confirmed |
+| The choice is not stored, only the address text | Abulkalam, 2026-11-26 | confirmed |
+| Separate messages for a quota or limit, a busy AI and other failures | Abulkalam, 2026-11-26 (so the client can add credits to the Gemini key) | confirmed |

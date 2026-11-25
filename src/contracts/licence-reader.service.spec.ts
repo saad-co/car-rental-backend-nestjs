@@ -1,12 +1,18 @@
 import {
   BadGatewayException,
   ConflictException,
+  HttpException,
   NotFoundException,
   ServiceUnavailableException,
 } from "@nestjs/common";
 import type { DataSource } from "typeorm";
 import { describe, expect, it, vi } from "vitest";
-import type { LlmJsonClient, LlmJsonRequest } from "../llm/llm-client.js";
+import {
+  LlmRateLimitError,
+  LlmUnavailableError,
+  type LlmJsonClient,
+  type LlmJsonRequest,
+} from "../llm/llm-client.js";
 import type { FileStorage } from "../sms/storage/file-storage.js";
 import { LICENCE_FULL_SCHEMA, LICENCE_SCHEMA } from "./licence-extraction.js";
 import { LicenceReaderService } from "./licence-reader.service.js";
@@ -22,6 +28,8 @@ const PDF = Buffer.from("%PDF-1.4 made-up licence");
 function setUp(options: {
   answer?: unknown;
   aiFails?: boolean;
+  /** The error the AI throws, when it should be one of the adapter's own. */
+  aiError?: Error;
   driverExists?: boolean;
   noAi?: boolean;
 }) {
@@ -40,6 +48,7 @@ function setUp(options: {
   const llm: LlmJsonClient = {
     generateJson: (request) => {
       requests.push(request);
+      if (options.aiError) return Promise.reject(options.aiError);
       return options.aiFails
         ? Promise.reject(new Error("quota"))
         : Promise.resolve(options.answer);
@@ -113,5 +122,51 @@ describe("LicenceReaderService", () => {
     await expect(
       setUp({ noAi: true }).service.readFull(DRIVER),
     ).rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
+
+  it("answers 429 with the add-credits text when the AI's limit or quota is reached (D118)", async () => {
+    const { service } = setUp({
+      aiError: new LlmRateLimitError("Gemini rate limit (429)"),
+    });
+    for (const call of [
+      () => service.read(DRIVER),
+      () => service.readFull(DRIVER),
+    ]) {
+      const error = await call().then(
+        () => null,
+        (e: unknown) => e,
+      );
+      expect(error).toBeInstanceOf(HttpException);
+      expect((error as HttpException).getStatus()).toBe(429);
+      expect((error as HttpException).message).toBe(
+        "The AI service's limit has been reached (Gemini free tier). Add credits to the Gemini API key, or try again in a minute.",
+      );
+    }
+  });
+
+  it("answers 503 with the busy text when the AI is overloaded, and keeps 502 for any other failure (D118)", async () => {
+    const busy = await setUp({
+      aiError: new LlmUnavailableError("Gemini overloaded (503)"),
+    })
+      .service.read(DRIVER)
+      .then(
+        () => null,
+        (e: unknown) => e,
+      );
+    expect(busy).toBeInstanceOf(ServiceUnavailableException);
+    expect((busy as HttpException).message).toBe(
+      "The AI service is busy right now. Try again in a moment.",
+    );
+
+    const other = await setUp({ aiFails: true })
+      .service.read(DRIVER)
+      .then(
+        () => null,
+        (e: unknown) => e,
+      );
+    expect(other).toBeInstanceOf(BadGatewayException);
+    expect((other as HttpException).message).toBe(
+      "The AI could not read the licence just now. Try again in a moment.",
+    );
   });
 });

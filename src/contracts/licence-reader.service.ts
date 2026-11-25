@@ -1,6 +1,8 @@
 import {
   BadGatewayException,
   ConflictException,
+  HttpException,
+  HttpStatus,
   Inject,
   Injectable,
   Logger,
@@ -10,7 +12,11 @@ import {
 import { InjectDataSource } from "@nestjs/typeorm";
 import type { DataSource } from "typeorm";
 import { Driver } from "../drivers/driver.entity.js";
-import type { LlmJsonClient } from "../llm/llm-client.js";
+import {
+  LlmRateLimitError,
+  LlmUnavailableError,
+  type LlmJsonClient,
+} from "../llm/llm-client.js";
 import type { FileStorage } from "../sms/storage/file-storage.js";
 import { FILE_STORAGE } from "../sms/storage/file-storage.module.js";
 import { isPdf, LicenceError, normaliseImage } from "./contract-licence.js";
@@ -77,7 +83,9 @@ export class LicenceReaderService {
    * @throws NotFoundException no driver with this id.
    * @throws ServiceUnavailableException the AI or the file storage is not set up.
    * @throws ConflictException no licence on file, or a file that is not a picture or PDF (HEIC, B98).
-   * @throws BadGatewayException the bucket or the AI failed.
+   * @throws HttpException (429) the AI's rate limit or quota was reached (D118).
+   * @throws ServiceUnavailableException the AI is overloaded or down (D118).
+   * @throws BadGatewayException the bucket or the AI failed in any other way.
    */
   private async ask(
     driverId: string,
@@ -123,6 +131,21 @@ export class LicenceReaderService {
       this.logger.error(
         `reading the licence of driver ${driverId} with AI failed: ${error instanceof Error ? error.message : String(error)}`,
       );
+      // D118: say what the admin can do about it. A limit or quota needs credits on the Gemini key; a busy model only
+      // needs a moment. Everything else keeps the general text.
+      if (error instanceof LlmRateLimitError) {
+        throw new HttpException(
+          "The AI service's limit has been reached (Gemini free tier). Add credits to the Gemini API key, or try again in a minute.",
+          HttpStatus.TOO_MANY_REQUESTS,
+          { cause: error },
+        );
+      }
+      if (error instanceof LlmUnavailableError) {
+        throw new ServiceUnavailableException(
+          "The AI service is busy right now. Try again in a moment.",
+          { cause: error },
+        );
+      }
       throw new BadGatewayException(
         "The AI could not read the licence just now. Try again in a moment.",
       );

@@ -4,6 +4,15 @@ Newest entry at the top. One dated entry per task: what changed, where, how veri
 
 ---
 
+### 2026-11-26 — Contract address: stated or licence; clear AI limit messages (D118, B149)
+- **Pushed to `dev` 2026-11-26** (Abulkalam: "push to the branch deployed on Railway, no PRs", built in the main checkouts on `dev`, no worktrees). **Not deployed.** No migration.
+- **Backend:** `LicenceReaderService.ask` answers 429 (Gemini limit or quota: "add credits to the Gemini API key"), 503 (AI busy) or the old 502; 2 tests added to `licence-reader.service.spec.ts`.
+- **Frontend:** switch "Stated address / Licence address" above the Address box on the contract draft (`ContractDetailsCards.tsx`), `statedAddress.ts` (+ test) builds the one-line stated address from the profile, `ContractDraft.tsx` passes it in. The choice is not stored.
+- **Verified:** backend unit 531, build; frontend typecheck, lint, 105 tests. **Not browser-checked** (Docker was off; Abulkalam accepted that). No e2e run.
+- **Not done:** deploy; a look at the switch with a real draft; the staging Gemini key is still free tier (D86).
+
+---
+
 ### 2026-11-20 — Edit a driver's email and phone (D117, B148)
 - **Merged and deployed to staging 2026-11-20** (Abulkalam asked in chat): backend PR #65 (`3ff1e02`), frontend PR #41 (`32e7181`), by the "Deployment" steps. No migration (`No migrations are pending`); `PATCH /drivers/:id/contact` mapped; frontend 200; no errors in the logs. Branch `feature/edit-contact` in both repos (worktrees `wt-edit-contact-*`, slot 3: 5003 / 5176, databases `car_rental_edit_contact` and `_test`). Started from the client's answers for B124 (Jhonny Duque's phone, Graham Baker's email), which had no way into the system.
 - **Backend:** `PATCH /drivers/:id/contact` (`DriversController`), `DriversService.updateContact`, `UpdateDriverContactDto`; audit line `driver.contact_edit` with old and new values; a driver with a login cannot change the email. No migration. Tests added to `test/driver-create.e2e-spec.ts` (6). `openapi.json` re-exported.
